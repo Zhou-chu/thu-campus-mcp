@@ -1,0 +1,13 @@
+import {execFileSync} from 'node:child_process';
+import {mkdir,writeFile} from 'node:fs/promises';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {root} from '../lib/services.mjs';
+const destination=path.join(root,'.local','release');
+await mkdir(destination,{recursive:true});
+const filename=path.join(destination,'thu-campus-mcp-source.zip');
+execFileSync('git',['archive','--format=zip','--output',filename,'HEAD'],{cwd:root});
+const {readFile}=await import('node:fs/promises');
+const sha=createHash('sha256').update(await readFile(filename)).digest('hex');
+await writeFile(filename+'.sha256',sha+'  thu-campus-mcp-source.zip\n');
+console.log(JSON.stringify({filename,sha256:sha,includes:'committed source, tests, documentation, vendored runtime and lockfile; npm ci and build required'}));

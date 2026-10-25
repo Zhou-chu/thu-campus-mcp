@@ -1,0 +1,45 @@
+{
+  "name": "learnx-mcp",
+  "version": "0.1.0",
+  "description": "清华大学网络学堂本地 MCP：课程归档与作业提交",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "learnx-mcp": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "smoke": "node test/smoke.mjs",
+    "start": "node dist/cli.js serve"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "cheerio": "1.0.0-rc.12",
+    "entities": "8.1.0",
+    "fetch-cookie": "3.0.1",
+    "js-base64": "3.9.3",
+    "node-fetch-native": "1.6.7",
+    "playwright-core": "1.64.1",
+    "proper-lockfile": "4.1.2",
+    "sm-crypto": "0.5.7",
+    "smol-toml": "1.9.1",
+    "thu-learn-lib": "file:vendor/thu-learn-lib",
+    "tough-cookie": "4.1.4",
+    "turndown": "7.2.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/proper-lockfile": "4.1.4",
+    "@types/tough-cookie": "4.0.5",
+    "@types/turndown": "5.0.6",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

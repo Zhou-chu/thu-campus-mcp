@@ -1,0 +1,37 @@
+{
+  "name": "hetang-mcp",
+  "version": "0.1.0",
+  "description": "荷塘雨课堂 MCP：课堂交互、Harness 答题、资源下载与清华云盘归档",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "hetang-mcp": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "smoke": "node test/smoke.mjs",
+    "start": "node dist/cli.js serve",
+    "format": "prettier --write src test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "playwright-core": "1.64.1",
+    "proper-lockfile": "4.1.2",
+    "smol-toml": "1.9.1",
+    "zod": "4.6.7",
+    "pdf-lib": "1.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/proper-lockfile": "4.1.4",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5",
+    "prettier": "3.6.2"
+  }
+}

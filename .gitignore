@@ -1,0 +1,13 @@
+node_modules/
+dist/
+downloads/
+.local/
+.superpowers/
+coverage/
+*.dpapi
+*.log
+.env
+.env.*
+!*.example
+*-backup-*
+*.part

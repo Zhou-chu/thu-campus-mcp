@@ -1,0 +1,23 @@
+{
+  "name": "thu-campus-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "清华校园 MCP 整合包：网络学堂、清华云盘、荷塘雨课堂",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "workspaces": ["packages/*"],
+  "bin": { "thu-campus": "bin/thu-campus.mjs" },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces && npm run test:bundle",
+    "test:bundle": "node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm run build && npm test && npm run licenses:check && npm run audit:source",
+    "smoke": "npm run smoke --workspaces && node test/smoke.mjs",
+    "licenses": "node scripts/licenses.mjs",
+    "licenses:check": "node scripts/licenses.mjs --check",
+    "audit:source": "node scripts/audit-source.mjs",
+    "bundle": "node scripts/bundle.mjs"
+  }
+}
