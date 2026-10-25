@@ -37,5 +37,5 @@ Source license inventory consumes root lock and installed package metadata; `--c
 ### Task 3: Review, private publishing and CI convergence
 - [x] One independent final review; fix important findings with regression coverage.
 - [x] Audit secrets/history, verify clean tree and create a private GitHub repository.
-- [ ] Push, monitor exact head workflow, diagnose/fix/push until every job succeeds.
-- [ ] Record final results and report repository/CI URLs and material limits.
+- [x] Push, monitor exact head workflow, diagnose/fix/push until every job succeeds.
+- [x] Record final results and report repository/CI URLs and material limits.

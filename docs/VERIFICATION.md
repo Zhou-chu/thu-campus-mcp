@@ -22,6 +22,14 @@
 
 首次 CI 中 Node 24 通过，Node 22 在网络学堂后台同步 smoke 失败。Windows 并发读取状态文件的本机复现返回 `EPERM` / `rename`；网络学堂原有原子写入没有重试。现增加仅针对 Windows 共享冲突的有界本地 rename 重试，3 项回归验证短暂冲突恢复、其他错误不重试及永久失败保留旧文件。该重试不会重放任何学校或云盘请求。
 
+## 整合包实测结果
+
+实现提交 `1f856cf9f03e38d8b0200e868588010357686b45` 的 [GitHub CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/runs/40161473837) 已完成：Windows Node 22 与 Node 24 两个 job 全部成功，包含干净安装、检查、端到端、源代码打包及产物上传。
+
+检查共 **127 项测试**：网络学堂 56、云盘 38、雨课堂 28、整合入口 5。类型检查、构建、206 条依赖许可记录与源码/历史密钥扫描均通过；端到端验证 46 个工具。CI 产物分别包含源码 ZIP 和 SHA256 文件，私有仓库权限已核对为 PRIVATE。
+
+文档提交之后的最新状态以 [CI 工作流](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml) 为准。旧失败运行保留，修复后的提交不通过重跑旧代码来掩盖问题。
+
 ## 当前限制
 
 真实认证只支持 Windows DPAPI，新机器需要本机登录。CI 不包含学校凭据。
