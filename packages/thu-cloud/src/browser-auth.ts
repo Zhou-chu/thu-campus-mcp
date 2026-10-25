@@ -1,5 +1,6 @@
 import {
   withBrowser,
+  authGuard,
   BrowserError,
   type BrowserOptions,
 } from "@thu-campus/browser";
@@ -35,7 +36,10 @@ export async function browserLogin(
   options: BrowserOptions = {},
 ) {
   const store = new AuthStore(config.stateDir);
-  const generation = await store.generation();
+  const { epoch: generation, version } = await authGuard(store, {
+    epoch: options.expectedGeneration,
+    version: options.expectedVersion,
+  });
   try {
     return await withBrowser({ ...options, channel }, async (browser) => {
       const page = browser.pages()[0] || (await browser.newPage());
@@ -59,8 +63,14 @@ export async function browserLogin(
                 "BROWSER_ACCOUNT_MISMATCH",
                 "浏览器中的云盘账号与当前 MCP 账号不同，未替换认证。",
               );
-            await store.saveIfCurrent(data, generation);
+            const authVersion = await store.saveIfCurrent(
+              data,
+              generation,
+              version,
+            );
             return {
+              authVersion,
+              accountId: digest(data.account).slice(0, 16),
               configured: true,
               mode: data.mode,
               protection: "Windows-DPAPI",

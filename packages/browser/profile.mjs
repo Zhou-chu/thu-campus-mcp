@@ -114,6 +114,10 @@ export async function openBrowser(options = {}) {
         options.channel ? "profile-" + options.channel : "profile",
       ),
     );
+    const emptyProfile = !(await readdir(profile)).length;
+    const metaFile = path.join(cfg.stateDir, "snapshot-meta.json");
+    const priorMeta = await readJson(metaFile);
+    await atomic(metaFile, JSON.stringify({ clean: false }));
     context = await chromium.launchPersistentContext(profile, {
       ...(options.channel
         ? { channel: options.channel }
@@ -123,7 +127,21 @@ export async function openBrowser(options = {}) {
       timeout: 30000,
     });
     const saved = await readSnapshot(cfg);
-    if (saved) await context.setStorageState(saved);
+    if (saved && priorMeta?.clean) {
+      if (emptyProfile) await context.setStorageState(saved);
+      else {
+        const nativeCookies = await context.cookies();
+        const sessions = saved.cookies.filter(
+          (c) =>
+            c.expires < 0 &&
+            !nativeCookies.some(
+              (n) =>
+                n.name === c.name && n.domain === c.domain && n.path === c.path,
+            ),
+        );
+        if (sessions.length) await context.addCookies(sessions);
+      }
+    }
     if (options.initialCookies?.length) {
       const existing = await context.cookies();
       const missing = options.initialCookies.filter(
@@ -157,26 +175,31 @@ export async function openBrowser(options = {}) {
     }, 5000);
     timer.unref();
     const closed = new Promise((resolve) => context.once("close", resolve));
-    const close = async () => {
-      if (closing) return;
-      clearInterval(timer);
-      let failure;
-      try {
-        await checkpoint();
-      } catch (e) {
-        if (context.pages().length) failure = e;
-      }
-      closing = true;
-      options.signal?.removeEventListener("abort", abort);
-      await context.close().catch(() => {});
-      await queue.catch(() => {});
-      await lease.release().catch(() => {});
-      if (failure)
-        throw new BrowserError(
-          "BROWSER_SAVE_FAILED",
-          "浏览器状态未能保存，请检查用户目录权限。",
-        );
-    };
+    const nativeClose = context.close.bind(context);
+    let closePromise;
+    const close = () =>
+      (closePromise ||= (async () => {
+        if (closing) return;
+        clearInterval(timer);
+        let failure;
+        try {
+          await checkpoint();
+          await atomic(metaFile, JSON.stringify({ clean: true }));
+        } catch (e) {
+          if (context.pages().length) failure = e;
+        }
+        closing = true;
+        options.signal?.removeEventListener("abort", abort);
+        await nativeClose().catch(() => {});
+        await queue.catch(() => {});
+        await lease.release().catch(() => {});
+        if (failure)
+          throw new BrowserError(
+            "BROWSER_SAVE_FAILED",
+            "浏览器状态未能保存，请检查用户目录权限。",
+          );
+      })());
+    context.close = close;
     const abort = () => {
       void close().catch(() => {});
     };
@@ -198,7 +221,7 @@ export async function withBrowser(options, fn) {
   try {
     const result = await fn(browser.context);
     await browser.checkpoint();
-    await options.onSaved?.(await readSnapshot(browser.config));
+    await options.onSaved?.(await readSnapshot(browser.config), result);
     return result;
   } finally {
     await browser.close();
@@ -223,6 +246,9 @@ export async function browserStatus(options = {}) {
     runtime: await runtimeInfo(cfg),
     busy,
     encryptedSnapshot: snapshot,
+    snapshotSafeToRestore:
+      (await readJson(path.join(cfg.stateDir, "snapshot-meta.json")))?.clean ===
+      true,
   };
 }
 export async function resetBrowser(options = {}) {
@@ -248,6 +274,7 @@ export async function resetBrowser(options = {}) {
     }
     await rm(path.join(cfg.stateDir, "session.dpapi"), { force: true });
     await rm(path.join(cfg.stateDir, "bindings.json"), { force: true });
+    await rm(path.join(cfg.stateDir, "snapshot-meta.json"), { force: true });
   } finally {
     await lease.release();
   }

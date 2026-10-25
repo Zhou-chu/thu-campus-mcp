@@ -10,12 +10,12 @@
 
 ## 能做什么
 
-| 模块 | 工具数 | 功能 |
-| --- | ---: | --- |
-| 网络学堂 | 13 | 学期和课程查询；公告、作业、文件等专栏增量归档；查询及提交个人在线作业 |
-| 清华云盘 | 15 | 资料库、目录、搜索、读写文件、移动复制、分享与单向增量传输 |
-| 荷塘雨课堂 | 18 | 课程与课堂、限定范围自动进入、已发布题目与提交答案、课件/PDF/回放下载及云盘归档 |
-| 独立浏览器 | 4 | 查看状态、打开窗口、登录/复用登录、关闭并保留会话 |
+| 模块       | 工具数 | 功能                                                                            |
+| ---------- | -----: | ------------------------------------------------------------------------------- |
+| 网络学堂   |     13 | 学期和课程查询；公告、作业、文件等专栏增量归档；查询及提交个人在线作业          |
+| 清华云盘   |     15 | 资料库、目录、搜索、读写文件、移动复制、分享与单向增量传输                      |
+| 荷塘雨课堂 |     18 | 课程与课堂、限定范围自动进入、已发布题目与提交答案、课件/PDF/回放下载及云盘归档 |
+| 独立浏览器 |      4 | 查看状态、打开窗口、登录/复用登录、关闭并保留会话                               |
 
 解题由当前 Harness 的模型完成，不另外索要模型 API Key。已有课程、作业和文件内容都作为外部数据处理，不作为额外操作授权。覆盖已有提交或云盘文件仍需明确授权。
 
@@ -62,13 +62,13 @@ node bin/thu-campus.mjs install --unified --apply
 
 安装器保留现有认证目录和下载目录，备份配置，保留其他 MCP。属于当前整合包的 `learnx`、`thu-cloud`、`hetang` 三项注册会合并为一项 `thu-campus`；原来的 46 个工具名保持不变。遇到其他来源的同名服务、禁用状态或不兼容的单独工具策略时会停止，不自动改变策略。写入逐文件处理，磁盘故障或并发编辑时依据输出及备份检查已处理文件。
 
-| 客户端 | 默认配置位置 |
-| --- | --- |
-| Claude Code | `~/.claude.json` |
-| Codex | `~/.codex/config.toml` |
-| Antigravity | `~/.gemini/config/mcp_config.json` |
-| Antigravity 旧 IDE | 已存在时同时更新 `~/.gemini/antigravity/mcp_config.json` |
-| DeepSeek Harness | `$DSH_HOME/@wingsky-1/dsh-mcp-manager/mcp.json`；默认探测 `D:/DeepSeekHarness/home` 或 `~/.dsh` |
+| 客户端             | 默认配置位置                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| Claude Code        | `~/.claude.json`                                                                                |
+| Codex              | `~/.codex/config.toml`                                                                          |
+| Antigravity        | `~/.gemini/config/mcp_config.json`                                                              |
+| Antigravity 旧 IDE | 已存在时同时更新 `~/.gemini/antigravity/mcp_config.json`                                        |
+| DeepSeek Harness   | `$DSH_HOME/@wingsky-1/dsh-mcp-manager/mcp.json`；默认探测 `D:/DeepSeekHarness/home` 或 `~/.dsh` |
 
 也可以复制一个 stdio 配置。便携包示例：
 
@@ -117,12 +117,12 @@ node bin/thu-campus.mjs browser status
 
 ## 浏览器窗口与会话管理
 
-| MCP 工具 | 用途 |
-| --- | --- |
+| MCP 工具                | 用途                                                         |
+| ----------------------- | ------------------------------------------------------------ |
 | `campus_browser_status` | 内核、资料目录、占用情况、最近后台任务及错误代码；不返回凭据 |
-| `campus_browser_open` | 打开一个或全部校园站点，复用独立工作区；返回任务 ID |
-| `campus_browser_login` | 登录指定服务并验证、写入对应 MCP 会话；返回任务 ID |
-| `campus_browser_close` | 请求关闭工具打开的窗口并保留资料；不注销学校账号 |
+| `campus_browser_open`   | 打开一个或全部校园站点，复用独立工作区；返回任务 ID          |
+| `campus_browser_login`  | 登录指定服务并验证、写入对应 MCP 会话；返回任务 ID           |
+| `campus_browser_close`  | 请求关闭工具打开的窗口并保留资料；不注销学校账号             |
 
 `open` 用于查看网页；需要把网页登录同步到 MCP 时用 `login`。同一工作区一次只允许一个浏览器进程，多个 Harness 共用它。已有 `open` 窗口时，先 `close`，等状态不再占用，再 `login`。后台任务显示 `downloading` 时正在准备内核。
 
@@ -132,7 +132,7 @@ node bin/thu-campus.mjs browser close
 node bin/thu-campus.mjs browser status
 ```
 
-关闭窗口、退出客户端或升级代码都不会主动删除浏览器资料。Cookie、localStorage、IndexedDB 保存在持久工作区，并有当前 Windows 用户 DPAPI 保护的额外状态快照；原生 Chromium 资料目录按浏览器自身格式保存，不应共享。
+关闭窗口、退出客户端或升级代码都不会主动删除浏览器资料。建议用 `campus_browser_close` / `browser close` 关闭，它会先保存最新的会话快照。直接点击窗口关闭按钮或强制结束浏览器时，原生资料仍保留，但最近的会话型 Cookie 可能来不及保存；此时暂停自动恢复，使用 `browser login` 正常验证。旧快照不会覆盖原生浏览器中更新的 Cookie、localStorage 或 IndexedDB。Cookie、localStorage、IndexedDB 保存在持久工作区，并有当前 Windows 用户 DPAPI 保护的额外状态快照；原生 Chromium 资料目录按浏览器自身格式保存，不应共享。
 
 ### 退出与切换账号
 
@@ -163,14 +163,14 @@ node bin/thu-campus.mjs browser reset --confirm
 
 ## 可迁移性、升级和资料位置
 
-| 内容 | 默认位置 | 迁移说明 |
-| --- | --- | --- |
-| 代码、Node、依赖、浏览器内核 | 安装目录；内核在 `.runtime` | 便携包可整目录复制；路径变化后更新这一项 MCP 配置 |
-| 持久浏览器和额外加密快照 | `~/.thu-campus-mcp/browser` | 同一 Windows 用户升级/换安装目录时继续使用；不要随程序分发 |
-| 网络学堂会话 | `~/.learnx-mcp` | 保留原目录 |
-| 云盘会话 | `~/.thu-cloud-mcp` | 保留原目录 |
-| 雨课堂会话 | `~/.hetang-mcp` | 保留原目录 |
-| 下载资料 | 各模块配置的输出目录 | 安装迁移保留已有配置；升级前不要覆盖个人输出目录 |
+| 内容                         | 默认位置                    | 迁移说明                                                   |
+| ---------------------------- | --------------------------- | ---------------------------------------------------------- |
+| 代码、Node、依赖、浏览器内核 | 安装目录；内核在 `.runtime` | 便携包可整目录复制；路径变化后更新这一项 MCP 配置          |
+| 持久浏览器和额外加密快照     | `~/.thu-campus-mcp/browser` | 同一 Windows 用户升级/换安装目录时继续使用；不要随程序分发 |
+| 网络学堂会话                 | `~/.learnx-mcp`             | 保留原目录                                                 |
+| 云盘会话                     | `~/.thu-cloud-mcp`          | 保留原目录                                                 |
+| 雨课堂会话                   | `~/.hetang-mcp`             | 保留原目录                                                 |
+| 下载资料                     | 各模块配置的输出目录        | 安装迁移保留已有配置；升级前不要覆盖个人输出目录           |
 
 升级便携包时，关闭独立浏览器，解压新版到新目录，再运行新版 `install-clients.cmd` 或更新配置里的程序路径。已有注册指向另一安装目录时，安装器会保护它并报告冲突，可在旧目录执行 `uninstall --unified --apply` 后安装新版。源码升级使用 `git pull`、`npm ci`、`npm run build`、`browser install`；浏览器版本按锁文件更新，用户资料目录保留。
 
@@ -180,16 +180,16 @@ DPAPI 绑定 Windows 用户，不能把加密快照直接复制给另一台机�
 
 ## 常见问题
 
-| 现象 / 错误 | 处理 |
-| --- | --- |
-| `BROWSER_NOT_INSTALLED` | 源码安装运行 `browser install`；便携包检查是否完整解压 `.runtime` |
-| 下载失败 | 检查网络/代理后重试；可直接使用带内核的便携包 |
-| `BROWSER_BUSY` / `requiresClose` | 关闭现有独立窗口，或请求 `campus_browser_close`，等任务停止后重试 |
-| `AUTH_REQUIRED` / `BROWSER_LOGIN_REQUIRED` | 请求 `campus_browser_login`，在本机窗口完成验证 |
-| `BROWSER_ACCOUNT_MISMATCH` | 浏览器与 MCP 账号不一致，先按账号切换流程处理 |
-| `AUTH_CHANGED` | 登录期间发生注销/切换，旧登录未保存；按当前账号重新操作 |
-| `INSTALL_CONFLICT` / `INSTALL_POLICY_CONFLICT` | 检查旧路径或服务策略，不手动删除其他 MCP；可继续使用分服务模式 |
-| 工具未出现 | 重载 MCP 或新建客户端会话；检查 `thu-campus` 的路径和启用状态 |
+| 现象 / 错误                                    | 处理                                                              |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| `BROWSER_NOT_INSTALLED`                        | 源码安装运行 `browser install`；便携包检查是否完整解压 `.runtime` |
+| 下载失败                                       | 检查网络/代理后重试；可直接使用带内核的便携包                     |
+| `BROWSER_BUSY` / `requiresClose`               | 关闭现有独立窗口，或请求 `campus_browser_close`，等任务停止后重试 |
+| `AUTH_REQUIRED` / `BROWSER_LOGIN_REQUIRED`     | 请求 `campus_browser_login`，在本机窗口完成验证                   |
+| `BROWSER_ACCOUNT_MISMATCH`                     | 浏览器与 MCP 账号不一致，先按账号切换流程处理                     |
+| `AUTH_CHANGED`                                 | 登录期间发生注销/切换，旧登录未保存；按当前账号重新操作           |
+| `INSTALL_CONFLICT` / `INSTALL_POLICY_CONFLICT` | 检查旧路径或服务策略，不手动删除其他 MCP；可继续使用分服务模式    |
+| 工具未出现                                     | 重载 MCP 或新建客户端会话；检查 `thu-campus` 的路径和启用状态     |
 
 不需要增加“保持在线”定时请求，不模拟学习时长或伪造验证码。与身份验证有关的输入仅在本机终端/浏览器处理，README、日志和 CI 产物中均不应包含登录资料。
 

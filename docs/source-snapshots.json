@@ -76,11 +76,11 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/auth.ts": {
-        "sha256": "cd3820bb4f86ae217046fd63abe14342778bfad1027e27067fecf12b45bdd130",
+        "sha256": "951a3eac632fedd3dc37927666a966c04953b7a495434b04641069ecab801ff6",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/browser-auth.ts": {
-        "sha256": "3adc2101a0ede6dd688d125c29e3a94b377684d915eefde869477a58ae7bb452",
+        "sha256": "83e13e20df2b8f91b945af43160da6f39dba198e58134a2aa6b6895c04edda88",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/cli.ts": {
@@ -138,11 +138,15 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/browser-auth.ts": {
-        "sha256": "ec563cb576bf3ed84cd527248d9090531b146d7ae1d29433d653050f36a941eb",
+        "sha256": "05aeb13d34e13f9056af01d697126c5c52cab9bfd37ca57064a101749b15b749",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/cli.ts": {
         "sha256": "6c2c13552b430176b5bb9b96e3b687ab775a9ce5c2b60e1189abcb144b12b45c",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/auth.ts": {
+        "sha256": "9ef06de5989984cccc18ebd7ee24dcdcf9ea56a8f7ab2febab78b5c45996c12e",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       }
     }
@@ -204,7 +208,7 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/browser-auth.ts": {
-        "sha256": "18aa5eb6625646ee324a4e9f965ae851be812976882ae18c0c68135431b1b934",
+        "sha256": "6eaaf2ba5a4c71ed4d7ef80e65fa4988b5788d218eb89f17ff0873ac5ca11067",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/capture.ts": {
@@ -213,6 +217,10 @@
       },
       "src/cli.ts": {
         "sha256": "e14717adf07f2b99825d7b5177dae72d177a23cfd06c68ab5a5b7d72a355c94b",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/auth.ts": {
+        "sha256": "f48cb2626b1772f49ea2f078605c227641d4ab9598c9266b9c6384fcc9575cf0",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       }
     }

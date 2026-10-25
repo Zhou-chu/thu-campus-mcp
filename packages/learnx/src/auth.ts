@@ -70,13 +70,21 @@ export class AuthStore {
       this.browserEpoch(),
     );
   }
-  async saveBrowserIfCurrent(data: AuthData, expected: string) {
+  async saveBrowserIfCurrent(
+    data: AuthData,
+    expected: string,
+    expectedVersion?: string | null,
+  ) {
     const encrypted = await dpapi(
       Buffer.from(JSON.stringify(data)).toString("base64"),
       false,
     );
-    await withLock(path.join(this.directory, "auth-lock"), async () => {
-      if ((await this.browserEpoch()) !== expected)
+    return withLock(path.join(this.directory, "auth-lock"), async () => {
+      if (
+        (await this.browserEpoch()) !== expected ||
+        (expectedVersion !== undefined &&
+          ((await this.version()) ?? null) !== expectedVersion)
+      )
         throw new LearnError(
           "AUTH_CHANGED",
           "登录期间账号已注销或改变，未恢复旧会话。",
@@ -86,6 +94,7 @@ export class AuthStore {
         path.join(this.directory, "auth-generation"),
         randomUUID(),
       );
+      return digest(encrypted);
     });
   }
   async version(): Promise<string | undefined> {

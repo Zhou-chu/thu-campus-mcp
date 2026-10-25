@@ -1,4 +1,4 @@
-export { BrowserError, browserConfig, bundleRoot } from "./core.mjs";
+export { BrowserError, browserConfig, bundleRoot, authGuard } from "./core.mjs";
 export { runtimeInfo, installRuntime } from "./runtime.mjs";
 export {
   profileLease,

@@ -6,8 +6,10 @@ export interface BrowserOptions {
   headless?: boolean;
   timeoutMs?: number;
   expectedAccountId?: string;
+  expectedGeneration?: string;
+  expectedVersion?: string | null;
   initialCookies?: any[];
-  onSaved?: (state: any) => Promise<void>;
+  onSaved?: (state: any, result?: any) => Promise<void>;
   signal?: AbortSignal;
 }
 export class BrowserError extends Error {
@@ -15,6 +17,13 @@ export class BrowserError extends Error {
   constructor(code: string, message: string);
 }
 export const bundleRoot: string;
+export function authGuard(
+  store: {
+    generation(): Promise<string>;
+    version(): Promise<string | undefined>;
+  },
+  expected?: { epoch?: string; version?: string | null },
+): Promise<{ epoch: string; version: string | null }>;
 export function browserConfig(options?: BrowserOptions): {
   stateDir: string;
   runtimeDir: string;

@@ -1,5 +1,6 @@
 import {
   withBrowser,
+  authGuard,
   BrowserError,
   type BrowserOptions,
 } from "@thu-campus/browser";
@@ -13,8 +14,11 @@ export async function browserLogin(
   channel?: string,
   options: BrowserOptions = {},
 ) {
-  const store = new AuthStore(config.stateDir),
-    epoch = await store.generation();
+  const store = new AuthStore(config.stateDir);
+  const { epoch, version } = await authGuard(store, {
+    epoch: options.expectedGeneration,
+    version: options.expectedVersion,
+  });
   const prior = await store.load();
   const initialCookies = (prior?.cookieHeader || "")
     .split(";")
@@ -92,11 +96,14 @@ export async function browserLogin(
                   const cookieHeader = (await context.cookies(ORIGIN))
                     .map((c) => c.name + "=" + c.value)
                     .join("; ");
-                  await store.saveIfCurrent(
+                  const authVersion = await store.saveIfCurrent(
                     { account: userId, userId, cookieHeader, bearerToken },
                     epoch,
+                    version,
                   );
                   return {
+                    authVersion,
+                    accountId: digest(userId).slice(0, 16),
                     configured: true,
                     verified: true,
                     protection: "Windows-DPAPI",

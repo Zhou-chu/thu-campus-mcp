@@ -126,13 +126,21 @@ export class AuthStore<T extends { account: string } = AuthData> {
       await this.advance();
     });
   }
-  async saveIfCurrent(data: T, expectedGeneration: string): Promise<string> {
+  async saveIfCurrent(
+    data: T,
+    expectedGeneration: string,
+    expectedVersion?: string | null,
+  ): Promise<string> {
     const encrypted = await dpapi(
       Buffer.from(JSON.stringify(data)).toString("base64"),
       false,
     );
     return this.locked(async () => {
-      if ((await this.generationUnlocked()) !== expectedGeneration)
+      if (
+        (await this.generationUnlocked()) !== expectedGeneration ||
+        (expectedVersion !== undefined &&
+          ((await this.version()) ?? null) !== expectedVersion)
+      )
         throw new RainError(
           "AUTH_CHANGED",
           "认证已变化，待完成的登录未恢复旧会话。",

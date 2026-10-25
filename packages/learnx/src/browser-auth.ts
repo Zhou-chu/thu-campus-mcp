@@ -1,6 +1,7 @@
 import { type Cookie, type BrowserContext } from "playwright-core";
 import {
   withBrowser,
+  authGuard,
   BrowserError,
   type BrowserOptions,
 } from "@thu-campus/browser";
@@ -8,6 +9,7 @@ import { CookieJar } from "tough-cookie";
 import * as cheerio from "cheerio";
 import { AuthStore, type AuthData } from "./auth.js";
 import { LearnError } from "./types.js";
+import { digest } from "./storage.js";
 export async function verifyBrowserSession(
   context: BrowserContext,
   csrfToken: string,
@@ -62,7 +64,10 @@ export async function browserLogin(
   channel?: string,
   options: BrowserOptions = {},
 ) {
-  const epoch = await store.generation();
+  const { epoch, version } = await authGuard(store, {
+    epoch: options.expectedGeneration,
+    version: options.expectedVersion,
+  });
   const old = await store.load();
   const initialCookies = old?.cookieJar
     ? CookieJar.fromJSON(old.cookieJar as any)
@@ -118,8 +123,14 @@ export async function browserLogin(
               );
               if (!(await verifyBrowserSession(context, data.csrfToken!)))
                 continue;
-              await store.saveBrowserIfCurrent(data, epoch);
+              const authVersion = await store.saveBrowserIfCurrent(
+                data,
+                epoch,
+                version,
+              );
               return {
+                authVersion,
+                accountId: digest(data.account).slice(0, 16),
                 configured: true,
                 method: "persistent-browser",
                 message: "已验证并保存本机持久浏览器会话。",

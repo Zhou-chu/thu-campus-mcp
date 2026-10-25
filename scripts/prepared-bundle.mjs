@@ -14,6 +14,7 @@ import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { root, services } from "../lib/services.mjs";
 import { runtimeInfo, launchEphemeral } from "@thu-campus/browser";
+import { request } from "playwright-core";
 if (process.platform !== "win32")
   throw new Error("Prepared release currently targets Windows x64.");
 const runtime = await runtimeInfo();
@@ -103,12 +104,31 @@ for (const name of ["LICENSE", "LICENSE.txt"])
     if (e.code !== "ENOENT") throw e;
   }
 if (!license) {
-  const response = await fetch(
-    `https://raw.githubusercontent.com/nodejs/node/${process.version}/LICENSE`,
-    { signal: AbortSignal.timeout(60000) },
-  );
-  if (!response.ok) throw new Error("Cannot obtain matching Node.js license.");
-  license = Buffer.from(await response.arrayBuffer());
+  const proxyUrl =
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY;
+  let proxy;
+  if (proxyUrl) {
+    const url = new URL(proxyUrl);
+    proxy = {
+      server: url.origin,
+      username: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+    };
+  }
+  const client = await request.newContext({ proxy });
+  try {
+    const response = await client.get(
+      `https://raw.githubusercontent.com/nodejs/node/${process.version}/LICENSE`,
+      { timeout: 60000 },
+    );
+    if (!response.ok())
+      throw new Error("Cannot obtain matching Node.js license.");
+    license = await response.body();
+  } finally {
+    await client.dispose();
+  }
 }
 await writeFile(path.join(stage, ".runtime/NODE-LICENSE.txt"), license);
 const cleanBrowser = await launchEphemeral({ headless: true });

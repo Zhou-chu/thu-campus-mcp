@@ -18,6 +18,19 @@ export class BrowserError extends Error {
     this.code = code;
   }
 }
+export async function authGuard(store, expected = {}) {
+  const epoch = expected.epoch ?? (await store.generation());
+  const version =
+    expected.version !== undefined
+      ? expected.version
+      : ((await store.version()) ?? null);
+  if (
+    (await store.generation()) !== epoch ||
+    ((await store.version()) ?? null) !== version
+  )
+    throw new BrowserError("AUTH_CHANGED", "认证已注销或变化，未恢复旧会话。");
+  return { epoch, version };
+}
 function findRoot() {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (;;) {

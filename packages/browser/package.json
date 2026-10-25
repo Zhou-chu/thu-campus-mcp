@@ -14,7 +14,7 @@
     "build": "node --check index.mjs",
     "typecheck": "node --check index.mjs",
     "test": "node --test test/*.test.mjs",
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs && node test/manual-close.mjs"
   },
   "dependencies": {
     "playwright-core": "1.64.1",
