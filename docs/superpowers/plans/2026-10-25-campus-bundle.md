@@ -23,19 +23,19 @@ Unified installer consumes three previews; validate all before applying and pres
 Source license inventory consumes root lock and installed package metadata; `--check` detects drift.
 
 ### Task 1: Standalone workspace and unified CLI
-- [ ] Import committed snapshots with exact source hashes, root workspace manifest/lock.
-- [ ] Add failing root routing/default-cloud/config-preview tests and observe RED.
-- [ ] Implement routing/installer/default cloud path; observe GREEN and run module checks.
-- [ ] Commit coherent source and entry point.
+- [x] Import committed snapshots with exact source hashes, root workspace manifest/lock.
+- [x] Add failing root routing/default-cloud/config-preview tests and observe RED.
+- [x] Implement routing/installer/default cloud path; observe GREEN and run module checks.
+- [x] Commit coherent source and entry point.
 
 ### Task 2: Documentation, dependency inventory and CI
-- [ ] Write root setup/auth/client/config/troubleshooting guide and provenance distinguishing runtime vs reference.
-- [ ] Generate reproducible npm license inventory; retain license files and check copied source provenance.
-- [ ] Add Windows Node22/24 CI with checks, smokes, secret audit and source artifact.
-- [ ] Run root check and relocated three-service smoke, commit.
+- [x] Write root setup/auth/client/config/troubleshooting guide and provenance distinguishing runtime vs reference.
+- [x] Generate reproducible npm license inventory; retain license files and check copied source provenance.
+- [x] Add Windows Node22/24 CI with checks, smokes, secret audit and source artifact.
+- [x] Run root check and relocated three-service smoke, commit.
 
 ### Task 3: Review, private publishing and CI convergence
-- [ ] One independent final review; fix important findings with regression coverage.
-- [ ] Audit secrets/history, verify clean tree and create a private GitHub repository.
+- [x] One independent final review; fix important findings with regression coverage.
+- [x] Audit secrets/history, verify clean tree and create a private GitHub repository.
 - [ ] Push, monitor exact head workflow, diagnose/fix/push until every job succeeds.
 - [ ] Record final results and report repository/CI URLs and material limits.

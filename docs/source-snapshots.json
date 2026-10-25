@@ -158,6 +158,10 @@
       "src/config.ts": {
         "sha256": "41f977dc057bb5df24fc7d3c0b220a80be8a401f989876bdd8611ca165b2e977",
         "reason": "Resolve bundled cloud CLI relative to workspace"
+      },
+      "src/install.ts": {
+        "sha256": "198182de3134d334db4654a608cb87065d4fcacc87a763b48883c15c2a090a86",
+        "reason": "Preserve selected cloud state directory in installed rain configuration"
       }
     }
   }

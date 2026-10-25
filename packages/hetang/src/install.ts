@@ -139,6 +139,7 @@ export interface InstallOptions {
   home?: string;
   harnessHome?: string;
   stateDir?: string;
+  cloudStateDir?: string;
 }
 export interface InstallResult {
   client: string;
@@ -167,6 +168,11 @@ export async function installClients(options: InstallOptions = {}) {
       HETANG_OUTPUT_DIR: config.outputDir,
       HETANG_MOCK: "0",
       HETANG_CLOUD_CLI: config.cloudCli,
+      THU_CLOUD_STATE_DIR: path.resolve(
+        options.cloudStateDir ||
+          process.env.THU_CLOUD_STATE_DIR ||
+          path.join(homedir(), ".thu-cloud-mcp"),
+      ),
     },
   };
   const targets: { client: string; path: string; format: Format }[] = [

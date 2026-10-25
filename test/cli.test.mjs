@@ -20,12 +20,15 @@ test('unified CLI works outside the checkout and rejects unknown services clearl
   assert.doesNotMatch(bad.stderr, /MODULE_NOT_FOUND/);
 });
 test('config export uses portable bundled paths and real mode while preserving state overrides', () => {
-  const output = run(['config'], { HETANG_STATE_DIR: path.join(tmpdir(), 'my-rain-state') });
+  const cloudState=path.join(tmpdir(),'custom-cloud-account');
+  const output = run(['config'], { HETANG_STATE_DIR: path.join(tmpdir(), 'my-rain-state'), THU_CLOUD_STATE_DIR:cloudState });
   assert.equal(output.status, 0, output.stderr);
   const data = JSON.parse(output.stdout).mcpServers;
   assert.deepEqual(Object.keys(data).sort(), ['hetang','learnx','thu-cloud']);
   assert.equal(data.hetang.env.HETANG_STATE_DIR, path.join(tmpdir(), 'my-rain-state'));
   assert.equal(data.hetang.env.HETANG_CLOUD_CLI, path.join(root, 'packages/thu-cloud/dist/cli.js'));
+  assert.equal(data.hetang.env.THU_CLOUD_STATE_DIR,cloudState);
+  assert.equal(data.hetang.env.THU_CLOUD_STATE_DIR,data['thu-cloud'].env.THU_CLOUD_STATE_DIR);
   for (const entry of Object.values(data)) {
     assert.equal(entry.command, process.execPath);
     assert(path.isAbsolute(entry.args[0]));
@@ -70,6 +73,7 @@ test('combined install preserves unrelated clients and registers all services id
     assert.equal(installed.theme,'keep'); assert.equal(installed.mcpServers.other.command,'untouched');
     assert.deepEqual(Object.keys(installed.mcpServers).sort(),['hetang','learnx','other','thu-cloud']);
     assert.equal(installed.mcpServers.hetang.env.HETANG_CLOUD_CLI,path.join(root,'packages/thu-cloud/dist/cli.js'));
+    assert.equal(installed.mcpServers.hetang.env.THU_CLOUD_STATE_DIR,installed.mcpServers['thu-cloud'].env.THU_CLOUD_STATE_DIR);
     const codex=await readFile(path.join(home,'.codex/config.toml'),'utf8');
     assert(codex.includes('# keep comment')); assert(codex.includes('command="untouched"'));
     const again=await installBundle(options);

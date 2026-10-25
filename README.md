@@ -85,7 +85,7 @@ test/                    整合入口与搬迁验证
 | cloud | `THU_CLOUD_STATE_DIR` | `THU_CLOUD_OUTPUT_DIR` |
 | hetang | `HETANG_STATE_DIR` | `HETANG_OUTPUT_DIR` |
 
-网络学堂和云盘默认下载到各子包的 `downloads`，雨课堂默认 `D:/荷塘雨课堂`。可用 `HETANG_CLOUD_CLI` 显式指定其他兼容云盘构建。`*_MOCK=1` 才启用离线模拟；安装器始终写入真实模式。移动仓库后应重新构建并更新客户端路径，认证默认目录保持不变。
+网络学堂和云盘默认下载到各子包的 `downloads`，雨课堂默认 `D:/荷塘雨课堂`。可用 `HETANG_CLOUD_CLI` 显式指定其他兼容云盘构建。安装和配置导出会把云盘的 `THU_CLOUD_STATE_DIR` 同时保存到雨课堂注册项，确保客户端重启后归档仍使用选定云盘会话。`*_MOCK=1` 才启用离线模拟；安装器始终写入真实模式。移动仓库后应重新构建并更新客户端路径，认证默认目录保持不变。
 
 模块行为及限制见：[网络学堂](packages/learnx/README.md)、[云盘](packages/thu-cloud/README.md)、[雨课堂](packages/hetang/README.md)；完整工具及必填参数见 [TOOLS.md](docs/TOOLS.md)。安装及目录以本页为准。
 
