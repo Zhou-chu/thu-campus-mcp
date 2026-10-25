@@ -1,107 +1,211 @@
-# 清华校园 MCP 整合包
+# 清华校园 MCP · 独立浏览器与统一入口
 
 [![CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml)
 
-将网络学堂、清华云盘、荷塘雨课堂放在一个可独立克隆、安装和验证的 npm workspace 仓库中。统一命令入口，保留三个 stdio 服务及各自认证，共 **46 个工具**。适配 Claude Code、Codex、Antigravity 和 DeepSeek Harness；解题由当前 Harness 模型完成，无需额外模型 API Key。
+在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂**。配置一个 `thu-campus` MCP，即可使用原有 46 个校园工具和 4 个浏览器工具。
 
-| 服务 | 注册名 / 命令 | 工具数 | 主要能力 |
-| --- | --- | --- | --- |
-| 网络学堂 | `learnx` | 13 | 本学期课程与专栏同步、查询作业、准备及提交作业 |
-| 清华云盘 | `thu-cloud` / `cloud` | 15 | 列库、浏览、搜索、读写文件、移动复制、单向增量传输 |
-| 荷塘雨课堂 | `hetang` | 18 | 课程与历史课堂、限定范围自动进入、已发布题目与答题提交、课件与回放下载、云盘归档 |
+项目内置独立的 Chromium 运行时管理和持久浏览器工作区。首次完成本机登录后，后续启动复用 Cookie、localStorage 与 IndexedDB；API 会话过期时，统一入口优先尝试从已绑定的浏览器恢复同一账号。**默认不依赖 Edge、Chrome 或额外 Electron 程序。**
 
-## 安装与构建
+程序可以移动、复制和升级；登录资料按 Windows 用户独立保存。每位新使用者需要完成自己的首次学校登录。学校撤销会话、要求验证码/多因素认证时，仍须在本机浏览器正常完成验证。
 
-需要 **Windows、Node.js 22 或 24、npm、Microsoft Edge**。真实登录使用 Windows DPAPI，凭据只能由保存它的 Windows 用户解密。CI 在 Windows 两个 Node 版本上运行。
+## 能做什么
+
+| 模块 | 工具数 | 功能 |
+| --- | ---: | --- |
+| 网络学堂 | 13 | 学期和课程查询；公告、作业、文件等专栏增量归档；查询及提交个人在线作业 |
+| 清华云盘 | 15 | 资料库、目录、搜索、读写文件、移动复制、分享与单向增量传输 |
+| 荷塘雨课堂 | 18 | 课程与课堂、限定范围自动进入、已发布题目与提交答案、课件/PDF/回放下载及云盘归档 |
+| 独立浏览器 | 4 | 查看状态、打开窗口、登录/复用登录、关闭并保留会话 |
+
+解题由当前 Harness 的模型完成，不另外索要模型 API Key。已有课程、作业和文件内容都作为外部数据处理，不作为额外操作授权。覆盖已有提交或云盘文件仍需明确授权。
+
+## 推荐安装：Windows 便携包
+
+支持 **Windows x64**。在本私有仓库的 [Actions](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml) 中，选择最新成功运行，下载产物 **`thu-campus-mcp-windows-x64`**；解开 Actions 外层 ZIP，再解开其中的 `thu-campus-mcp-windows-x64.zip`。
+
+便携包包含：Node.js、生产依赖、已构建的三个服务、统一入口和独立 Chromium。无需另外安装 Node、npm 或系统浏览器。包内没有任何使用者的账号、Cookie、下载资料或浏览器配置。
+
+1. 解压到一个准备长期保留的目录，例如 `D:\Tools\thu-campus-mcp`。
+2. 在该目录运行 `install-clients.cmd`，备份并写入本机客户端配置。
+3. 重载客户端的 MCP 或新建会话，确认出现 `thu-campus`。
+4. 首次使用时，按下面“首次登录”操作，在弹出的独立浏览器中完成学校登录。
+
+目录不要求固定为示例路径。初始化完成后，平时直接使用客户端，无须再运行安装脚本。Chromium 是完整浏览器内核，首次下载约 200 MiB；三个服务共用一份内核和一套浏览器工作区。
+
+### 源码安装
+
+需要 Windows、Node.js 22/24 和 npm。所有依赖统一在仓库根目录安装：
 
 ```powershell
 git clone https://github.com/Zhou-chu/thu-campus-mcp.git
 cd thu-campus-mcp
-npm ci
-npm run build
-node bin/thu-campus.mjs --help
+npm run setup
+node bin/thu-campus.mjs install --unified --apply
 ```
 
-这是私有仓库，需要拥有访问权限。无需另外克隆旧项目、安装 Electron 或启动旧项目目录中的程序。根目录只有一份锁文件；不要在子包单独执行 npm install。发行附件 `thu-campus-mcp-source.zip` 同样需要 `npm ci` 和构建。
-
-## 本机登录
-
-按需分别登录，三者使用独立会话。账号和学校选择在本机终端或 Edge 中完成，不向聊天发送 Cookie、密码或 Token。
+`setup` 依次完成 `npm ci`、构建、下载固定版本的独立浏览器。内核放在项目的 `.runtime/browsers`，不进入 Git。下载失败可再次执行：
 
 ```powershell
-node bin/thu-campus.mjs learnx auth browser
-node bin/thu-campus.mjs cloud auth browser
-node bin/thu-campus.mjs hetang auth browser
-
-node bin/thu-campus.mjs learnx doctor
-node bin/thu-campus.mjs cloud doctor
-node bin/thu-campus.mjs hetang doctor
+node bin/thu-campus.mjs browser install
 ```
 
-默认继续使用 `~/.learnx-mcp`、`~/.thu-cloud-mcp`、`~/.hetang-mcp`。在同一 Windows 用户上可复用已有登录，不会把认证文件复制到仓库。`doctor` 的本地已配置状态不代表在线会话仍有效，可用服务的 status/查询工具验证。另一个 Windows 用户或另一台机器需要重新登录。
+下载使用 Playwright 官方发行源，版本与锁定的 Playwright 配套。网络需要代理时，在当前终端设置 `HTTPS_PROXY` 后重新下载，例如 `$env:HTTPS_PROXY='http://127.0.0.1:7890'`。这只影响当前终端；端口按自己的代理配置填写。安装完成后使用浏览器不再需要下载内核。
 
-## 四客户端配置
+## 一次 MCP 配置
+
+推荐使用安装器，它同时支持 Claude Code、Codex、Antigravity 新旧配置及已安装的 DeepSeek Harness。安装前可先预览：
 
 ```powershell
-node bin/thu-campus.mjs install           # 全部服务预览
-node bin/thu-campus.mjs install --apply   # 全部预检后，备份并合并
-node bin/thu-campus.mjs config            # 导出 JSON 配置示例，不含凭据
+node bin/thu-campus.mjs install --unified
+node bin/thu-campus.mjs install --unified --apply
 ```
 
-安装器维护 Claude Code 的 `~/.claude.json`、Codex 的 `~/.codex/config.toml`、Antigravity 的 `~/.gemini/config/mcp_config.json`，并在旧 IDE 配置和 DeepSeek Harness 目录已存在时维护它们。Harness 默认探测 `D:/DeepSeekHarness/home`，可以用 `DSH_HOME` 指定。服务注册名保持 `learnx`、`thu-cloud`、`hetang`，工具名也保持不变。
+安装器保留现有认证目录和下载目录，备份配置，保留其他 MCP。属于当前整合包的 `learnx`、`thu-cloud`、`hetang` 三项注册会合并为一项 `thu-campus`；原来的 46 个工具名保持不变。遇到其他来源的同名服务、禁用状态或不兼容的单独工具策略时会停止，不自动改变策略。写入逐文件处理，磁盘故障或并发编辑时依据输出及备份检查已处理文件。
 
-所有服务先预检；普通配置冲突不会写入任何目标。应用过程逐文件加锁、比对和备份，不是跨文件事务；并发修改或磁盘故障可能需要根据输出检查已处理的文件。已有会话可能需要重载 MCP 或新建会话。
+| 客户端 | 默认配置位置 |
+| --- | --- |
+| Claude Code | `~/.claude.json` |
+| Codex | `~/.codex/config.toml` |
+| Antigravity | `~/.gemini/config/mcp_config.json` |
+| Antigravity 旧 IDE | 已存在时同时更新 `~/.gemini/antigravity/mcp_config.json` |
+| DeepSeek Harness | `$DSH_HOME/@wingsky-1/dsh-mcp-manager/mcp.json`；默认探测 `D:/DeepSeekHarness/home` 或 `~/.dsh` |
 
-**已有旧仓库注册时**，安装器会报告 `INSTALL_CONFLICT`，保护原配置。本次仓库整合不会自动迁移本机已有注册。决定迁移时，先停止旧的后台任务，在旧仓库运行对应的 `node dist/cli.js uninstall --apply`，再在整合包运行安装命令。不要在卸载后删除原认证目录。三次卸载均只移除各自服务注册，其他 MCP 不变。也可参照 `config` 输出手动修改三项的命令路径。
+也可以复制一个 stdio 配置。便携包示例：
 
-卸载整合包注册使用 `node bin/thu-campus.mjs uninstall --apply`，只移除属于本整合包路径的三项注册。
-
-## 常见用法
-
-- “把本学期网络学堂课程更新到 `D:\网络学堂`，每门课程按公告、作业、文件等专栏分类，并报告抓取不完整的内容。”
-- “列出尚未提交的作业和截止时间；把我指定的文件提交到指定作业。”
-- “列出荷塘雨课堂当前课堂，监控我指定的课程并自动进入，用当前模型读取已发布题目、解题、提交和核对回执。”
-- “把选定雨课堂的课件下载到 `D:\荷塘雨课堂`，生成 PDF，并归档到清华云盘的‘荷塘雨课堂’文件夹。”
-
-自动答题要求当前 Harness 保持运行并持续调用工具；后台监控不会另行调用模型。自动进入需要指定课程或课堂范围，单次最长 8 小时。平台未发布或已经截止的题不会补投。结果不明的提交保留 `unknown`，查询原回执和服务器状态，不能更换请求 ID 盲目重发。已有作业或文件的覆盖需要明确授权。
-
-雨课堂默认调用包内 `packages/thu-cloud/dist/cli.js`。归档只接收已登记的下载清单，校验文件哈希，并默认选择明确属于个人的可写资料库，在 `/荷塘雨课堂/课程/课堂/` 下保存；不会自动选择共享资料库兜底。云盘不可用时保留本地下载和清单，登录后可继续归档。
-
-## 目录与配置
-
-```text
-bin/thu-campus.mjs        统一命令入口
-lib/                     命令、配置与安装协调
-packages/learnx/         网络学堂，含固定版本 thu-learn-lib
-packages/thu-cloud/      云盘 REST MCP
-packages/hetang/         雨课堂 MCP，默认连接包内云盘
-docs/                    开源来源、依赖清单、源提交与验证记录
-test/                    整合入口与搬迁验证
+```json
+{
+  "mcpServers": {
+    "thu-campus": {
+      "command": "D:\\Tools\\thu-campus-mcp\\.runtime\\node.exe",
+      "args": ["D:\\Tools\\thu-campus-mcp\\bin\\thu-campus.mjs", "serve"]
+    }
+  }
+}
 ```
 
-| 服务 | 认证目录变量 | 下载目录变量 |
+源码安装时将 `command` 改为本机 Node 路径。使用 `node bin/thu-campus.mjs config --unified` 可以生成当前机器的实际 JSON；Codex 使用对应的 `[mcp_servers.thu-campus]` TOML 表。不要配置远程调试端口，不需要另设浏览器服务端口。
+
+## 首次登录
+
+可以直接对 Harness 说：
+
+> 打开独立浏览器，为我登录网络学堂。我的学号是……。不要让我把密码或 Cookie 发到聊天中。
+
+Harness 调用 `campus_browser_login` 后立即得到后台任务 ID。你在本机窗口完成密码、扫码、学校选择或多因素验证；工具在线验证成功后保存 MCP 会话并关闭窗口。用 `campus_browser_status` 查看任务是否 `complete`；MCP 对话连接中断不会关闭后台登录窗口。
+
+首次网络学堂需要一个学号作为本地账号绑定；已有绑定时可省略。雨课堂和云盘的账号由服务器验证结果取得。也可在终端操作：
+
+```powershell
+# 源码安装使用 node；便携包可将 node 换成 .\.runtime\node.exe
+node bin/thu-campus.mjs browser login learnx --account 你的学号
+node bin/thu-campus.mjs browser login cloud
+node bin/thu-campus.mjs browser login hetang
+node bin/thu-campus.mjs browser status
+```
+
+已有三个 API 登录状态的老用户无需删除或搬运认证文件。网络学堂与雨课堂会尝试把自己已有的 Cookie 带入空的独立浏览器工作区，减少重新验证；是否能直接恢复取决于学校会话是否仍有效。首次迁移完成一次浏览器登录后，后续使用相同工作区。
+
+### 日常登录复用
+
+统一入口会按以下顺序处理：
+
+1. 优先直接使用已保存的服务会话，正常调用不启动浏览器。
+2. **只读操作**返回认证过期，且已有相匹配的浏览器绑定时，短暂启动无界面 Chromium，尝试恢复同一账号。
+3. 恢复成功后，仅重试该只读操作一次；失败则返回登录要求，使用 `campus_browser_login` 重新打开窗口。
+
+自动恢复不会跨账号替换认证，不会在已注销的空认证存储中重新登录，也不会重发提交作业、答题、上传、分享等写入请求。`unknown` 仍须查询原操作回执。浏览器正在被另一个窗口使用时，先关闭该窗口再执行登录/恢复。
+
+## 浏览器窗口与会话管理
+
+| MCP 工具 | 用途 |
+| --- | --- |
+| `campus_browser_status` | 内核、资料目录、占用情况、最近后台任务及错误代码；不返回凭据 |
+| `campus_browser_open` | 打开一个或全部校园站点，复用独立工作区；返回任务 ID |
+| `campus_browser_login` | 登录指定服务并验证、写入对应 MCP 会话；返回任务 ID |
+| `campus_browser_close` | 请求关闭工具打开的窗口并保留资料；不注销学校账号 |
+
+`open` 用于查看网页；需要把网页登录同步到 MCP 时用 `login`。同一工作区一次只允许一个浏览器进程，多个 Harness 共用它。已有 `open` 窗口时，先 `close`，等状态不再占用，再 `login`。后台任务显示 `downloading` 时正在准备内核。
+
+```powershell
+node bin/thu-campus.mjs browser open all
+node bin/thu-campus.mjs browser close
+node bin/thu-campus.mjs browser status
+```
+
+关闭窗口、退出客户端或升级代码都不会主动删除浏览器资料。Cookie、localStorage、IndexedDB 保存在持久工作区，并有当前 Windows 用户 DPAPI 保护的额外状态快照；原生 Chromium 资料目录按浏览器自身格式保存，不应共享。
+
+### 退出与切换账号
+
+`browser close` 只是关闭窗口。彻底退出 MCP 会话，分别执行：
+
+```powershell
+node bin/thu-campus.mjs learnx auth logout
+node bin/thu-campus.mjs cloud auth logout
+node bin/thu-campus.mjs hetang auth logout
+```
+
+需要清除浏览器里的 SSO、Cookie 和本机浏览器绑定时，先关闭窗口，再执行：
+
+```powershell
+node bin/thu-campus.mjs browser reset --confirm
+```
+
+`reset` 仅清理本工具管理的浏览器工作区，不删除课程资料和三个服务的 API 认证存储；要完全换账号，应同时执行对应的 `auth logout`，然后重新登录。注销/切换账号后，已启动任务不能把旧认证恢复回来。
+
+## 自然语言使用示例
+
+- “把本学期网络学堂课程更新到 `D:\网络学堂`，每门课程按公告、作业、文件等专栏分类，报告不完整内容。”
+- “列出尚未提交的作业和截止时间，把我指定的文件提交到指定作业。”
+- “监控我指定的雨课堂课程并自动进入，用当前模型读取已发布题目、解题、提交和核对回执。”
+- “把选定课堂的课件下载到 `D:\荷塘雨课堂`，生成 PDF，并归档到清华云盘的‘荷塘雨课堂’文件夹。”
+
+自动答题要求当前 Harness 保持运行并持续调用工具；后台监控只维护连接，不另行调用模型。监控需要课程/课堂范围，最长 8 小时。不补投已关闭题目，不能保证任意题目答对。课件归档只上传本服务登记清单内校验过的文件，默认不覆盖，不自动选共享资料库兜底。
+
+## 可迁移性、升级和资料位置
+
+| 内容 | 默认位置 | 迁移说明 |
 | --- | --- | --- |
-| learnx | `LEARNX_STATE_DIR` | `LEARNX_OUTPUT_DIR` |
-| cloud | `THU_CLOUD_STATE_DIR` | `THU_CLOUD_OUTPUT_DIR` |
-| hetang | `HETANG_STATE_DIR` | `HETANG_OUTPUT_DIR` |
+| 代码、Node、依赖、浏览器内核 | 安装目录；内核在 `.runtime` | 便携包可整目录复制；路径变化后更新这一项 MCP 配置 |
+| 持久浏览器和额外加密快照 | `~/.thu-campus-mcp/browser` | 同一 Windows 用户升级/换安装目录时继续使用；不要随程序分发 |
+| 网络学堂会话 | `~/.learnx-mcp` | 保留原目录 |
+| 云盘会话 | `~/.thu-cloud-mcp` | 保留原目录 |
+| 雨课堂会话 | `~/.hetang-mcp` | 保留原目录 |
+| 下载资料 | 各模块配置的输出目录 | 安装迁移保留已有配置；升级前不要覆盖个人输出目录 |
 
-网络学堂和云盘默认下载到各子包的 `downloads`，雨课堂默认 `D:/荷塘雨课堂`。可用 `HETANG_CLOUD_CLI` 显式指定其他兼容云盘构建。安装和配置导出会把云盘的 `THU_CLOUD_STATE_DIR` 同时保存到雨课堂注册项，确保客户端重启后归档仍使用选定云盘会话。`*_MOCK=1` 才启用离线模拟；安装器始终写入真实模式。移动仓库后应重新构建并更新客户端路径，认证默认目录保持不变。
+升级便携包时，关闭独立浏览器，解压新版到新目录，再运行新版 `install-clients.cmd` 或更新配置里的程序路径。已有注册指向另一安装目录时，安装器会保护它并报告冲突，可在旧目录执行 `uninstall --unified --apply` 后安装新版。源码升级使用 `git pull`、`npm ci`、`npm run build`、`browser install`；浏览器版本按锁文件更新，用户资料目录保留。
 
-模块行为及限制见：[网络学堂](packages/learnx/README.md)、[云盘](packages/thu-cloud/README.md)、[雨课堂](packages/hetang/README.md)；完整工具及必填参数见 [TOOLS.md](docs/TOOLS.md)。安装及目录以本页为准。
+可用 `THU_BROWSER_STATE_DIR` 自定义浏览器资料目录，用 `THU_BROWSER_RUNTIME_DIR` 自定义内核目录。默认内核路径相对安装目录解析，移动项目不需要保留原电脑的绝对路径。`LEARNX_STATE_DIR`、`THU_CLOUD_STATE_DIR`、`HETANG_STATE_DIR` 及相应 `*_OUTPUT_DIR` 继续有效。自定义路径应选择自己的私有目录。
 
-## 开源来源与许可
+DPAPI 绑定 Windows 用户，不能把加密快照直接复制给另一台机器或另一个人当作登录凭据。其他人使用同一程序包时，登录自己的账号一次，之后保留自己的工作区。服务器撤销会话或学校要求重新验证时，程序无法承诺永久免验证。
 
-网络学堂直接依赖并随包包含 MIT 的 [thu-learn-lib](https://github.com/robertying/thu-learn-lib)，版本与 [learnX](https://github.com/robertying/learnX) 对齐。云盘独立实现 Seafile REST；雨课堂独立实现公开课堂协议。没有捆绑来源许可不明或带非商业限制的第三方应用代码。
+## 常见问题
 
-完整说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，精确 npm 版本和许可见 [DEPENDENCIES.md](docs/DEPENDENCIES.md)。本项目及三个模块保留各自 MIT 许可，第三方依赖遵循各自许可；不能把协议参考项目说成实际运行依赖。
+| 现象 / 错误 | 处理 |
+| --- | --- |
+| `BROWSER_NOT_INSTALLED` | 源码安装运行 `browser install`；便携包检查是否完整解压 `.runtime` |
+| 下载失败 | 检查网络/代理后重试；可直接使用带内核的便携包 |
+| `BROWSER_BUSY` / `requiresClose` | 关闭现有独立窗口，或请求 `campus_browser_close`，等任务停止后重试 |
+| `AUTH_REQUIRED` / `BROWSER_LOGIN_REQUIRED` | 请求 `campus_browser_login`，在本机窗口完成验证 |
+| `BROWSER_ACCOUNT_MISMATCH` | 浏览器与 MCP 账号不一致，先按账号切换流程处理 |
+| `AUTH_CHANGED` | 登录期间发生注销/切换，旧登录未保存；按当前账号重新操作 |
+| `INSTALL_CONFLICT` / `INSTALL_POLICY_CONFLICT` | 检查旧路径或服务策略，不手动删除其他 MCP；可继续使用分服务模式 |
+| 工具未出现 | 重载 MCP 或新建客户端会话；检查 `thu-campus` 的路径和启用状态 |
 
-## 开发与 CI
+不需要增加“保持在线”定时请求，不模拟学习时长或伪造验证码。与身份验证有关的输入仅在本机终端/浏览器处理，README、日志和 CI 产物中均不应包含登录资料。
+
+## 开源来源与开发
+
+[开源来源和许可总表](THIRD_PARTY_NOTICES.md) 区分实际分发代码、npm 运行依赖和仅作协议参考的项目；[精确依赖清单](docs/DEPENDENCIES.md) 与根锁文件对应。网络学堂包含 MIT 的 thu-learn-lib；云盘和雨课堂为独立协议适配。便携包另附匹配 Node.js 的 LICENSE 与浏览器的第三方许可页面。
 
 ```powershell
-npm run check          # 类型、构建、全部单测、许可清单与源代码审计
-npm run smoke          # 三个服务独立端到端 + 搬迁后的统一入口
-npm run licenses       # 依赖变更后更新清单
-npm run bundle         # 打包当前 Git 提交的源代码及 SHA256
+npm run check           # 类型、构建、单测、依赖许可和来源/密钥审计
+npm run smoke           # 三个服务、统一入口、真实独立 Chromium 持久化测试
+npm run bundle          # 仅源代码 ZIP
+npm run bundle:prepared # Windows 便携 ZIP；需先构建并安装内核
 ```
 
-CI 不使用学校账号，不提交真实作业、不进入真实课堂、不上传真实云盘数据。真实服务曾分别验收过课程同步、个人作业提交及课件/云盘归档；当前没有活跃雨课堂，真实进课堂与答题仍待课堂验证。回放和附件受平台实际返回内容限制，仅有共享文件计数时尚不展开附件。网络学堂讨论/答疑的细节仍标注部分验收。详见 [验证说明](docs/VERIFICATION.md)。
+CI 在 Windows Node 22/24 上检查，不使用学校账号，不进入真实课堂、不提交真实作业、不写真实云盘。独立浏览器的 Cookie、localStorage、IndexedDB 关闭重开测试使用本地模拟站点。真实雨课堂进入/答题仍受活跃课堂与授权范围限制；回放和附件以平台返回为准。详情见 [验证说明](docs/VERIFICATION.md)。
+
+兼容分服务模式：不加 `--unified` 的 `install` / `config` 仍保留原有三个注册；模块命令 `learnx`、`cloud`、`hetang` 仍可单独调用。统一入口才提供集中浏览器工具及自动恢复。原工具参考见 [TOOLS.md](docs/TOOLS.md)。
+
+浏览器持久化机制使用 Playwright 的 [Persistent Context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context) 和 [Storage State](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)；独立内核由其[官方浏览器安装器](https://playwright.dev/docs/browsers)准备。

@@ -1,4 +1,4 @@
-import { chromium } from "playwright-core";
+import { launchEphemeral } from "@thu-campus/browser";
 import path from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
 import { AuthStore } from "./auth.js";
@@ -16,7 +16,7 @@ export async function captureClassroom(
     throw new RainError("JOIN_REQUIRED", "截图前需要显式进入尚未结束的课堂。");
   const auth = await new AuthStore(cfg.stateDir).load();
   if (!auth) throw new RainError("AUTH_REQUIRED", "未登录荷塘雨课堂。");
-  const browser = await chromium.launch({ channel: "msedge", headless: true });
+  const browser = await launchEphemeral({ headless: true });
   try {
     await client.checkAuth();
     const context = await browser.newContext({

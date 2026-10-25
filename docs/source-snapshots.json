@@ -70,6 +70,26 @@
       "src/storage.ts": {
         "sha256": "3e592c0d2a0a7e330af93c2be3c5f6901d97a332d6ba3427fe9842a29d8be2e9",
         "reason": "Bounded Windows atomic rename recovery for concurrent status readers exposed by Node22 CI"
+      },
+      "package.json": {
+        "sha256": "b433baad2ba3ef8f73945d663c039ee21701c16398386a2d7cb6f65a238bafc4",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/auth.ts": {
+        "sha256": "cd3820bb4f86ae217046fd63abe14342778bfad1027e27067fecf12b45bdd130",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/browser-auth.ts": {
+        "sha256": "3adc2101a0ede6dd688d125c29e3a94b377684d915eefde869477a58ae7bb452",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/cli.ts": {
+        "sha256": "f97f58eb0d8f5505f931d63b091966c48f705ac7d70672e416facf08b0347479",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "test/browser-auth.test.ts": {
+        "sha256": "5217382a7de60d21a323e021e60a65e0aac4ca3b6505b77c3929a7525673b62c",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       }
     }
   },
@@ -112,6 +132,18 @@
       "README.md": {
         "sha256": "e57a141a4c802cac22f3ae648af34e7a7b83f603bab36150a46e3d7701081d8a",
         "reason": "Bundle module guide"
+      },
+      "package.json": {
+        "sha256": "7558dbf60986430c041f598b2fcf1aea4c30436bac2dd76b35c187c5f7306a62",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/browser-auth.ts": {
+        "sha256": "ec563cb576bf3ed84cd527248d9090531b146d7ae1d29433d653050f36a941eb",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/cli.ts": {
+        "sha256": "6c2c13552b430176b5bb9b96e3b687ab775a9ce5c2b60e1189abcb144b12b45c",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       }
     }
   },
@@ -166,6 +198,22 @@
       "src/install.ts": {
         "sha256": "198182de3134d334db4654a608cb87065d4fcacc87a763b48883c15c2a090a86",
         "reason": "Preserve selected cloud state directory in installed rain configuration"
+      },
+      "package.json": {
+        "sha256": "7dc4584cd70c3d118c42eaa11fa7a93d8a9c904328b213f63662399dcf01b6cb",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/browser-auth.ts": {
+        "sha256": "18aa5eb6625646ee324a4e9f965ae851be812976882ae18c0c68135431b1b934",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/capture.ts": {
+        "sha256": "471739ca16cfa80a923d2a878f2f229c538dd33b7f6b74a9741b623faa6bc589",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/cli.ts": {
+        "sha256": "e14717adf07f2b99825d7b5177dae72d177a23cfd06c68ab5a5b7d72a355c94b",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       }
     }
   }

@@ -1,13 +1,19 @@
 {
   "name": "thu-campus-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "清华校园 MCP 整合包：网络学堂、清华云盘、荷塘雨课堂",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "workspaces": ["packages/*"],
-  "bin": { "thu-campus": "bin/thu-campus.mjs" },
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "bin": {
+    "thu-campus": "bin/thu-campus.mjs"
+  },
   "scripts": {
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
@@ -18,6 +24,14 @@
     "licenses": "node scripts/licenses.mjs",
     "licenses:check": "node scripts/licenses.mjs --check",
     "audit:source": "node scripts/audit-source.mjs",
-    "bundle": "node scripts/bundle.mjs"
+    "bundle": "node scripts/bundle.mjs",
+    "setup": "npm ci && npm run build && node bin/thu-campus.mjs browser install",
+    "bundle:prepared": "node scripts/prepared-bundle.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@thu-campus/browser": "1.0.0",
+    "smol-toml": "1.9.1",
+    "proper-lockfile": "4.1.2"
   }
 }

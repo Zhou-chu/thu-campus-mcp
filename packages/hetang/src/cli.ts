@@ -25,7 +25,7 @@ async function main() {
       print(
         await browserLogin(
           cfg,
-          args.includes("--chrome") ? "chrome" : "msedge",
+          args.includes("--chrome") ? "chrome" : undefined,
         ),
       );
       return;

@@ -22,7 +22,7 @@
 | 依赖项目 | 实际作用 | 主要许可 |
 | --- | --- | --- |
 | [modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk) | 三个服务的 MCP stdio、工具、客户端桥接 | MIT |
-| [microsoft/playwright](https://github.com/microsoft/playwright)（playwright-core） | 本机 Edge 登录、雨课堂页面截图；不随包下载浏览器 | Apache-2.0 |
+| [microsoft/playwright](https://github.com/microsoft/playwright)（playwright-core） | 独立 Chromium、持久浏览器工作区、学校登录与课堂截图 | Apache-2.0 |
 | [Hopding/pdf-lib](https://github.com/Hopding/pdf-lib) | 课件图片生成 PDF | MIT |
 | [cheeriojs/cheerio](https://github.com/cheeriojs/cheerio)、[fb55/entities](https://github.com/fb55/entities) | 网络学堂 HTML 解析和实体解码 | MIT / BSD-2-Clause |
 | [mixmark-io/turndown](https://github.com/mixmark-io/turndown) | HTML 转 Markdown | MIT |
@@ -54,4 +54,14 @@
 
 ## 5. CI 基础设施
 
-GitHub Actions 使用官方 [actions/checkout](https://github.com/actions/checkout)、[actions/setup-node](https://github.com/actions/setup-node)、[actions/upload-artifact](https://github.com/actions/upload-artifact)，工作流固定到已核对的提交 SHA。它们只在 CI 运行，不是本机 MCP 的运行依赖。Windows、Edge、Node、Claude Code、Codex、Antigravity、DeepSeek Harness 和当前模型是宿主环境，不随源代码包分发。
+GitHub Actions 使用官方 [actions/checkout](https://github.com/actions/checkout)、[actions/setup-node](https://github.com/actions/setup-node)、[actions/upload-artifact](https://github.com/actions/upload-artifact)，工作流固定到已核对的提交 SHA。它们只在 CI 运行。
+
+## 6. 独立浏览器及便携运行时（1.1）
+
+新增 `@thu-campus/browser` 是本项目自己的 MIT 工作区，提供共享配置、DPAPI 快照、配置目录锁及独立内核安装，不是新引入的第三方浏览器 UI 项目。
+
+独立内核由 Playwright 1.64.1 的官方安装器下载，本次固定 Chromium revision `1248`，发行标题 Chrome for Testing `156.0.8078.4`。该二进制发行的许可与第三方组件以其 `chrome://credits` 为准；Windows 便携包保存此页面到 `.runtime/CHROMIUM-THIRD-PARTY-NOTICES.html`，并完整保留浏览器发行文件。不能把 Chromium 发行及其中第三方组件统称为本仓库 MIT。安装器还可能下载 FFmpeg/Winldd 辅助文件，便携运行包仅打包实际使用的 Chromium 目录。
+
+便携包另含 Node.js 的实际构建版本及匹配版本的原始 LICENSE，保存为 `.runtime/NODE-LICENSE.txt`；源码 ZIP 不含 Node 或浏览器二进制。Windows、Claude Code、Codex、Antigravity、DeepSeek Harness 和当前模型仍由使用者提供。
+
+浏览器工作区、SSO、API 会话和加密快照不属于可分发的运行时，始终留在使用者本机，不进入上述安装包。

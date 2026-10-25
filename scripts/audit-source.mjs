@@ -14,7 +14,7 @@ const rules = [
 const findings = [];
 function scan(text,location) { for (const [rule,regex] of rules) if (regex.test(text)) findings.push({location,rule}); }
 for (const name of names) {
-  if (/(?:^|\/)(?:node_modules|dist|downloads|\.local|\.superpowers)(?:\/|$)|(?:^|\/)\.env(?:$|\.)|\.dpapi$/i.test(name)) findings.push({location:name,rule:'private-or-generated-path'});
+  if (/(?:^|\/)(?:node_modules|dist|downloads|\.runtime|\.local|\.superpowers)(?:\/|$)|(?:^|\/)\.env(?:$|\.)|\.dpapi$/i.test(name)) findings.push({location:name,rule:'private-or-generated-path'});
   scan(await readFile(path.join(root,name),'utf8'),name);
 }
 let blobs = 0;

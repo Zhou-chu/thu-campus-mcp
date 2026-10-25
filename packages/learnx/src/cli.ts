@@ -53,8 +53,8 @@ async function main() {
     if (sub === 'logout') { await store.clear(); print({ configured: false }); return; }
     if (sub === 'status') { print(await store.status()); return; }
     if (sub === 'browser') {
-      const account = flag('--account') || await text('会话所属网络学堂账号（仅用于本地账号绑定）：');
-      const { browserLogin } = await import('./browser-auth.js'); print(await browserLogin(store, account, flag('--channel') || 'msedge')); return;
+      const account = flag('--account') || (await store.load())?.account || await text('会话所属网络学堂账号（仅用于本地账号绑定）：');
+      const { browserLogin } = await import('./browser-auth.js'); print(await browserLogin(store, account, flag('--channel'))); return;
     }
     let auth: AuthData;
     if (sub === 'login') {

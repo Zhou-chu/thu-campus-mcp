@@ -94,7 +94,7 @@ async function main() {
         "请在新开的本机浏览器完成清华云盘登录；凭据不会进入聊天，最多等待 10 分钟。\n",
       );
       const n = args.indexOf("--channel");
-      print(await browserLogin(config, n < 0 ? "msedge" : args[n + 1]));
+      print(await browserLogin(config, n < 0 ? undefined : args[n + 1]));
       return;
     }
     const generation = await store.generation();

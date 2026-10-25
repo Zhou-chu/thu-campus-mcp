@@ -27,12 +27,22 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: node bin/thu-campus.mjs browser install
       - run: npm run check
       - run: npm run smoke
       - run: npm run bundle
+      - if: matrix.node == 24
+        run: npm run bundle:prepared
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: thu-campus-mcp-source-node-${{ matrix.node }}
-          path: .local/release/*
+          path: .local/release/thu-campus-mcp-source.zip*
+          retention-days: 14
+          if-no-files-found: error
+      - if: matrix.node == 24
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: thu-campus-mcp-windows-x64
+          path: .local/release/thu-campus-mcp-windows-x64.zip*
           retention-days: 14
           if-no-files-found: error
