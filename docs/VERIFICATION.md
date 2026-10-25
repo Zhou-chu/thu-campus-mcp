@@ -16,6 +16,8 @@
 
 已生成 Windows x64 便携 ZIP，完成包内状态/许可审计。将完整 ZIP 解压到含中文和空格的不同路径，PATH 排除系统 Node；使用包内 Node 发现 50 个工具，并用包内 Chromium 完成 Cookie、localStorage、IndexedDB 及直接关闭回归测试。该搬迁验证同时纳入 Node 24 CI。远端结果以对应提交及 Actions 产物为准，使用者浏览器资料始终不进入分发。
 
+实现提交 `fc0dd5b67edd9197df41d0936fb5560cb81e986e` 的 [CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/runs/40168924652) 已全部成功：Windows Node 22/24，Node 24 另完成便携 ZIP 构建、搬迁验证及上传。四个本机客户端的5处配置已合为一个 `thu-campus`，逐配置 stdio 握手均发现50工具，网络学堂学期、云盘资料库和雨课堂课程只读查询均成功；DeepSeek Harness 3199 热重连显示 connected、50工具。重复安装不再产生配置改动。网络学堂和雨课堂已在新的用户持久浏览器中复用验证；云盘原API会话正常，新浏览器需要首次网页登录。
+
 ## 来源项目的验收范围
 
 - learnX MCP：提交 `8d9fcd3`，53 项测试；历史真实验收包含课程同步、一次个人在线作业单次上传与状态回读及附件回下载哈希核验。
