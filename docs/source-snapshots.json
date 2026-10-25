@@ -66,6 +66,10 @@
       "README.md": {
         "sha256": "d76f6667b8deb2306a40c30d0519da83987a13026909c20e9b39f1c44191eabf",
         "reason": "Bundle module guide"
+      },
+      "src/storage.ts": {
+        "sha256": "3e592c0d2a0a7e330af93c2be3c5f6901d97a332d6ba3427fe9842a29d8be2e9",
+        "reason": "Bounded Windows atomic rename recovery for concurrent status readers exposed by Node22 CI"
       }
     }
   },

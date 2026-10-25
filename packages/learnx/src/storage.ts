@@ -31,7 +31,18 @@ export async function guardedPath(root: string, relative: string): Promise<strin
 export async function atomicWrite(file: string, data: string | Uint8Array): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${randomUUID()}.tmp`;
-  try { await writeFile(temp, data, { mode: 0o600 }); await rename(temp, file); }
+  try {
+    await writeFile(temp, data, { mode: 0o600 });
+    // Retry only an identical local atomic replacement while Windows readers release it.
+    for (let attempt = 0; ; attempt++) {
+      try { await rename(temp, file); break; }
+      catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(code || '') || attempt >= 19) throw error;
+        await new Promise(resolve => setTimeout(resolve, Math.min(10 * 2 ** attempt, 200)));
+      }
+    }
+  }
   finally { await rm(temp, { force: true }); }
 }
 export async function atomicJson(file: string, data: unknown): Promise<void> { await atomicWrite(file, JSON.stringify(data, null, 2) + '\n'); }

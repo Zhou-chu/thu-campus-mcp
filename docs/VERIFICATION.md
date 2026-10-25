@@ -20,6 +20,8 @@
 - 来源文件哈希、npm 许可清单、源码及已提交 Git 历史的密钥模式扫描。
 - Windows Node 22/24 GitHub Actions，生成源代码 ZIP 与 SHA256。最终结果以对应提交的 Actions 页面为准。
 
+首次 CI 中 Node 24 通过，Node 22 在网络学堂后台同步 smoke 失败。Windows 并发读取状态文件的本机复现返回 `EPERM` / `rename`；网络学堂原有原子写入没有重试。现增加仅针对 Windows 共享冲突的有界本地 rename 重试，3 项回归验证短暂冲突恢复、其他错误不重试及永久失败保留旧文件。该重试不会重放任何学校或云盘请求。
+
 ## 当前限制
 
 真实认证只支持 Windows DPAPI，新机器需要本机登录。CI 不包含学校凭据。
