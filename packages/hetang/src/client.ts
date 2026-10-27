@@ -78,9 +78,12 @@ export class RainClient {
     endpoint: string,
     init: RequestInit = {},
     lessonToken?: string,
+    lessonBearerToken?: string,
+    captureBearer?: (bearer: string | undefined) => void,
   ): Promise<any> {
     await this.checkAuth();
     const u = apiUrl(endpoint);
+    const sentBearer = lessonBearerToken ?? this.auth!.bearerToken;
     const csrf = /(?:^|;\s*)csrftoken=([^;]+)/.exec(
       this.auth!.cookieHeader,
     )?.[1];
@@ -99,6 +102,9 @@ export class RainClient {
           ? { Authorization: "Bearer " + this.auth!.bearerToken }
           : {}),
         ...(lessonToken ? { "lesson-token": lessonToken } : {}),
+        ...(lessonBearerToken
+          ? { Authorization: "Bearer " + lessonBearerToken }
+          : {}),
         ...init.headers,
       },
       signal: AbortSignal.timeout(this.config.timeoutMs),
@@ -138,6 +144,7 @@ export class RainClient {
       );
     const setAuth = response.headers.get("set-auth");
     if (setAuth) this.auth!.bearerToken = setAuth.replace(/^Bearer\s+/i, "");
+    captureBearer?.(setAuth ? setAuth.replace(/^Bearer\s+/i, "") : sentBearer);
     return result;
   }
   async user() {
@@ -239,14 +246,24 @@ export class RainClient {
       return { lessonId, joined: true, alreadyJoined: true };
     }
     await beforeWrite?.();
+    let checkedBearer: string | undefined;
     const d = dataOf(
-      await this.request("/api/v3/lesson/checkin", {
-        method: "POST",
-        body: JSON.stringify({
-          lessonId,
-          ...(lesson.classroomId ? { classroomId: lesson.classroomId } : {}),
-        }),
-      }),
+      await this.request(
+        "/api/v3/lesson/checkin",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            source: 1,
+            lessonId,
+            ...(lesson.classroomId ? { classroomId: lesson.classroomId } : {}),
+          }),
+        },
+        undefined,
+        undefined,
+        (bearer) => {
+          checkedBearer = bearer;
+        },
+      ),
     );
     const token = d.lessonToken ?? d.lesson_token;
     if (typeof token !== "string" || !token)
@@ -259,6 +276,7 @@ export class RainClient {
       account: this.identity,
       lessonId,
       lessonToken: token,
+      lessonBearerToken: checkedBearer,
       expiresAt:
         d.expiresAt ??
         (d.expiresIn ? Date.now() + Number(d.expiresIn) * 1000 : null),
@@ -281,6 +299,7 @@ export class RainClient {
         encodeURIComponent(s.presentationId),
       {},
       s.lessonToken,
+      s.lessonBearerToken,
     );
     const result = await this.updateState(lessonId, (current) => {
       const latest = current || s;
@@ -315,12 +334,63 @@ export class RainClient {
   }
   async collectResources(lessonId: string) {
     await this.checkAuth();
+    const live = await this.state(lessonId);
+    if (
+      live?.lessonToken &&
+      !live.finished &&
+      (await this.active()).some((x) => x.id === lessonId)
+    ) {
+      const ids = Object.keys(live.publishedSlides || {});
+      if (!ids.length)
+        throw new RainError(
+          "LIVE_SNAPSHOT_REQUIRED",
+          "实时课堂尚未同步已发布课件，请等待课堂连接后重试。",
+        );
+      const presentations: Record<string, any> = {},
+        catalog = [];
+      for (const pid of ids) {
+        const response = await this.request(
+          "/api/v3/lesson/presentation/fetch?presentation_id=" +
+            encodeURIComponent(pid),
+          {},
+          live.lessonToken,
+          live.lessonBearerToken,
+        );
+        const deck = dataOf(response),
+          allowed = new Set(live.publishedSlides![pid]);
+        if (!Array.isArray(deck.slides))
+          throw new RainError("INVALID_RESPONSE", "实时课件缺少可识别的页面。");
+        presentations[pid] = {
+          ...deck,
+          slides: deck.slides.filter((s: any) => allowed.has(identifier(s.id))),
+        };
+        catalog.push({ id: pid, title: String(deck.title || "课堂课件") });
+      }
+      const resources = resourcesFromSummary(
+        lessonId,
+        { presentations: catalog },
+        presentations,
+        {},
+      );
+      await this.updateState(lessonId, (s) => ({ ...s!, resources }));
+      return {
+        title: catalog.at(-1)!.title,
+        resources,
+        replayUnavailable: true,
+        scope: "published-live-snapshot",
+      };
+    }
     const summary = dataOf(
       await this.request(
         "/api/v3/lesson-summary/student?lesson_id=" +
           encodeURIComponent(lessonId),
       ),
     );
+    if (summary.errorCode !== undefined && Number(summary.errorCode) !== 0)
+      throw new RainError(
+        "RESOURCES_NOT_READY",
+        "平台尚未生成可用的课后资源汇总。",
+      );
     const presentations: Record<string, any> = {};
     for (const p of summary.presentations ?? []) {
       const pid = identifier(p.id ?? p.presentation_id);

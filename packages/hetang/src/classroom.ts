@@ -67,9 +67,14 @@ export function applyEvent(
     const startAt = milliseconds(p.dt ?? p.unlockedAt) ?? now;
     const limit = Number(p.limit);
     state.timings ||= {};
+    const priorEnd = state.timings[qid]?.endAt;
+    const deadline = limit > 0 ? startAt + limit * 1000 : undefined;
+    const ends = [priorEnd, deadline].filter(
+      (n): n is number => n !== undefined,
+    );
     state.timings[qid] = {
       startAt,
-      endAt: limit > 0 ? startAt + limit * 1000 : state.timings[qid]?.endAt,
+      endAt: ends.length ? Math.min(...ends) : undefined,
     };
     const q = state.questions.find((x) => x.id === qid);
     if (q) {
@@ -79,14 +84,27 @@ export function applyEvent(
     emit("question-published", qid);
   };
   switch (String(message?.op ?? "").toLowerCase()) {
+    case "hello":
     case "fetchtimeline":
       for (const p of Array.isArray(message.timeline) ? message.timeline : []) {
         if (p.type === "problem") unlock(p);
-        else if (p.type === "presentation") {
+        else if (p.type === "slide") {
+          const pres = id(p.pres),
+            slide = id(p.sid);
+          if (pres && slide) {
+            state.publishedSlides ||= {};
+            const slides = (state.publishedSlides[pres] ||= []);
+            if (!slides.includes(slide)) slides.push(slide);
+            state.presentationId = pres;
+          }
+        } else if (p.type === "presentation") {
           const pres = id(p.pres ?? p.presentationId ?? p.id);
           if (pres) state.presentationId = pres;
         }
       }
+      if (typeof message.presentation === "string")
+        state.presentationId = id(message.presentation);
+      if (state.presentationId) emit("presentation");
       break;
     case "unlockproblem":
       unlock(message);
@@ -200,6 +218,7 @@ export class AnswerService {
             }),
           },
           state.lessonToken,
+          state.lessonBearerToken,
         );
         for (let n = 0; n < 4; n++) {
           await this.client.checkAuth();

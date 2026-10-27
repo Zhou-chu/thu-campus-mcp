@@ -222,6 +222,38 @@
       "src/auth.ts": {
         "sha256": "f48cb2626b1772f49ea2f078605c227641d4ab9598c9266b9c6384fcc9575cf0",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/classroom.ts": {
+        "sha256": "bf4498f0bd77a1c725ad25a3a5685d2140a241430fee61014c3fca3b2d130e4d",
+        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+      },
+      "src/client.ts": {
+        "sha256": "a4649c1e6848c5d6762de5de85e68282058ecff87860c60fd2b1537f4a8a7caf",
+        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+      },
+      "src/protocol.ts": {
+        "sha256": "4cf1e3da9756109a61fbaae804583c650e2c06cba83ec5ae62b478aff44f4fd1",
+        "reason": "Live classroom checkin source, protected lesson bearer and published snapshot recovery (1.1)"
+      },
+      "src/server.ts": {
+        "sha256": "1bf1770e573616f7173f7440abd06d6b7a21e16e7338631bdfddb1b18a34c4e9",
+        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+      },
+      "src/types.ts": {
+        "sha256": "d36742d8222aac1a4e2235af6914844f45b72157f41aea176045d6e3a99501f6",
+        "reason": "Live classroom checkin source, protected lesson bearer and published snapshot recovery (1.1)"
+      },
+      "test/classroom.test.ts": {
+        "sha256": "ef85c1c19119031ec0647b193ddd2799190217ba0116889dca886a1aef46c75d",
+        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+      },
+      "test/client.test.ts": {
+        "sha256": "0658667b9bf2ae5663f4bb89b3023cb3be5b328f577fcfed5b8e2abe7218a154",
+        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+      },
+      "test/server.test.ts": {
+        "sha256": "cbebd5d14696e07b757837017801bec289e067624d709c313965594460dfccc4",
+        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
       }
     }
   }

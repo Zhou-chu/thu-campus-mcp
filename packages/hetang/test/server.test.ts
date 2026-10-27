@@ -34,3 +34,56 @@ it("discovers tools without authentication and distinguishes read-only and write
     await rm(root, { recursive: true, force: true });
   }
 });
+it("previews already delivered unpublished questions only when requested, omits answers, and still refuses submission", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hetang-preview-")),
+    cfg = loadConfig({ stateDir: root, mock: true });
+  const { MockRain } = await import("../src/mock.js"),
+    mock = new MockRain(cfg);
+  await mock.join("lesson-1");
+  await mock.updateState("lesson-1", (s) => {
+    s!.questions.push({
+      ...s!.questions[0],
+      id: "draft-question",
+      prompt: "unpublished body",
+      published: false,
+      answer: ["hidden-must-not-return"],
+    });
+    return s!;
+  });
+  const server = await createServer(cfg),
+    [a, b] = InMemoryTransport.createLinkedPair(),
+    client = new Client({ name: "preview-test", version: "1" });
+  try {
+    await server.connect(a);
+    await client.connect(b);
+    const ordinary = await client.callTool({
+      name: "rain_questions",
+      arguments: { lessonId: "lesson-1" },
+    });
+    expect((ordinary.structuredContent as any).items).toHaveLength(1);
+    const preview = await client.callTool({
+      name: "rain_questions",
+      arguments: { lessonId: "lesson-1", includeUnpublished: true },
+    });
+    const items = (preview.structuredContent as any).items;
+    expect(items).toHaveLength(2);
+    expect(items.find((q: any) => q.id === "draft-question")).toMatchObject({
+      published: false,
+      prompt: "unpublished body",
+    });
+    expect(JSON.stringify(preview)).not.toContain("hidden-must-not-return");
+    const submit = await client.callTool({
+      name: "rain_submit_answer",
+      arguments: {
+        lessonId: "lesson-1",
+        questionId: "draft-question",
+        answer: ["A"],
+      },
+    });
+    expect(JSON.stringify(submit)).toContain("NOT_PUBLISHED");
+  } finally {
+    await client.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -147,3 +147,64 @@ it("does not replay an uncertain answer and refuses closed or already answered q
     await rm(root, { recursive: true, force: true });
   }
 });
+it("replays a hello snapshot without missing earlier questions or published slide IDs", () => {
+  const state: LessonData = {
+    account: "test",
+    lessonId: "lesson",
+    questions: [],
+    published: [],
+    resources: [],
+  };
+  const events = applyEvent(
+    state,
+    {
+      op: "hello",
+      presentation: "deck",
+      timeline: [
+        { type: "slide", pres: "deck", sid: "s12", si: 12, dt: 1700000000000 },
+        {
+          type: "problem",
+          pres: "deck",
+          prob: "q12",
+          dt: 1700000000000,
+          limit: 120,
+        },
+      ],
+    },
+    1700000400000,
+  );
+  expect(state.presentationId).toBe("deck");
+  expect(state.published).toEqual(["q12"]);
+  expect(state.timings?.q12.endAt).toBe(1700000120000);
+  expect((state as any).publishedSlides).toEqual({ deck: ["s12"] });
+  expect(events.some((e) => e.kind === "presentation")).toBe(true);
+});
+it("never extends a recorded close deadline when hello replays an earlier publication", () => {
+  const start = 1700000000000,
+    state: LessonData = {
+      account: "test",
+      lessonId: "lesson",
+      questions: [{ ...q }],
+      published: [],
+      resources: [],
+    };
+  applyEvent(
+    state,
+    { op: "unlockproblem", prob: "22", pres: "8", dt: start, limit: 300 },
+    start,
+  );
+  applyEvent(state, { op: "lockproblem", prob: "22" }, start + 60000);
+  applyEvent(
+    state,
+    {
+      op: "hello",
+      presentation: "8",
+      timeline: [
+        { type: "problem", prob: "22", pres: "8", dt: start, limit: 300 },
+      ],
+    },
+    start + 120000,
+  );
+  expect(state.timings?.["22"].endAt).toBe(start + 60000);
+  expect(state.questions[0].endAt).toBe(start + 60000);
+});

@@ -94,8 +94,10 @@ export interface LessonData {
   account: string;
   lessonId: string;
   lessonToken?: string;
+  lessonBearerToken?: string;
   expiresAt?: number | null;
   presentationId?: string;
+  publishedSlides?: Record<string, string[]>;
   questions: Question[];
   resources: Resource[];
   published: string[];

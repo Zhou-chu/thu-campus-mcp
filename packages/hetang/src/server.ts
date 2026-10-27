@@ -179,26 +179,41 @@ export async function createServer(cfg: Config = loadConfig()) {
   );
   tool(
     "rain_questions",
-    "读取已发布题目、选项、截止和作答状态；答案由当前 Harness 模型生成。字体编码或图形题可调用图像/课堂截图工具。",
-    { lessonId: id, refresh: z.boolean().default(true) },
+    "读取题目、选项、截止和作答状态。默认仅已发布题；includeUnpublished=true 可预览当前学生端已下发课件中嵌入的未发布题，并明确标记发布状态，不返回其答案。字体编码或图形题可调用图像工具。",
+    {
+      lessonId: id,
+      refresh: z.boolean().default(true),
+      includeUnpublished: z.boolean().default(false),
+    },
     async (i, c) => {
       const r = i.refresh
         ? await c.refreshQuestions(i.lessonId)
         : { items: (await c.state(i.lessonId))?.questions ?? [] };
       return {
         items: r.items
-          .filter((q) => q.published)
-          .map(({ imageUrl, ...q }) => ({ ...q, hasImage: !!imageUrl })),
+          .filter((q) => q.published || i.includeUnpublished)
+          .map(({ imageUrl, answer, ...q }) => ({
+            ...q,
+            ...(q.published && answer !== undefined ? { answer } : {}),
+            hasImage: !!imageUrl,
+          })),
+        scope: "current-loaded-presentation",
       };
     },
   );
   tool(
     "rain_question_image",
-    "返回已发布题目所在课件图片及本机缓存路径；不把签名 URL 暴露给模型。",
-    { lessonId: id, questionId: id },
+    "返回题目课件图片及本机缓存路径。默认仅已发布题；includeUnpublished=true 可读取当前学生端已下发的未发布题图片，不返回签名 URL。",
+    {
+      lessonId: id,
+      questionId: id,
+      includeUnpublished: z.boolean().default(false),
+    },
     async (i, c) => {
       const s = await c.state(i.lessonId),
-        q = s?.questions.find((q) => q.id === i.questionId && q.published);
+        q = s?.questions.find(
+          (q) => q.id === i.questionId && (q.published || i.includeUnpublished),
+        );
       if (!q?.imageUrl)
         throw new RainError("NO_IMAGE", "题目没有课件图片；可使用课堂截图。");
       const root = await guardedPath(cfg.outputDir, ".题目图片");
@@ -307,7 +322,7 @@ export async function createServer(cfg: Config = loadConfig()) {
   );
   tool(
     "rain_list_resources",
-    "读取历史课堂课件图片、附件和回放目录；返回稳定资源 ID，不返回签名 URL。",
+    "读取课件图片、附件和回放目录；实时课堂仅返回当前已发布页面快照，课后使用平台汇总。返回稳定资源 ID，不返回签名 URL。",
     {
       lessonId: id,
       offset: z.number().int().min(0).default(0),
@@ -319,6 +334,7 @@ export async function createServer(cfg: Config = loadConfig()) {
         title: r.title,
         total: r.resources.length,
         replayUnavailable: r.replayUnavailable,
+        scope: "scope" in r ? r.scope : "lesson-summary",
         items: r.resources
           .slice(i.offset, i.offset + i.limit)
           .map(({ url, ...x }) => x),

@@ -168,7 +168,8 @@ export function resourcesFromSummary(
         title: String(p.title ?? p.name ?? "课件"),
         url,
         presentationId: pid,
-        index: index + 1,
+        index:
+          Number.isSafeInteger(s.index) && s.index > 0 ? s.index : index + 1,
         size: typeof s.size === "number" ? s.size : undefined,
       });
     }
