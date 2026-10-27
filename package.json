@@ -1,6 +1,6 @@
 {
   "name": "thu-campus-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "清华校园 MCP 整合包：网络学堂、清华云盘、荷塘雨课堂",
   "license": "MIT",

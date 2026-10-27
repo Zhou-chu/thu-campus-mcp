@@ -204,8 +204,8 @@
         "reason": "Preserve selected cloud state directory in installed rain configuration"
       },
       "package.json": {
-        "sha256": "7dc4584cd70c3d118c42eaa11fa7a93d8a9c904328b213f63662399dcf01b6cb",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "513bdbf26ece1a19a1ca5f9bbabdc1c4fc493afaa1283bf862c33dab9ad09392",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/browser-auth.ts": {
         "sha256": "6eaaf2ba5a4c71ed4d7ef80e65fa4988b5788d218eb89f17ff0873ac5ca11067",
@@ -224,24 +224,24 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/classroom.ts": {
-        "sha256": "bf4498f0bd77a1c725ad25a3a5685d2140a241430fee61014c3fca3b2d130e4d",
-        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+        "sha256": "d730d24c76a1c655a4d37384aa5a0e50398d1a8dc7e1113d412bf2659701cf45",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/client.ts": {
-        "sha256": "a4649c1e6848c5d6762de5de85e68282058ecff87860c60fd2b1537f4a8a7caf",
-        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+        "sha256": "20a212ab09a4f01d7a2ae6c0b3531e1f96a874af18900a48b4ebb829dbb4b9aa",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/protocol.ts": {
-        "sha256": "4cf1e3da9756109a61fbaae804583c650e2c06cba83ec5ae62b478aff44f4fd1",
-        "reason": "Live classroom checkin source, protected lesson bearer and published snapshot recovery (1.1)"
+        "sha256": "be9c5712c78d747e760a71b0f2a9cfd5ea00c10c10354ec97df97e7cc8284f99",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/server.ts": {
-        "sha256": "1bf1770e573616f7173f7440abd06d6b7a21e16e7338631bdfddb1b18a34c4e9",
-        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+        "sha256": "892a322ebe12d157d04ceed5ad944701d96a5d612351ff0c8e28f6e3decbcd98",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/types.ts": {
-        "sha256": "d36742d8222aac1a4e2235af6914844f45b72157f41aea176045d6e3a99501f6",
-        "reason": "Live classroom checkin source, protected lesson bearer and published snapshot recovery (1.1)"
+        "sha256": "c4675bfe1d5f9b1350f8e20bd1e31204fcd7a15d1a85d5a587ea03e2e5b4c60f",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "test/classroom.test.ts": {
         "sha256": "ef85c1c19119031ec0647b193ddd2799190217ba0116889dca886a1aef46c75d",
@@ -252,8 +252,24 @@
         "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
       },
       "test/server.test.ts": {
-        "sha256": "cbebd5d14696e07b757837017801bec289e067624d709c313965594460dfccc4",
-        "reason": "Live classroom protocol repair and explicit read-only unpublished preview (1.1)"
+        "sha256": "ea122f6993770391fd4395f9ab0dbd1ddd937867d578eaeecdeffab15fae6897",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+      },
+      "src/jobs.ts": {
+        "sha256": "577727fec7772d7e342188e9b288bd5d88d1c9bd15fbb761eafd73202d88e401",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+      },
+      "src/mock.ts": {
+        "sha256": "18a2b1fede277d5f358fb2592f96ac821135eb474a7d4961cd8d15eb19f961ce",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+      },
+      "src/storage.ts": {
+        "sha256": "d1d417d440eef9fb2c26f4fda8b568dd995a5ccb1ad3f91ebf3c46232e7136dc",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+      },
+      "test/smoke.mjs": {
+        "sha256": "6e9a10980bf56d2d21e3071c65ced4988a1acce7d44a09e79e8074f3a1fa03de",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       }
     }
   }

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml)
 
-在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂**。配置一个 `thu-campus` MCP，即可使用原有 46 个校园工具和 4 个浏览器工具。
+在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂**。配置一个 `thu-campus` MCP，即可使用47 个校园工具和 4 个浏览器工具，共 **51 个工具**（原46个名称保留）。
 
 项目内置独立的 Chromium 运行时管理和持久浏览器工作区。首次完成本机登录后，后续启动复用 Cookie、localStorage 与 IndexedDB；API 会话过期时，统一入口优先尝试从已绑定的浏览器恢复同一账号。**默认不依赖 Edge、Chrome 或额外 Electron 程序。**
 
@@ -14,7 +14,7 @@
 | ---------- | -----: | ------------------------------------------------------------------------------- |
 | 网络学堂   |     13 | 学期和课程查询；公告、作业、文件等专栏增量归档；查询及提交个人在线作业          |
 | 清华云盘   |     15 | 资料库、目录、搜索、读写文件、移动复制、分享与单向增量传输                      |
-| 荷塘雨课堂 |     18 | 课程与课堂、限定范围自动进入、已发布题目与提交答案、课件/PDF/回放下载及云盘归档 |
+| 荷塘雨课堂 |     19 | 课程与课堂、限定范围自动进入、题目预览、预设答案定时提交、课件/PDF/回放下载及云盘归档 |
 | 独立浏览器 |      4 | 查看状态、打开窗口、登录/复用登录、关闭并保留会话                               |
 
 解题由当前 Harness 的模型完成，不另外索要模型 API Key。已有课程、作业和文件内容都作为外部数据处理，不作为额外操作授权。覆盖已有提交或云盘文件仍需明确授权。
@@ -159,7 +159,7 @@ node bin/thu-campus.mjs browser reset --confirm
 - “监控我指定的雨课堂课程并自动进入，用当前模型读取已发布题目、解题、提交和核对回执。”
 - “把选定课堂的课件下载到 `D:\荷塘雨课堂`，生成 PDF，并归档到清华云盘的‘荷塘雨课堂’文件夹。”
 
-自动答题要求当前 Harness 保持运行并持续调用工具；后台监控只维护连接，不另行调用模型。监控需要课程/课堂范围，最长 8 小时。不补投已关闭题目，不能保证任意题目答对。实时课堂资源仅包含老师当前已发布页面的快照，不代表整堂课已结束或包含后续题目；课后汇总尚未就绪时会明确报错。 `rain_questions` 与 `rain_question_image` 可显式传入 `includeUnpublished: true`，预览当前学生端已下发课件内的未发布题目/投票及原图；返回发布标记，不返回未发布题的答案。未下发的课件不在范围内，提交接口仍拒绝未发布题。多份课件切换时，历史习题的完整性仍需额外现场验证。课件归档只上传本服务登记清单内校验过的文件，默认不覆盖，不自动选共享资料库兜底。
+持续读取新题并解题要求当前 Harness 保持运行；已经通过 `rain_schedule_answer` 登记的固定答案由独立后台任务执行，关闭 Harness 后仍可等待发布和提交。后台监控不另行调用模型。监控需要课程/课堂范围，最长 8 小时。不补投已关闭题目，不能保证任意题目答对。实时课堂资源仅包含老师当前已发布页面的快照，不代表整堂课已结束或包含后续题目；课后汇总尚未就绪时会明确报错。 `rain_questions` 与 `rain_question_image` 可显式传入 `includeUnpublished: true`，预览当前学生端已下发课件内的未发布题目/投票及原图；返回发布标记，不返回未发布题的答案。未下发的课件不在范围内，提交接口仍拒绝未发布题。多份课件切换时，历史习题的完整性仍需额外现场验证。课件归档只上传本服务登记清单内校验过的文件，默认不覆盖，不自动选共享资料库兜底。
 
 ## 可迁移性、升级和资料位置
 
@@ -177,6 +177,50 @@ node bin/thu-campus.mjs browser reset --confirm
 可用 `THU_BROWSER_STATE_DIR` 自定义浏览器资料目录，用 `THU_BROWSER_RUNTIME_DIR` 自定义内核目录。默认内核路径相对安装目录解析，移动项目不需要保留原电脑的绝对路径。`LEARNX_STATE_DIR`、`THU_CLOUD_STATE_DIR`、`HETANG_STATE_DIR` 及相应 `*_OUTPUT_DIR` 继续有效。自定义路径应选择自己的私有目录。
 
 DPAPI 绑定 Windows 用户，不能把加密快照直接复制给另一台机器或另一个人当作登录凭据。其他人使用同一程序包时，登录自己的账号一次，之后保留自己的工作区。服务器撤销会话或学校要求重新验证时，程序无法承诺永久免验证。
+
+## 预先解题，发布后随机等待20–40秒提交
+
+可以直接对四个客户端中的任一个说：
+
+> 在我授权的这节课中，读取当前课件的未发布题及原图。先解答我指定的第53页题目，再登记预设答案：老师发布后随机等待20–40秒提交一次。告诉我任务ID和最终回执；题目变化或错过窗口就停止，不要重投。
+
+页码用于帮助模型找到题目，登记始终使用平台返回的 `lessonId`、`questionId`，不能猜测ID。
+
+1. 查询 `rain_active_classrooms`，确认范围并使用 `rain_join_classroom` 进入课堂。
+2. 调用 `rain_questions({lessonId, includeUnpublished:true})`，必要时调用 `rain_question_image({lessonId, questionId, includeUnpublished:true})`。只预览学生端已经下发的课件；模型根据题干、选项和原图解答，不读取隐藏答案。
+3. 保存解题所依据的 `questionFingerprint`，调用 `rain_schedule_answer`。指纹绑定账号、登录代次和题目内容；题目或图片已变更时重新读取并解题，不能把旧答案配上新指纹。
+4. 保存返回的任务 `id`，使用 `rain_job_status({jobId:id})` 查询；`rain_wait_events` 可增量取事件，`rain_stop_job` 可请求取消。
+
+工具参数示例（ID和指纹必须替换为读取结果）：
+
+```json
+{
+  "lessonId": "平台返回的课堂ID",
+  "questionId": "平台返回的题目ID",
+  "questionFingerprint": "读取题目或原图返回的64位十六进制指纹",
+  "answer": ["B"],
+  "durationMinutes": 120,
+  "requestId": "调用方生成并保存的UUID"
+}
+```
+
+`durationMinutes` 默认120，范围1–480，从登记开始计时。`requestId` 可省略；传入后相同请求复用同一任务，不覆盖既有任务。单选、多选和投票使用选项字母数组，填空使用字符串数组，主观题使用 `{"content":"解答文本"}`。不同预设答案不能覆盖正在等待的任务，需先取消。返回的 **`id` 是后台任务ID**，**`submissionRequestId` 是独立答题操作ID**，后者用于 `rain_operation_status({id:submissionRequestId})`；发布前可能尚无该操作记录。
+
+| `result.phase` / 状态 | 含义及处理 |
+| --- | --- |
+| `waiting-publication` | 已保存固定答案，等待该题发布；不会提前提交 |
+| `scheduled` | 已选定并持久保存随机目标，`window` 含发布时间、目标、最晚派发时间；重连不重新抽签 |
+| `submitting` | 派发意图已落盘；取消不能保证撤回 |
+| `submitted` | 一次派发且同一答案回读确认；`dispatchElapsedMs` 是相对平台发布时间的本机派发毫秒数，并非服务器收件耗时 |
+| `cancelled` / `expired` / `classroom-ended` / `already-answered` | 取消、任务到期、课堂结束或已有答题，不再提交 |
+| `question-changed` / `publication-changed` / `publication-time-unavailable` / `missed-window` | 题目或发布时间变化、无可信平台时间、关闭过早或错过窗口；说明原因并停止 |
+| `unknown` / 顶层 `interrupted` | 结果未确认或进程中断。只查原任务、回执及题目，不自动恢复或重新登记来补投 |
+
+随机时间取**平台发布后20秒至40秒之前**与题目截止、任务到期的有效交集；晚发现时只在剩余交集中选择一次，没有交集就跳过。WebSocket 实时事件配合只读轮询，重复事件不重置计时。派发前再次检查账号、题目、课堂、取消标记和截止；耗时过长或电脑休眠后错过窗口不会补交。最终同步时间检查位于网络请求前，正文 `dt` 使用真实派发时间。
+
+电脑必须保持运行、时钟准确、网络和学校会话有效。此任务不依赖 Codex heartbeat，不需要额外模型Key；它只执行登记的固定答案，不在后台生成新答案，也不保证答案正确。关闭客户端可以继续执行；退出系统、重启、结束 Node 进程会中断任务，程序不自动恢复可能已派发的写入。取消返回 `mayHaveDispatched:false` 表示取消先于派发意图；`true` 表示可能已派发，应查看原回执，不能视为撤回成功。
+
+预设答案保存在当前 Windows 用户 DPAPI 保护的雨课堂状态目录；通用任务JSON不存题干、答案和登录凭据。不要把个人状态目录加入 Git 或分发给其他人。本版端到端测试使用模拟题验证真实20–40秒计时，不自动在真实课堂试投答案。
 
 ## 常见问题
 
