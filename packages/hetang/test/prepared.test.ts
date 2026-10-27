@@ -1,20 +1,302 @@
-import {it,expect,vi} from 'vitest';import {mkdtemp,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';
-import {RainClient} from '../src/client.js';import {loadConfig} from '../src/config.js';import {RainError} from '../src/types.js';import {questionContentFingerprint} from '../src/prepared-contract.js';import {AnswerService} from '../src/classroom.js';
-const module=()=>import('../src/prepared.js').catch(()=>({}as any));
-async function fixture(fn:(f:any)=>Promise<void>){const root=await mkdtemp(path.join(tmpdir(),'rain-prepared-engine-'));try{const cfg=loadConfig({stateDir:root}),c=new RainClient(cfg);let now=Date.now(),writes=0,cancelled=false;const q:any={id:'question',lessonId:'lesson',presentationId:'deck',slideId:'slide',type:'single',prompt:'Question',options:[{key:'A',text:'no'},{key:'B',text:'yes'}],published:false,answered:false};const state:any={account:'account',lessonId:'lesson',lessonToken:'synthetic',questions:[q],published:[],resources:[]};c.identity='account';c.checkAuth=async()=>{};c.generation=async()=>'epoch';c.state=async()=>state;c.refreshQuestions=async()=>({items:state.questions});c.active=async()=>[{id:'lesson'}]as any;c.request=async(_url,init={},_t,_b,_cap,gate)=>{await gate?.beforeSend?.();gate?.assertNow?.();writes++;const body=JSON.parse(String(init.body));q.answered=true;q.answer=body.result;return{code:0}};
- const data:any={account:c.identity,generation:'epoch',lessonId:'lesson',questionId:q.id,answer:['B'],contentFingerprint:questionContentFingerprint(q),questionFingerprint:'snapshot',expiresAt:now+120000,submissionRequestId:'33333333-3333-4333-8333-333333333333'};const job:any={id:'44444444-4444-4444-8444-444444444444',kind:'scheduled-answer',accountId:c.identity,generation:'epoch',options:{lessonId:'lesson',questionId:q.id},status:'running'};
- const hooks:any={check:async()=>!cancelled,checkpoint:async(r:any)=>{job.result={...r}},progress:async()=>{},commitDispatch:async(r:any)=>{if(cancelled)throw new RainError('SCHEDULE_CANCELLED','cancelled',400);job.result={...r}}};
- const deps:any={now:()=>now,sleep:async(ms:number)=>{now+=ms},randomInt:vi.fn(()=>22415),connect:async()=>{q.published=true;q.startAt=now;q.publicationTimeSource='server';q.endAt=now+120000;return{open:true,close:async()=>{}}}};
- const f:any={root,cfg,c,q,state,data,job,hooks,deps,get now(){return now},set now(n){now=n},get writes(){return writes},set writes(n){writes=n},cancel(){cancelled=true}};
- const m=await module();expect(typeof m.runPreparedAnswer).toBe('function');await m.preparedVault(cfg,job.id).save(data);await fn({...f, get now(){return now},set now(n){now=n},get writes(){return writes},set writes(n){writes=n},m});
- }finally{await rm(root,{recursive:true,force:true})}}
-it('waits for the prepared random offset and sends exactly once with verified readback',()=>fixture(async f=>{const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.status).toBe('complete');expect(r.result.phase).toBe('submitted');expect(r.result.dispatchElapsedMs).toBeGreaterThanOrEqual(22415);expect(r.result.dispatchElapsedMs).toBeLessThan(40000);expect(f.writes).toBe(1);expect(f.deps.randomInt).toHaveBeenCalledTimes(1);}));
-it('cancellation during the timer prevents the HTTP request',()=>fixture(async f=>{f.hooks.checkpoint=async(r:any)=>{f.job.result={...r};if(r.phase==='scheduled')f.cancel()};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('cancelled');expect(f.writes).toBe(0);}));
-it('content edits during the timer stop the precomputed answer',()=>fixture(async f=>{f.hooks.checkpoint=async(r:any)=>{f.job.result={...r};if(r.phase==='scheduled')f.q.prompt='edited'};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('question-changed');expect(f.writes).toBe(0);}));
-it('a slow preflight cannot send outside the40second window',()=>fixture(async f=>{f.c.refreshQuestions=async()=>{f.now+=50000;return{items:[f.q]}};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('missed-window');expect(f.writes).toBe(0);}));
-it('a clock jump after dispatch intent is rejected by the final synchronous check',()=>fixture(async f=>{f.hooks.commitDispatch=async()=>{f.now+=50000};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('missed-window');expect(f.writes).toBe(0);}));
-it('does not submit if a classroom ends or a question never publishes',()=>fixture(async f=>{f.deps.connect=async()=>({open:true,close:async()=>{}});f.data.expiresAt=f.now+1000;await f.m.preparedVault(f.cfg,f.job.id).save(f.data);let r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('expired');f.state.finished=true;r=await f.m.runPreparedAnswer(f.c,f.cfg,{...f.job,result:undefined},f.hooks,f.deps);expect(r.result.phase).toBe('classroom-ended');expect(f.writes).toBe(0);}));
-it('auth changes while waiting cannot rebind to another session',()=>fixture(async f=>{f.hooks.checkpoint=async(r:any)=>{if(r.phase==='scheduled')f.hooks.check=async()=>{throw new RainError('AUTH_CHANGED','changed')}};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('auth-changed');expect(f.writes).toBe(0);}));
-it('does not retry an unknown HTTP write',()=>fixture(async f=>{f.c.request=async(_url:any,_init:any,_a:any,_b:any,_c:any,gate:any)=>{await gate.beforeSend();gate.assertNow();f.writes++;throw new Error('response lost')};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.status).toBe('unknown');expect(f.writes).toBe(1);}));
-it('does not claim a manual answer receipt as this scheduled submission',()=>fixture(async f=>{await f.deps.connect();const manual=await new AnswerService(f.c,f.cfg).submit({lessonId:'lesson',questionId:'question',answer:['A'],requestId:'55555555-5555-4555-8555-555555555555'});expect(manual.status).toBe('complete');f.q.answered=false;f.writes=0;const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('already-answered');expect(f.writes).toBe(0);}));
-it('preserves a persisted target and never auto-resumes dispatch intent',()=>fixture(async f=>{await f.deps.connect();f.job.result={phase:'scheduled',window:{publishedAt:f.now,targetAt:f.now+22415,latestSendAt:f.now+40000,delayMs:22415}};const r=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r.result.phase).toBe('submitted');expect(f.deps.randomInt).not.toHaveBeenCalled();f.job.result={phase:'submitting',intentAt:f.now};f.writes=0;const r2=await f.m.runPreparedAnswer(f.c,f.cfg,f.job,f.hooks,f.deps);expect(r2.status).toBe('unknown');expect(f.writes).toBe(0);}));
+import { it, expect, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { RainClient } from "../src/client.js";
+import { loadConfig } from "../src/config.js";
+import { RainError } from "../src/types.js";
+import { questionContentFingerprint } from "../src/prepared-contract.js";
+import { AnswerService } from "../src/classroom.js";
+const module = () => import("../src/prepared.js").catch(() => ({}) as any);
+async function fixture(fn: (f: any) => Promise<void>) {
+  const root = await mkdtemp(path.join(tmpdir(), "rain-prepared-engine-"));
+  try {
+    const cfg = loadConfig({ stateDir: root }),
+      c = new RainClient(cfg);
+    let now = Date.now(),
+      writes = 0,
+      cancelled = false;
+    const q: any = {
+      id: "question",
+      lessonId: "lesson",
+      presentationId: "deck",
+      slideId: "slide",
+      type: "single",
+      prompt: "Question",
+      options: [
+        { key: "A", text: "no" },
+        { key: "B", text: "yes" },
+      ],
+      published: false,
+      answered: false,
+    };
+    const state: any = {
+      account: "account",
+      lessonId: "lesson",
+      lessonToken: "synthetic",
+      questions: [q],
+      published: [],
+      resources: [],
+    };
+    c.identity = "account";
+    c.checkAuth = async () => {};
+    c.generation = async () => "epoch";
+    c.state = async () => state;
+    c.refreshQuestions = async () => ({ items: state.questions });
+    c.active = async () => [{ id: "lesson" }] as any;
+    c.request = async (_url, init = {}, _t, _b, _cap, gate) => {
+      await gate?.beforeSend?.();
+      gate?.assertNow?.();
+      writes++;
+      const body = JSON.parse(String(init.body));
+      q.answered = true;
+      q.answer = body.result;
+      return { code: 0 };
+    };
+    const data: any = {
+      account: c.identity,
+      generation: "epoch",
+      lessonId: "lesson",
+      questionId: q.id,
+      answer: ["B"],
+      contentFingerprint: questionContentFingerprint(q),
+      questionFingerprint: "snapshot",
+      expiresAt: now + 120000,
+      submissionRequestId: "33333333-3333-4333-8333-333333333333",
+    };
+    const job: any = {
+      id: "44444444-4444-4444-8444-444444444444",
+      kind: "scheduled-answer",
+      accountId: c.identity,
+      generation: "epoch",
+      options: { lessonId: "lesson", questionId: q.id },
+      status: "running",
+    };
+    const hooks: any = {
+      check: async () => !cancelled,
+      checkpoint: async (r: any) => {
+        job.result = { ...r };
+      },
+      progress: async () => {},
+      commitDispatch: async (r: any) => {
+        if (cancelled)
+          throw new RainError("SCHEDULE_CANCELLED", "cancelled", 400);
+        job.result = { ...r };
+      },
+    };
+    const deps: any = {
+      now: () => now,
+      sleep: async (ms: number) => {
+        now += ms;
+      },
+      randomInt: vi.fn(() => 22415),
+      connect: async () => {
+        q.published = true;
+        q.startAt = now;
+        q.publicationTimeSource = "server";
+        q.endAt = now + 120000;
+        return { open: true, close: async () => {} };
+      },
+    };
+    const f: any = {
+      root,
+      cfg,
+      c,
+      q,
+      state,
+      data,
+      job,
+      hooks,
+      deps,
+      get now() {
+        return now;
+      },
+      set now(n) {
+        now = n;
+      },
+      get writes() {
+        return writes;
+      },
+      set writes(n) {
+        writes = n;
+      },
+      cancel() {
+        cancelled = true;
+      },
+    };
+    const m = await module();
+    expect(typeof m.runPreparedAnswer).toBe("function");
+    await m.preparedVault(cfg, job.id).save(data);
+    await fn({
+      ...f,
+      get now() {
+        return now;
+      },
+      set now(n) {
+        now = n;
+      },
+      get writes() {
+        return writes;
+      },
+      set writes(n) {
+        writes = n;
+      },
+      m,
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+it("waits for the prepared random offset and sends exactly once with verified readback", () =>
+  fixture(async (f) => {
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.status).toBe("complete");
+    expect(r.result.phase).toBe("submitted");
+    expect(r.result.dispatchElapsedMs).toBeGreaterThanOrEqual(22415);
+    expect(r.result.dispatchElapsedMs).toBeLessThan(40000);
+    expect(f.writes).toBe(1);
+    expect(f.deps.randomInt).toHaveBeenCalledTimes(1);
+  }));
+it("cancellation during the timer prevents the HTTP request", () =>
+  fixture(async (f) => {
+    f.hooks.checkpoint = async (r: any) => {
+      f.job.result = { ...r };
+      if (r.phase === "scheduled") f.cancel();
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("cancelled");
+    expect(f.writes).toBe(0);
+  }));
+it("content edits during the timer stop the precomputed answer", () =>
+  fixture(async (f) => {
+    f.hooks.checkpoint = async (r: any) => {
+      f.job.result = { ...r };
+      if (r.phase === "scheduled") f.q.prompt = "edited";
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("question-changed");
+    expect(f.writes).toBe(0);
+  }));
+it("a slow preflight cannot send outside the40second window", () =>
+  fixture(async (f) => {
+    f.c.refreshQuestions = async () => {
+      f.now += 50000;
+      return { items: [f.q] };
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("missed-window");
+    expect(f.writes).toBe(0);
+  }));
+it("a clock jump after dispatch intent is rejected by the final synchronous check", () =>
+  fixture(async (f) => {
+    f.hooks.commitDispatch = async () => {
+      f.now += 50000;
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("missed-window");
+    expect(f.writes).toBe(0);
+  }));
+it("does not submit if a classroom ends or a question never publishes", () =>
+  fixture(async (f) => {
+    f.deps.connect = async () => ({ open: true, close: async () => {} });
+    f.data.expiresAt = f.now + 1000;
+    await f.m.preparedVault(f.cfg, f.job.id).save(f.data);
+    let r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("expired");
+    f.state.finished = true;
+    r = await f.m.runPreparedAnswer(
+      f.c,
+      f.cfg,
+      { ...f.job, result: undefined },
+      f.hooks,
+      f.deps,
+    );
+    expect(r.result.phase).toBe("classroom-ended");
+    expect(f.writes).toBe(0);
+  }));
+it("auth changes while waiting cannot rebind to another session", () =>
+  fixture(async (f) => {
+    f.hooks.checkpoint = async (r: any) => {
+      if (r.phase === "scheduled")
+        f.hooks.check = async () => {
+          throw new RainError("AUTH_CHANGED", "changed");
+        };
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("auth-changed");
+    expect(f.writes).toBe(0);
+  }));
+it("does not retry an unknown HTTP write", () =>
+  fixture(async (f) => {
+    f.c.request = async (
+      _url: any,
+      _init: any,
+      _a: any,
+      _b: any,
+      _c: any,
+      gate: any,
+    ) => {
+      await gate.beforeSend();
+      gate.assertNow();
+      f.writes++;
+      throw new Error("response lost");
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.status).toBe("unknown");
+    expect(f.writes).toBe(1);
+  }));
+it("does not claim a manual answer receipt as this scheduled submission", () =>
+  fixture(async (f) => {
+    await f.deps.connect();
+    const manual = await new AnswerService(f.c, f.cfg).submit({
+      lessonId: "lesson",
+      questionId: "question",
+      answer: ["A"],
+      requestId: "55555555-5555-4555-8555-555555555555",
+    });
+    expect(manual.status).toBe("complete");
+    f.q.answered = false;
+    f.writes = 0;
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("already-answered");
+    expect(f.writes).toBe(0);
+  }));
+it("preserves a persisted target and never auto-resumes dispatch intent", () =>
+  fixture(async (f) => {
+    await f.deps.connect();
+    f.job.result = {
+      phase: "scheduled",
+      window: {
+        publishedAt: f.now,
+        targetAt: f.now + 22415,
+        latestSendAt: f.now + 40000,
+        delayMs: 22415,
+      },
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("submitted");
+    expect(f.deps.randomInt).not.toHaveBeenCalled();
+    f.job.result = { phase: "submitting", intentAt: f.now };
+    f.writes = 0;
+    const r2 = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r2.status).toBe("unknown");
+    expect(f.writes).toBe(0);
+  }));
+it("does not label another uncertain manual request as already answered", () =>
+  fixture(async (f) => {
+    await f.deps.connect();
+    f.c.request = async () => {
+      throw new Error("lost manual response");
+    };
+    const manual = await new AnswerService(f.c, f.cfg).submit({
+      lessonId: "lesson",
+      questionId: "question",
+      answer: ["A"],
+      requestId: "66666666-6666-4666-8666-666666666666",
+    });
+    expect(manual.status).toBe("unknown");
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.status).toBe("unknown");
+    expect(r.result.phase).toBe("unknown");
+    expect(f.writes).toBe(0);
+  }));

@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",
-    "smoke": "node test/smoke.mjs",
+    "smoke": "node test/smoke.mjs && node test/prepared-smoke.mjs",
     "start": "node dist/cli.js serve",
     "format": "prettier --write src test"
   },

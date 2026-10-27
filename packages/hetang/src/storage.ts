@@ -124,6 +124,12 @@ export function scrub<T>(data: T): T {
   return JSON.parse(
     JSON.stringify(data, (key, value) => {
       if (
+        key === "questionFingerprint" &&
+        typeof value === "string" &&
+        /^[a-f0-9]{64}$/.test(value)
+      )
+        return value;
+      if (
         /password|cookie|csrf|fingerprint|fingergen|authorization|token/i.test(
           key,
         )

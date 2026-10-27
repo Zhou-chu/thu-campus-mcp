@@ -101,7 +101,12 @@ export async function startJob(
 export async function getJob(cfg: Config, id: string) {
   const job = await readJson<Job>(file(cfg, id));
   if (!job) throw new RainError("NOT_FOUND", "找不到任务。");
-  if (job.kind === "scheduled-answer" && job.status === "queued" && !job.pid && Date.now() - Date.parse(job.createdAt) > 60000)
+  if (
+    job.kind === "scheduled-answer" &&
+    job.status === "queued" &&
+    !job.pid &&
+    Date.now() - Date.parse(job.createdAt) > 60000
+  )
     return { ...job, status: "interrupted" as const };
   if (["running", "queued"].includes(job.status) && job.pid) {
     try {
@@ -117,7 +122,13 @@ export async function stopJob(cfg: Config, id: string) {
     const job = await getJob(cfg, id);
     job.stop = true;
     await atomicJson(file(cfg, id), job);
-    return { id, stopRequested: true, ...(job.kind === "scheduled-answer" ? { mayHaveDispatched: job.result?.intentAt !== undefined } : {}) };
+    return {
+      id,
+      stopRequested: true,
+      ...(job.kind === "scheduled-answer"
+        ? { mayHaveDispatched: job.result?.intentAt !== undefined }
+        : {}),
+    };
   });
 }
 export async function runJob(cfg: Config, id: string) {
@@ -126,7 +137,11 @@ export async function runJob(cfg: Config, id: string) {
     if (job.status !== "queued") return;
     job.pid = process.pid;
     job.status = "running";
-    const client = await makeClient(job.kind === "scheduled-answer" ? { ...cfg, timeoutMs: Math.min(cfg.timeoutMs, 5000) } : cfg);
+    const client = await makeClient(
+      job.kind === "scheduled-answer"
+        ? { ...cfg, timeoutMs: Math.min(cfg.timeoutMs, 5000) }
+        : cfg,
+    );
     const save = () =>
       withLock(path.join(cfg.stateDir, "job-record-locks", id), async () => {
         const latest = await readJson<Job>(file(cfg, id));
@@ -154,21 +169,36 @@ export async function runJob(cfg: Config, id: string) {
     try {
       if (!(await check())) {
         job.status = "stopped";
+        if (job.kind === "scheduled-answer")
+          job.result = { phase: "cancelled", dispatched: false };
         await save();
         return;
       }
       if (job.kind === "scheduled-answer") {
         const { runPreparedAnswer } = await import("./prepared.js");
         const outcome = await runPreparedAnswer(client, cfg, job, {
-          check, progress,
-          checkpoint: async result => { job.result = result; await save(); },
-          commitDispatch: result => withLock(path.join(cfg.stateDir, "job-record-locks", id), async () => {
-            const latest = await readJson<Job>(file(cfg, id));
-            if (latest?.stop) throw new RainError("SCHEDULE_CANCELLED", "任务已取消。", 400);
+          check,
+          progress,
+          checkpoint: async (result) => {
             job.result = result;
-            job.updatedAt = new Date().toISOString();
-            await atomicJson(file(cfg, id), job);
-          }),
+            await save();
+          },
+          commitDispatch: (result) =>
+            withLock(
+              path.join(cfg.stateDir, "job-record-locks", id),
+              async () => {
+                const latest = await readJson<Job>(file(cfg, id));
+                if (latest?.stop)
+                  throw new RainError(
+                    "SCHEDULE_CANCELLED",
+                    "任务已取消。",
+                    400,
+                  );
+                job.result = result;
+                job.updatedAt = new Date().toISOString();
+                await atomicJson(file(cfg, id), job);
+              },
+            ),
         });
         job.result = outcome.result;
         job.status = outcome.status;
@@ -249,7 +279,10 @@ export async function runJob(cfg: Config, id: string) {
         job.status = job.result.status;
       }
     } catch (error) {
-      job.status = job.kind === "scheduled-answer" && job.result?.intentAt !== undefined ? "unknown" : "failed";
+      job.status =
+        job.kind === "scheduled-answer" && job.result?.intentAt !== undefined
+          ? "unknown"
+          : "failed";
       job.error = publicError(error);
     }
     await save();

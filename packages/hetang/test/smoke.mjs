@@ -33,7 +33,7 @@ async function call(c, name, args = {}) {
 }
 try {
   const real = await connect(false);
-  assert.equal((await real.listTools()).tools.length, 18);
+  assert.equal((await real.listTools()).tools.length, 19);
   assert.equal(
     (await call(real, "rain_status")).authentication.configured,
     false,
@@ -103,7 +103,7 @@ try {
   assert(manifest.files.some((f) => f.kind === "pdf"));
   await call(second, "rain_stop_job", { jobId: monitorId });
   console.log(
-    "PASS: 18 stdio tools, real unauthenticated mode, mock join/events/answer readback/idempotency, detached download/PDF/cloud archive.",
+    "PASS: 19 stdio tools, real unauthenticated mode, mock join/events/answer readback/idempotency, detached download/PDF/cloud archive.",
   );
 } finally {
   if (monitorId) {

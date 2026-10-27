@@ -6,7 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { root } from "../lib/services.mjs";
-test("one MCP entry forwards all46 tools, browser lifecycle and rain prompt", async () => {
+test("one MCP entry forwards all47 tools, browser lifecycle and rain prompt", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-gateway-"));
   const client = new Client({ name: "gateway-test", version: "1" });
   try {
@@ -31,8 +31,8 @@ test("one MCP entry forwards all46 tools, browser lifecycle and rain prompt", as
       }),
     );
     const tools = (await client.listTools()).tools;
-    assert.equal(tools.length, 50);
-    assert.equal(new Set(tools.map((t) => t.name)).size, 50);
+    assert.equal(tools.length, 51);
+    assert.equal(new Set(tools.map((t) => t.name)).size, 51);
     const courses = await client.callTool({
       name: "learn_list_courses",
       arguments: {},

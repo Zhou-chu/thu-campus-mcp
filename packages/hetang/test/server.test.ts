@@ -87,3 +87,63 @@ it("previews already delivered unpublished questions only when requested, omits 
     await rm(root, { recursive: true, force: true });
   }
 });
+it("exposes prepared-answer schema, scoped fingerprints, and rejects stale snapshots without starting a worker", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hetang-prepare-mcp-")),
+    cfg = loadConfig({ stateDir: root, mock: true });
+  const { MockRain } = await import("../src/mock.js"),
+    mock = new MockRain(cfg);
+  await mock.join("lesson-1");
+  await mock.updateState("lesson-1", (s) => {
+    s!.questions[0].published = false;
+    return s!;
+  });
+  const server = await createServer(cfg),
+    [a, b] = InMemoryTransport.createLinkedPair(),
+    client = new Client({ name: "prepare-test", version: "1" });
+  try {
+    await server.connect(a);
+    await client.connect(b);
+    const tools = (await client.listTools()).tools,
+      tool = tools.find((t) => t.name === "rain_schedule_answer");
+    expect(tools).toHaveLength(19);
+    expect(tool?.annotations?.readOnlyHint).toBe(false);
+    expect(tool?.annotations?.destructiveHint).toBe(true);
+    expect(tool?.inputSchema.required).toContain("questionFingerprint");
+    const preview = await client.callTool({
+      name: "rain_questions",
+      arguments: { lessonId: "lesson-1", includeUnpublished: true },
+    });
+    const q = (preview.structuredContent as any).items[0];
+    expect(q.questionFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    await mock.updateState("lesson-1", (s) => {
+      s!.questions[0].prompt = "changed after model solved";
+      return s!;
+    });
+    const rejected = await client.callTool({
+      name: "rain_schedule_answer",
+      arguments: {
+        lessonId: "lesson-1",
+        questionId: q.id,
+        questionFingerprint: q.questionFingerprint,
+        answer: ["B"],
+      },
+    });
+    expect(rejected.isError).toBe(true);
+    expect(rejected.structuredContent).toMatchObject({
+      code: "QUESTION_CHANGED",
+    });
+    const { scrub } = await import("../src/storage.js");
+    expect(
+      scrub({
+        questionFingerprint: q.questionFingerprint,
+        authFingerprint: "secret",
+        questionFingerprintToken: "secret",
+      }),
+    ).toEqual({ questionFingerprint: q.questionFingerprint });
+    expect(scrub({ questionFingerprint: "Cookie=secret" })).toEqual({});
+  } finally {
+    await client.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
