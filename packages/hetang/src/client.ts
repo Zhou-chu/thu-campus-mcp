@@ -28,6 +28,10 @@ export function apiUrl(value: string) {
     throw new RainError("UNSAFE_URL", "课堂 API 只允许荷塘雨课堂同源 HTTPS。");
   return u;
 }
+export interface RequestGate {
+  beforeSend?: () => Promise<void>;
+  assertNow?: () => void;
+}
 export class RainClient {
   identity = "";
   private auth?: AuthData;
@@ -80,6 +84,7 @@ export class RainClient {
     lessonToken?: string,
     lessonBearerToken?: string,
     captureBearer?: (bearer: string | undefined) => void,
+    gate?: RequestGate,
   ): Promise<any> {
     await this.checkAuth();
     const u = apiUrl(endpoint);
@@ -87,6 +92,8 @@ export class RainClient {
     const csrf = /(?:^|;\s*)csrftoken=([^;]+)/.exec(
       this.auth!.cookieHeader,
     )?.[1];
+    await gate?.beforeSend?.();
+    gate?.assertNow?.();
     const response = await fetch(u, {
       ...init,
       redirect: "manual",
@@ -317,6 +324,7 @@ export class RainClient {
           answered: q.answered || old?.answered === true,
           answer: q.answer ?? old?.answer,
           startAt: latest.timings?.[q.id]?.startAt ?? old?.startAt ?? q.startAt,
+          publicationTimeSource: latest.timings?.[q.id]?.publicationTimeSource ?? old?.publicationTimeSource ?? q.publicationTimeSource,
           endAt: [q.endAt, latest.timings?.[q.id]?.endAt, old?.endAt].some(
             (v) => v !== undefined,
           )

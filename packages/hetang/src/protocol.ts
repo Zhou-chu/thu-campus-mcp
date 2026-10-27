@@ -139,6 +139,7 @@ export function questions(
           (p.result !== undefined && p.result !== null),
         answer: p.result,
         startAt: milliseconds(p.startTime ?? p.start_time),
+        publicationTimeSource: milliseconds(p.startTime ?? p.start_time) !== undefined ? "server" : undefined,
         endAt: milliseconds(p.endTime ?? p.end_time),
         imageUrl: s.imageUrl ?? s.cover ?? s.coverAlt ?? s.image_url,
       } as Question,

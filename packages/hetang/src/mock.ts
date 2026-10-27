@@ -1,5 +1,5 @@
 import path from "node:path";
-import { RainClient } from "./client.js";
+import { RainClient, type RequestGate } from "./client.js";
 import type { Config } from "./config.js";
 import { readJson, atomicJson, withLock } from "./storage.js";
 import { RainError, type LessonData, type Resource } from "./types.js";
@@ -108,9 +108,15 @@ export class MockRain extends RainClient {
   override async request(
     endpoint: string,
     init: RequestInit = {},
+    _lessonToken?: string,
+    _lessonBearerToken?: string,
+    _captureBearer?: (bearer: string | undefined) => void,
+    gate?: RequestGate,
   ): Promise<any> {
     if (endpoint !== "/api/v3/lesson/problem/answer")
       throw new RainError("MOCK_NETWORK", "模拟模式禁止真实请求。");
+    await gate?.beforeSend?.();
+    gate?.assertNow?.();
     const body = JSON.parse(String(init.body));
     await this.updateState("lesson-1", (old) => {
       const s = old!;

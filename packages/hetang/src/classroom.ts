@@ -1,5 +1,5 @@
 import { RainError, type LessonData, type Question } from "./types.js";
-import { RainClient } from "./client.js";
+import { RainClient, type RequestGate } from "./client.js";
 import type { Config } from "./config.js";
 import { scopedWrite } from "./scoped-write.js";
 import { id, milliseconds } from "./protocol.js";
@@ -64,7 +64,9 @@ export function applyEvent(
     const pres = id(p.pres ?? p.presentationId ?? p.presentation_id);
     if (pres) state.presentationId = pres;
     if (!state.published.includes(qid)) state.published.push(qid);
-    const startAt = milliseconds(p.dt ?? p.unlockedAt) ?? now;
+    const serverStart = milliseconds(p.dt ?? p.unlockedAt);
+    const prior = state.timings?.[qid];
+    const startAt = serverStart ?? prior?.startAt ?? now;
     const limit = Number(p.limit);
     state.timings ||= {};
     const priorEnd = state.timings[qid]?.endAt;
@@ -74,6 +76,7 @@ export function applyEvent(
     );
     state.timings[qid] = {
       startAt,
+      publicationTimeSource: serverStart !== undefined ? "server" : prior?.publicationTimeSource ?? "observed",
       endAt: ends.length ? Math.min(...ends) : undefined,
     };
     const q = state.questions.find((x) => x.id === qid);
@@ -169,7 +172,7 @@ export class AnswerService {
     private client: RainClient,
     private config: Config,
   ) {}
-  async submit(input: SubmitInput) {
+  async submit(input: SubmitInput, gate?: RequestGate) {
     return scopedWrite(
       this.client,
       this.config,
@@ -210,15 +213,17 @@ export class AnswerService {
           "/api/v3/lesson/problem/answer",
           {
             method: "POST",
-            body: JSON.stringify({
+            get body() { return JSON.stringify({
               problemId: q.id,
               problemType: type,
               dt: Date.now(),
               result: answer,
-            }),
+            }); },
           },
           state.lessonToken,
           state.lessonBearerToken,
+          undefined,
+          gate,
         );
         for (let n = 0; n < 4; n++) {
           await this.client.checkAuth();

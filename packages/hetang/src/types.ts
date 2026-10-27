@@ -77,6 +77,7 @@ export interface Question {
   answered: boolean;
   answer?: unknown;
   startAt?: number;
+  publicationTimeSource?: "server" | "observed";
   endAt?: number;
   imageUrl?: string;
 }
@@ -104,5 +105,5 @@ export interface LessonData {
   joinedAt?: string;
   finished?: boolean;
   locallyLeft?: boolean;
-  timings?: Record<string, { startAt?: number; endAt?: number }>;
+  timings?: Record<string, { startAt?: number; endAt?: number; publicationTimeSource?: "server" | "observed" }>;
 }
