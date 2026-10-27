@@ -221,6 +221,10 @@ export async function runPreparedAnswer(
             );
             result = { ...result, phase: "submitting", intentAt: deps.now() };
             await hooks.commitDispatch(result);
+            // The record lock/atomic rename can take time. Re-read the current
+            // account and lesson snapshot after that await, then check time at fetch.
+            q = await question();
+            await check();
           } catch (e) {
             gateFailure = e;
             throw e;

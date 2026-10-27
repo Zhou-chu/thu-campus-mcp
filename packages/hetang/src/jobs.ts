@@ -71,7 +71,34 @@ export async function startJob(
     events: [],
     cursor: 0,
   };
-  await atomicJson(file(cfg, job.id), job);
+  await withLock(
+    path.join(cfg.stateDir, "job-record-locks", job.id),
+    async () => {
+      const reserved = await readJson<Job>(file(cfg, job.id));
+      if (reserved) {
+        if (
+          !fixedId ||
+          reserved.kind !== kind ||
+          reserved.accountId !== job.accountId ||
+          reserved.generation !== job.generation ||
+          JSON.stringify(reserved.options) !== JSON.stringify(options)
+        )
+          throw new RainError(
+            "REQUEST_CONFLICT",
+            "任务 ID 已绑定其他请求。",
+            400,
+          );
+        Object.assign(job, reserved);
+        if (job.stop && job.status === "queued") {
+          job.status = "stopped";
+          job.result = { phase: "cancelled", dispatched: false };
+        }
+      }
+      await atomicJson(file(cfg, job.id), job);
+    },
+  );
+  if (job.stop || job.status !== "queued")
+    return { id: job.id, status: job.status };
   const child = spawn(
     process.execPath,
     [path.join(projectRoot, "dist/cli.js"), "worker", job.id],
@@ -89,11 +116,18 @@ export async function startJob(
     },
   );
   child.once("error", () => {
-    void atomicJson(file(cfg, job.id), {
-      ...job,
-      status: "failed",
-      error: { code: "WORKER_START", message: "后台进程启动失败。" },
-    });
+    void withLock(
+      path.join(cfg.stateDir, "job-record-locks", job.id),
+      async () => {
+        const latest = await readJson<Job>(file(cfg, job.id));
+        if (!latest || latest.status !== "queued") return;
+        await atomicJson(file(cfg, job.id), {
+          ...latest,
+          status: latest.stop ? "stopped" : "failed",
+          error: { code: "WORKER_START", message: "后台进程启动失败。" },
+        });
+      },
+    ).catch(() => {});
   });
   child.unref();
   return { id: job.id, status: "queued" };

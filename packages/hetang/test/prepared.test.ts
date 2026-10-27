@@ -300,3 +300,32 @@ it("does not label another uncertain manual request as already answered", () =>
     expect(r.result.phase).toBe("unknown");
     expect(f.writes).toBe(0);
   }));
+it("rechecks authentication after dispatch intent persistence", () =>
+  fixture(async (f) => {
+    f.hooks.commitDispatch = async () => {
+      f.c.generation = async () => "other-epoch";
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("auth-changed");
+    expect(f.writes).toBe(0);
+  }));
+it("rechecks edited questions after dispatch intent persistence", () =>
+  fixture(async (f) => {
+    f.hooks.commitDispatch = async () => {
+      f.state.questions = [
+        { ...f.q, prompt: "edit while intent is persisted" },
+      ];
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("question-changed");
+    expect(f.writes).toBe(0);
+  }));
+it("rechecks classroom closure after dispatch intent persistence", () =>
+  fixture(async (f) => {
+    f.hooks.commitDispatch = async () => {
+      f.state.finished = true;
+    };
+    const r = await f.m.runPreparedAnswer(f.c, f.cfg, f.job, f.hooks, f.deps);
+    expect(r.result.phase).toBe("classroom-ended");
+    expect(f.writes).toBe(0);
+  }));

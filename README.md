@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml)
 
-在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂**。配置一个 `thu-campus` MCP，即可使用47 个校园工具和 4 个浏览器工具，共 **51 个工具**（原46个名称保留）。
+在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂**。配置一个 `thu-campus` MCP，即可使用 47 个校园工具和 4 个浏览器工具，共 **51 个工具**（原46个名称保留）。
 
 项目内置独立的 Chromium 运行时管理和持久浏览器工作区。首次完成本机登录后，后续启动复用 Cookie、localStorage 与 IndexedDB；API 会话过期时，统一入口优先尝试从已绑定的浏览器恢复同一账号。**默认不依赖 Edge、Chrome 或额外 Electron 程序。**
 
@@ -188,7 +188,7 @@ DPAPI 绑定 Windows 用户，不能把加密快照直接复制给另一台机�
 
 1. 查询 `rain_active_classrooms`，确认范围并使用 `rain_join_classroom` 进入课堂。
 2. 调用 `rain_questions({lessonId, includeUnpublished:true})`，必要时调用 `rain_question_image({lessonId, questionId, includeUnpublished:true})`。只预览学生端已经下发的课件；模型根据题干、选项和原图解答，不读取隐藏答案。
-3. 保存解题所依据的 `questionFingerprint`，调用 `rain_schedule_answer`。指纹绑定账号、登录代次和题目内容；题目或图片已变更时重新读取并解题，不能把旧答案配上新指纹。
+3. 保存解题所依据的 `questionFingerprint`，调用 `rain_schedule_answer`。指纹绑定账号、登录代次和题目内容（含原图URL路径，忽略临时签名）；题目或图片已变更时重新读取并解题，不能把旧答案配上新指纹。
 4. 保存返回的任务 `id`，使用 `rain_job_status({jobId:id})` 查询；`rain_wait_events` 可增量取事件，`rain_stop_job` 可请求取消。
 
 工具参数示例（ID和指纹必须替换为读取结果）：
@@ -220,7 +220,7 @@ DPAPI 绑定 Windows 用户，不能把加密快照直接复制给另一台机�
 
 电脑必须保持运行、时钟准确、网络和学校会话有效。此任务不依赖 Codex heartbeat，不需要额外模型Key；它只执行登记的固定答案，不在后台生成新答案，也不保证答案正确。关闭客户端可以继续执行；退出系统、重启、结束 Node 进程会中断任务，程序不自动恢复可能已派发的写入。取消返回 `mayHaveDispatched:false` 表示取消先于派发意图；`true` 表示可能已派发，应查看原回执，不能视为撤回成功。
 
-预设答案保存在当前 Windows 用户 DPAPI 保护的雨课堂状态目录；通用任务JSON不存题干、答案和登录凭据。不要把个人状态目录加入 Git 或分发给其他人。本版端到端测试使用模拟题验证真实20–40秒计时，不自动在真实课堂试投答案。
+预设答案保存在当前 Windows 用户 DPAPI 保护的雨课堂状态目录；通用任务JSON不存题干、答案和登录凭据。不要把个人状态目录加入 Git 或分发给其他人。若平台原地替换同一路径的图片字节，URL指纹无法单独识别这种变化。本版端到端测试使用模拟题验证真实20–40秒计时，不自动在真实课堂试投答案。
 
 ## 常见问题
 

@@ -256,8 +256,8 @@
         "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/jobs.ts": {
-        "sha256": "577727fec7772d7e342188e9b288bd5d88d1c9bd15fbb761eafd73202d88e401",
-        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+        "sha256": "3583ce5484ddcb481bbd719f2a7e9ed4574ed7993d664be5028a3a77c6a4919a",
+        "reason": "Prepared-answer scheduling and reviewed cancellation preservation/post-intent auth and lesson revalidation."
       },
       "src/mock.ts": {
         "sha256": "18a2b1fede277d5f358fb2592f96ac821135eb474a7d4961cd8d15eb19f961ce",
