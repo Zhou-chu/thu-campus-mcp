@@ -204,8 +204,8 @@
         "reason": "Preserve selected cloud state directory in installed rain configuration"
       },
       "package.json": {
-        "sha256": "513bdbf26ece1a19a1ca5f9bbabdc1c4fc493afaa1283bf862c33dab9ad09392",
-        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+        "sha256": "8d24c48f2f1a30a446c70e764814f983506f1ad0a677229038d5484a17189f8c",
+        "reason": "Add prepared-answer stdio smoke; hash committed LF bytes as required by .gitattributes."
       },
       "src/browser-auth.ts": {
         "sha256": "6eaaf2ba5a4c71ed4d7ef80e65fa4988b5788d218eb89f17ff0873ac5ca11067",
