@@ -80,8 +80,8 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/browser-auth.ts": {
-        "sha256": "83e13e20df2b8f91b945af43160da6f39dba198e58134a2aa6b6895c04edda88",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "d6d14fdf9563c76a9a6dd6a7fa1532b7de6d380d3b067e4a179a6427f3a85f0f",
+        "reason": "Recover interrupted expired-session redirects and drive browser-owned autofill with account binding, captcha stop and bounded submissions."
       },
       "src/cli.ts": {
         "sha256": "f97f58eb0d8f5505f931d63b091966c48f705ac7d70672e416facf08b0347479",

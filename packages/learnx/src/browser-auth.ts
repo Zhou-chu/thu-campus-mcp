@@ -10,6 +10,7 @@ import * as cheerio from "cheerio";
 import { AuthStore, type AuthData } from "./auth.js";
 import { LearnError } from "./types.js";
 import { digest } from "./storage.js";
+import { tryBrowserAutofillLogin } from "./autofill-login.js";
 export async function verifyBrowserSession(
   context: BrowserContext,
   csrfToken: string,
@@ -94,22 +95,37 @@ export async function browserLogin(
       { ...options, initialCookies, channel },
       async (context) => {
         const page = context.pages()[0] || (await context.newPage());
-        await page.goto(
-          "https://learn.tsinghua.edu.cn/f/wlxt/index/course/student/",
-          { waitUntil: "domcontentloaded", timeout: 60000 },
-        );
+        // An expired session redirects immediately; the interrupted navigation is expected, not a failure.
+        await page
+          .goto("https://learn.tsinghua.edu.cn/f/wlxt/index/course/student/", {
+            waitUntil: "domcontentloaded",
+            timeout: 60000,
+          })
+          .catch((e: Error) => {
+            if (!/interrupted|ERR_ABORTED|frame was detached/i.test(e.message)) throw e;
+          });
+        const autofill = { submits: 0, lastClick: new Map<string, number>() };
         if (!options.headless)
           process.stderr.write(
             "请在独立浏览器完成学校登录；此浏览器会保留登录状态。\n",
           );
         const until =
           Date.now() +
-          (options.timeoutMs ?? (options.headless ? 15000 : 600000));
+          (options.timeoutMs ?? (options.headless ? 45000 : 600000));
         while (Date.now() < until) {
           if (!context.pages().length)
             throw new LearnError("CANCELLED", "登录浏览器已关闭。");
           for (const candidate of context.pages()) {
-            const url = new URL(candidate.url());
+            let url: URL;
+            try { url = new URL(candidate.url()); } catch { continue; }
+            if (process.env.THU_CAMPUS_AUTOFILL_LOGIN !== "0") {
+              await authGuard(store, { epoch, version });
+              if (options.signal?.aborted) throw new LearnError("CANCELLED", "登录已取消。");
+              const step = await tryBrowserAutofillLogin(candidate, autofill, undefined, account);
+              if (step === "verification-required" && options.headless)
+                throw new LearnError("BROWSER_LOGIN_REQUIRED", "School requires a verification code; please finish login in the local browser.");
+              if (step === "clicked") continue;
+            }
             if (
               url.hostname !== "learn.tsinghua.edu.cn" ||
               !url.pathname.includes("/f/wlxt/")
