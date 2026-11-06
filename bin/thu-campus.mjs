@@ -3,11 +3,12 @@ import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import {
   service,
+  services,
   modulePath,
   serviceEnvironment,
   clientConfig,
 } from "../lib/services.mjs";
-const help = `清华校园 MCP 1.1：统一入口与独立持久浏览器\n\nnode bin/thu-campus.mjs serve\nnode bin/thu-campus.mjs install --unified [--apply]\nnode bin/thu-campus.mjs config --unified\nnode bin/thu-campus.mjs browser install|status|open|login|close|reset\nnode bin/thu-campus.mjs <learnx|cloud|hetang> <服务命令>\n\n首次安装：npm run setup\n示例：node bin/thu-campus.mjs browser login learnx --account 学号\n密码和验证码只在本机独立浏览器输入；解题使用当前 Harness 模型。\n`;
+const help = `清华校园 MCP 1.1：统一入口与独立持久浏览器\n\nnode bin/thu-campus.mjs serve\nnode bin/thu-campus.mjs install --unified [--apply]\nnode bin/thu-campus.mjs config --unified\nnode bin/thu-campus.mjs browser install|status|open|login|close|restore|reset\nnode bin/thu-campus.mjs <learnx|cloud|hetang> <服务命令>\n\n首次安装：npm run setup\n示例：node bin/thu-campus.mjs browser login learnx --account 学号\n密码和验证码只在本机独立浏览器输入；解题使用当前 Harness 模型。\n`;
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || ["help", "--help", "-h"].includes(command)) {
@@ -30,7 +31,13 @@ async function main() {
       await broker.runBrowserJob(target);
       return;
     } else if (action === "close") out = await broker.closeBrowserJobs();
-    else if (action === "reset") {
+    else if (action === "restore") {
+      const names =
+        target === "all" ? services.map((s) => s.name) : [service(target).name];
+      const restored = {};
+      for (const n of names) restored[n] = await broker.restoreService(n);
+      out = { restored, at: new Date().toISOString() };
+    } else if (action === "reset") {
       if (!args.includes("--confirm"))
         throw Object.assign(
           new Error(
@@ -50,7 +57,7 @@ async function main() {
       );
     } else
       throw Object.assign(
-        new Error("可用 browser install/status/open/login/close/reset。"),
+        new Error("可用 browser install/status/open/login/close/restore/reset。"),
         { code: "USAGE" },
       );
     process.stdout.write(JSON.stringify(out, null, 2) + "\n");
