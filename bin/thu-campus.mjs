@@ -12,12 +12,18 @@ const help = `清华校园 MCP 1.1：统一入口与独立持久浏览器\n\nnod
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || ["help", "--help", "-h"].includes(command)) {
-    process.stdout.write(help);
+    process.stdout.write(help + "\nMadModel：node bin/thu-campus.mjs madmodel login|status|check|refresh|models|serve\n");
     return;
   }
   if (command === "serve") {
     const { serveGateway } = await import("../lib/gateway.mjs");
     await serveGateway();
+    return;
+  }
+  if (command === "madmodel") {
+    const { main: madmodel, safeFailure } = await import("../lib/madmodel/cli.mjs");
+    try { await madmodel(args); }
+    catch (e) { process.stderr.write(JSON.stringify(safeFailure(e)) + "\n"); process.exitCode = 1; }
     return;
   }
   if (command === "browser") {
@@ -33,7 +39,7 @@ async function main() {
     } else if (action === "close") out = await broker.closeBrowserJobs();
     else if (action === "restore") {
       const names =
-        target === "all" ? services.map((s) => s.name) : [service(target).name];
+        target === "all" ? [...services.map((s) => s.name), "madmodel"] : [target === "madmodel" ? target : service(target).name];
       const restored = {};
       for (const n of names) restored[n] = await broker.restoreService(n);
       out = { restored, at: new Date().toISOString() };

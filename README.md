@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml)
 
-在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂**。配置一个 `thu-campus` MCP，即可使用 47 个校园工具和 4 个浏览器工具，共 **51 个工具**（原46个名称保留）。
+在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂、MadModel**。配置一个 `thu-campus` MCP，即可使用 47 个校园工具、4 个浏览器工具和 2 个 MadModel 工具，共 **53 个工具**（原工具名称保留）。
 
 项目内置独立的 Chromium 运行时管理和持久浏览器工作区。首次完成本机登录后，后续启动复用 Cookie、localStorage 与 IndexedDB；API 会话过期时，统一入口优先尝试从已绑定的浏览器恢复同一账号。**默认不依赖 Edge、Chrome 或额外 Electron 程序。**
 
@@ -16,8 +16,22 @@
 | 清华云盘   |     15 | 资料库、目录、搜索、读写文件、移动复制、分享与单向增量传输                      |
 | 荷塘雨课堂 |     19 | 课程与课堂、限定范围自动进入、题目预览、预设答案定时提交、课件/PDF/回放下载及云盘归档 |
 | 独立浏览器 |      4 | 查看状态、打开窗口、登录/复用登录、关闭并保留会话                               |
+| MadModel   |      2 | 登录状态与模型目录；另提供自动续登的 OpenAI 兼容 HTTP 服务                       |
 
 解题由当前 Harness 的模型完成，不另外索要模型 API Key。已有课程、作业和文件内容都作为外部数据处理，不作为额外操作授权。覆盖已有提交或云盘文件仍需明确授权。
+
+### MadModel 模型服务
+
+复用同一独立 Chromium 和清华统一认证，不需要向 MCP 或下游提供学校密码、Cookie 或令牌。
+
+```powershell
+node bin/thu-campus.mjs madmodel login
+node bin/thu-campus.mjs madmodel serve
+# 或后台启动：
+.\tools\madmodel-service.cmd start
+```
+
+下游 Base URL 为 `http://127.0.0.1:8765/v1`，支持 `/models` 和 `/chat/completions` 的 JSON/SSE。默认每 5 分钟在线检查登录，在令牌到期前 15 分钟续登；启动后立即检查。设置 `MADMODEL_API_KEY` 可为下游启用独立鉴权，非回环监听时必须设置。详见 [MadModel 接入说明](docs/madmodel.md)。已安装的统一 MCP 重载即可出现新工具，无需重新运行安装器。
 
 ## 推荐安装：Windows 便携包
 

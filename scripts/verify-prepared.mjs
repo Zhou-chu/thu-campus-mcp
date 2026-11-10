@@ -47,5 +47,5 @@ for (const args of [
   });
 }
 console.log(
-  "PASS: relocated Unicode/space prepared ZIP, bundled Node and Chromium, no system Node/browser dependency; 51 MCP tools.",
+  "PASS: relocated Unicode/space prepared ZIP, bundled Node and Chromium, no system Node/browser dependency; 53 MCP tools.",
 );
