@@ -132,6 +132,8 @@ async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost() 
     pairing,
     sessions,
     version: "1.3.0-test",
+    // 默认指向不存在的目录，测试内置占位页；真实 WebUI 由仓库 webui/ 提供。
+    webuiDir: path.join(dir, "webui"),
   });
   const url = await app.listen();
   t.after(async () => {
