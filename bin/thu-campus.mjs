@@ -8,11 +8,11 @@ import {
   serviceEnvironment,
   clientConfig,
 } from "../lib/services.mjs";
-const help = `清华校园 MCP 1.1：统一入口与独立持久浏览器\n\nnode bin/thu-campus.mjs serve\nnode bin/thu-campus.mjs install --unified [--apply]\nnode bin/thu-campus.mjs config --unified\nnode bin/thu-campus.mjs browser install|status|open|login|close|restore|reset\nnode bin/thu-campus.mjs <learnx|cloud|hetang> <服务命令>\n\n首次安装：npm run setup\n示例：node bin/thu-campus.mjs browser login learnx --account 学号\n密码和验证码只在本机独立浏览器输入；解题使用当前 Harness 模型。\n`;
+const help = `清华校园 MCP 1.3：统一入口、独立持久浏览器与独立 Agent 应用\n\nnode bin/thu-campus.mjs serve\nnode bin/thu-campus.mjs app serve|invite|devices|status\nnode bin/thu-campus.mjs install --unified [--apply]\nnode bin/thu-campus.mjs config --unified\nnode bin/thu-campus.mjs browser install|status|open|login|close|restore|reset\nnode bin/thu-campus.mjs <learnx|cloud|hetang> <服务命令>\n\n首次安装：npm run setup\n示例：node bin/thu-campus.mjs browser login learnx --account 学号\n独立应用：node bin/thu-campus.mjs app serve 后打开 http://127.0.0.1:8971\n密码和验证码只在本机独立浏览器输入；解题使用当前 Harness 模型或 MadModel。\n`;
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || ["help", "--help", "-h"].includes(command)) {
-    process.stdout.write(help + "\nMadModel：node bin/thu-campus.mjs madmodel login|status|check|refresh|models|serve\n");
+    process.stdout.write(help + "\nMadModel：node bin/thu-campus.mjs madmodel login|status|check|refresh|models|serve\n独立应用：node bin/thu-campus.mjs app serve|invite|devices|status\n");
     return;
   }
   if (command === "serve") {
@@ -24,6 +24,11 @@ async function main() {
     const { main: madmodel, safeFailure } = await import("../lib/madmodel/cli.mjs");
     try { await madmodel(args); }
     catch (e) { process.stderr.write(JSON.stringify(safeFailure(e)) + "\n"); process.exitCode = 1; }
+    return;
+  }
+  if (command === "app") {
+    const { appCommand } = await import("../lib/app/cli.mjs");
+    await appCommand(args);
     return;
   }
   if (command === "browser") {

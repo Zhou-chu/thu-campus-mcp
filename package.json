@@ -1,8 +1,8 @@
 {
   "name": "thu-campus-mcp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
-  "description": "清华校园 MCP 整合包：网络学堂、清华云盘、荷塘雨课堂",
+  "description": "清华校园 MCP 整合包与独立 Agent 应用：网络学堂、清华云盘、荷塘雨课堂、MadModel",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -19,6 +19,9 @@
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspaces && npm run test:bundle",
     "test:bundle": "node --test test/*.test.mjs",
+    "test:clients": "node --test desktop/test/*.test.mjs webui/test/*.test.mjs mobile/test/*.test.mjs",
+    "app": "node bin/thu-campus.mjs app serve",
+    "app:smoke": "node test/app-smoke.mjs",
     "check": "npm run typecheck && npm run build && npm test && npm run licenses:check && npm run audit:source",
     "smoke": "npm run smoke --workspaces && node test/smoke.mjs",
     "licenses": "node scripts/licenses.mjs",
