@@ -31,7 +31,7 @@
 
 | 目录 | 内容 | 状态 |
 | --- | --- | --- |
-| `android/` | Kotlin + WebView + Keystore AES-GCM 令牌 | 工程完整，**未编译**（本机缺 SDK platforms / build-tools） |
+| `android/` | Kotlin + WebView + Keystore AES-GCM 令牌 | **已在本机真实构建通过**，产出 `app-debug.apk`（3.06 MB，包名 `cn.edu.tsinghua.campusapp`），未上真机 |
 | `harmony/` | ArkTS Stage + ArkWeb + preferences | **已在本机真实构建通过**，产出未签名 HAP（44.6 KB），未上真机 |
 
 两端的 `README.md` 里分别写了构建步骤、真实缺口与排错。

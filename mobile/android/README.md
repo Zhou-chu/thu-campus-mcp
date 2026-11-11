@@ -27,20 +27,37 @@ app/src/main/
 
 ```powershell
 cd mobile/android
-# 首次：生成 wrapper（用本机已装的 Gradle 7.2+ 即可）
-gradle wrapper --gradle-version 8.9
-.\gradlew.bat assembleDebug
+.\gradlew.bat assembleDebug        # 首次会自动下载 Gradle 8.9 与依赖
 ```
 
 产物在 `app/build/outputs/apk/debug/app-debug.apk`。
 
-## 本仓库未验证的部分（如实说明）
+## 已通过的构建（本机实测）
 
-本开发机只有 Android SDK 的 `platform-tools`，**没有 `platforms/`、`build-tools/`、`cmdline-tools`**，因此：
+```
+> Task :app:compileDebugKotlin
+> Task :app:packageDebug
+> Task :app:assembleDebug
+BUILD SUCCESSFUL in 4m 7s
+```
 
-- **没有实际编译过，也没有产物 APK。** 上面的命令是按工程结构编写的标准流程。
-- 需要你在一台装了完整 SDK 的机器或 Android Studio 上首次构建验证。
-- 已做的人工核对：Manifest 引用的资源都存在（`@drawable/ic_launcher`、`@xml/network_security_config`、`@layout/activity_main`、`@string/*` 全部定义在 `strings.xml`）；两个 Kotlin 文件的 import 与类名一致；`build.gradle.kts` 声明的 `proguard-rules.pro` 已存在。
+| 项 | 值 |
+| --- | --- |
+| 产物 | `app/build/outputs/apk/debug/app-debug.apk` |
+| 大小 | 3.06 MB |
+| 包名（aapt2 读出） | `cn.edu.tsinghua.campusapp` |
+| ZIP 头 | `50 4B 03 04` |
+| JDK | DevEco 自带 JBR 21（AGP 8.7 支持 17–21） |
+| Gradle | 8.9（wrapper 已随仓库提交，无需另装） |
+| SDK | cmdline-tools 12.0 + `platforms;android-35` + `build-tools;35.0.0` |
+
+本机原来是「只有 `platform-tools`」的裸 SDK，编译链是临时自举的：下载 `commandlinetools-win-11076708` 解压到 `D:\Android\cmdline-tools\latest`，接受许可后装 platform 35 与 build-tools 35，再用 `D:\Android\gradle-8.9` 构建。`local.properties` 指向本机 SDK，已在 `.gitignore` 中，不随仓库分发。
+
+## 仍未验证
+
+- **没有装到真机或模拟器上运行过**：只验证到「编译通过 + APK 结构正确」。
+- 未验证 WebView 实际加载 WebUI 后的交互（需要主机 `app serve` 且与手机同网段）。
+- debug 包用 Android 默认调试签名；正式发布需要自己的 keystore。
 
 ## 安全取舍
 
