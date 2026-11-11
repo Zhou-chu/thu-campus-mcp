@@ -29,6 +29,8 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 运行时的 HTTP/SSE 契约见 [设计契约](docs/superpowers/specs/2026-11-11-campus-agent-app.md)，实施计划见 [实施计划](docs/superpowers/plans/2026-11-11-campus-agent-app.md)。
 
+默认只监听本机。想在任意网络下用手机接入时，见 [托管部署](docs/app-hosting.md)：`THU_CAMPUS_APP_ALLOW_REMOTE=1` + `PUBLIC_URL`，推荐让 Nginx/Caddy 终止 TLS（`proxy_buffering off` 是必须的）。
+
 ```powershell
 node bin/thu-campus.mjs app status           # 脱敏状态，不联网
 node bin/thu-campus.mjs app devices          # 已配对设备
@@ -297,3 +299,4 @@ CI 在 Windows Node 22/24 上检查，不使用学校账号，不进入真实课
 兼容分服务模式：不加 `--unified` 的 `install` / `config` 仍保留原有三个注册；模块命令 `learnx`、`cloud`、`hetang` 仍可单独调用。统一入口才提供集中浏览器工具及自动恢复。原工具参考见 [TOOLS.md](docs/TOOLS.md)。
 
 浏览器持久化机制使用 Playwright 的 [Persistent Context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context) 和 [Storage State](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)；独立内核由其[官方浏览器安装器](https://playwright.dev/docs/browsers)准备。
+

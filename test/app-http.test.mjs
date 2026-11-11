@@ -105,7 +105,7 @@ function scriptedRoute() {
     },
   };
 }
-async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost() } = {}) {
+async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {} } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-app-http-"));
   const config = {
     root: path.resolve(import.meta.dirname, ".."),
@@ -120,6 +120,7 @@ async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost() 
     maxSteps: 8,
     hostname: "test-host",
     version: "test",
+    ...overrides,
   };
   const devices = new DeviceStore(dir, { encrypt: async (buffer) => buffer });
   const pairing = new PairingCodes();
@@ -323,4 +324,37 @@ test("静态资源不回退到目录外，缺 WebUI 时给出可读占位页", a
   const traversal = await fetch(url + "/..%2f..%2fpackage.json");
   const text = await traversal.text();
   assert.ok(traversal.status === 400 || !text.includes('"name": "thu-campus-mcp"'));
+});
+test("托管模式：对外地址与安全信息如实反映配置", async (t) => {
+  const { url, pairing } = await boot(t, {
+    config: {
+      publicUrl: "https://campus.example.com",
+      extraOrigins: ["https://campus.example.com"],
+      allowRemote: true,
+    },
+  });
+  const redeemed = await pair(url, pairing);
+  assert.equal(redeemed.body.baseUrl, "https://campus.example.com");
+  const headers = { authorization: "Bearer " + redeemed.body.token };
+  const meta = await (await fetch(url + "/api/meta", { headers })).json();
+  assert.equal(meta.security.publicUrl, "https://campus.example.com");
+  assert.equal(meta.security.hosted, true);
+  assert.equal(meta.security.https, false);
+  assert.equal(meta.security.allowRemote, true);
+});
+
+test("托管模式：白名单来源被接受，未列入的来源仍被拒绝", async (t) => {
+  const { url, pairing } = await boot(t, {
+    config: { extraOrigins: ["https://campus.example.com"] },
+  });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token };
+  const allowed = await fetch(url + "/api/meta", {
+    headers: { ...headers, origin: "https://campus.example.com" },
+  });
+  assert.equal(allowed.status, 200);
+  const denied = await fetch(url + "/api/meta", {
+    headers: { ...headers, origin: "https://evil.example.com" },
+  });
+  assert.equal(denied.status, 403);
 });

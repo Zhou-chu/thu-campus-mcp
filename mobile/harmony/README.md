@@ -82,7 +82,7 @@ cd mobile/harmony
 
 - **未安装到真机或模拟器**：没有签名证书，也没有启动模拟器。
 - **未验证 ArkWeb 渲染真实 WebUI**：需要主机先 `app serve` 并与手机同网段。
-- 深链 `thucampus://pair` 已写进 `module.json5` 的 skills，但 `EntryAbility` 还没把 want 里的参数转给页面，属于下一步。
+- 深链 `thucampus://pair?base=…&code=…` 已打通：`module.json5` 声明 skills，`EntryAbility.onCreate/onNewIntent` 把 `want.uri` 写进 `AppStorage`，`Index.aboutToAppear` 取出并预填配对表单。仅编译验证，未在真机上点开链接实测。
 
 ## 目录
 

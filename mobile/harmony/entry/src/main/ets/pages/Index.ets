@@ -52,6 +52,11 @@ struct Index {
   }
 
   aboutToAppear(): void {
+    const pendingUri: string = AppStorage.get<string>('campus.deeplink') ?? '';
+    if (pendingUri.length > 0) {
+      AppStorage.set<string>('campus.deeplink', '');
+      this.applyDeeplink(pendingUri);
+    }
     const context = getContext(this) as common.UIAbilityContext;
     const pref = preferences.getPreferencesSync(context, this.prefOptions());
     const base = pref.getSync(KEY_BASE, '') as string;
@@ -59,6 +64,18 @@ struct Index {
     if (base.length > 0 && token.length > 0) {
       this.baseUrl = base;
       this.showWeb(base, token);
+    }
+  }
+
+  /** 从 thucampus://pair?base=…&code=… 预填配对表单。 */
+  applyDeeplink(uri: string): void {
+    const baseMatch = /[?&]base=([^&]+)/.exec(uri);
+    const codeMatch = /[?&]code=(\d{1,6})/.exec(uri);
+    if (baseMatch !== null && baseMatch[1].length > 0) {
+      this.baseUrl = decodeURIComponent(baseMatch[1]);
+    }
+    if (codeMatch !== null) {
+      this.code = codeMatch[1];
     }
   }
 
@@ -238,3 +255,4 @@ struct Index {
     .backgroundColor('#F5F7FA')
   }
 }
+

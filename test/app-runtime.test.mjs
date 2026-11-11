@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { appConfig, maskAccount, lanUrls } from "../lib/app/settings.mjs";
+import { appConfig, maskAccount, lanUrls, publicBase } from "../lib/app/settings.mjs";
 import { DeviceStore, newToken } from "../lib/app/devices.mjs";
 import { PairingCodes, PairingError } from "../lib/app/pairing.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
@@ -154,4 +154,38 @@ test("SSE 解析忽略注释行并容忍结尾没有空行", async () => {
   for await (const event of readSseEvents(streamOf([": keep-alive\n\n", "data: 末尾"])))
     events.push(event);
   assert.deepEqual(events, [{ event: "message", data: "末尾" }]);
+});
+test("托管模式配置：显式放开远程，TLS 证书必须成对", () => {
+  assert.throws(
+    () => appConfig({ THU_CAMPUS_APP_HOST: "0.0.0.0" }),
+    (e) => e.code === "INSECURE_LISTEN",
+  );
+  const remote = appConfig({ THU_CAMPUS_APP_HOST: "0.0.0.0", THU_CAMPUS_APP_ALLOW_REMOTE: "1" });
+  assert.equal(remote.allowRemote, true);
+  assert.equal(remote.token, "");
+  assert.throws(
+    () => appConfig({ THU_CAMPUS_APP_TLS_CERT: "a.pem" }),
+    (e) => e.code === "INVALID_SETTINGS",
+  );
+  const hosted = appConfig({
+    THU_CAMPUS_APP_HOST: "0.0.0.0",
+    THU_CAMPUS_APP_ALLOW_REMOTE: "1",
+    THU_CAMPUS_APP_TLS_CERT: "C:\\\\certs\\\\c.pem",
+    THU_CAMPUS_APP_TLS_KEY: "C:\\\\certs\\\\k.pem",
+    THU_CAMPUS_APP_PUBLIC_URL: "https://campus.example.com/",
+    THU_CAMPUS_APP_ALLOWED_HOSTS: "Campus.Example.com, extra.example.com",
+    THU_CAMPUS_APP_ALLOWED_ORIGINS: "https://campus.example.com",
+  });
+  assert.equal(hosted.publicUrl, "https://campus.example.com");
+  assert.deepEqual(hosted.extraHosts, ["campus.example.com", "extra.example.com"]);
+  assert.deepEqual(hosted.extraOrigins, ["https://campus.example.com"]);
+});
+
+test("对外地址优先 PUBLIC_URL，其次按是否启用 TLS 拼协议", () => {
+  assert.equal(
+    publicBase({ publicUrl: "https://campus.example.com", host: "127.0.0.1", port: 8971 }),
+    "https://campus.example.com",
+  );
+  assert.equal(publicBase({ publicUrl: "", tlsCert: "x.pem", host: "0.0.0.0", port: 443 }), "https://0.0.0.0:443");
+  assert.equal(publicBase({ publicUrl: "", tlsCert: "", host: "127.0.0.1", port: 8971 }), "http://127.0.0.1:8971");
 });

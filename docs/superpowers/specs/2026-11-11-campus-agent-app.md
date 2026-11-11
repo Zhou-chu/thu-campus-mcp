@@ -62,6 +62,13 @@ node bin/thu-campus.mjs app status            # 脱敏状态，不联网
 | `THU_CAMPUS_APP_MODEL_API_KEY` | 空 | `openai` 路由的密钥 |
 | `THU_CAMPUS_APP_MODEL_NAME` | 自动 | 首选模型名 |
 | `THU_CAMPUS_APP_MAX_STEPS` | `12` | 单轮 agent 最大工具步数 |
+| `THU_CAMPUS_APP_ALLOW_REMOTE` | 空 | `1` 允许「非回环 + 无固定令牌」启动（托管模式） |
+| `THU_CAMPUS_APP_PUBLIC_URL` | 空 | 对外可达地址；配对响应回填，并自动进入 Host 白名单 |
+| `THU_CAMPUS_APP_TLS_CERT` / `_KEY` | 空 | PEM 证书与私钥，成对提供则直出 HTTPS |
+| `THU_CAMPUS_APP_ALLOWED_HOSTS` | 空 | 额外 Host 白名单（逗号分隔） |
+| `THU_CAMPUS_APP_ALLOWED_ORIGINS` | 空 | 额外 Origin 白名单（逗号分隔） |
+
+托管部署的完整步骤与安全清单见 [托管部署](../app-hosting.md)。
 
 ## 5. HTTP API（冻结）
 
