@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="清华校园助手">
+  <rect width="512" height="512" rx="112" fill="#0f2f4f" />
+  <path d="M256 96 424 184 256 272 88 184z" fill="#9dc6f5" />
+  <path d="M168 232v88c0 34 40 60 88 60s88-26 88-60v-88l-32 16v72c0 18-25 32-56 32s-56-14-56-32v-72z" fill="#ffffff" />
+  <circle cx="256" cy="196" r="16" fill="#0f2f4f" />
+</svg>

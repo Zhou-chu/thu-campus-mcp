@@ -1,0 +1,23 @@
+{
+  "name": "清华校园助手",
+  "short_name": "校园助手",
+  "description": "网络学堂、清华云盘、荷塘雨课堂与 MadModel 的本机独立助手",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f7fa",
+  "theme_color": "#0f2f4f",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "新建对话", "url": "/" }
+  ]
+}

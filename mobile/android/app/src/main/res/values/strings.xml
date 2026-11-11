@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">清华校园助手</string>
+    <string name="pair_title">连接到你的电脑</string>
+    <string name="pair_hint">在电脑上运行 node bin/thu-campus.mjs app serve，控制台会打印一次性 6 位配对码。配对后密码与验证码只在本机浏览器输入。</string>
+    <string name="pair_base_label">服务器地址</string>
+    <string name="pair_code_label">配对码</string>
+    <string name="pair_submit">配对并连接</string>
+    <string name="pair_busy">正在配对…</string>
+    <string name="pair_failed">配对失败：%1$s</string>
+    <string name="pair_invalid_code">配对码必须是 6 位数字</string>
+    <string name="pair_invalid_base">服务器地址必须以 http:// 或 https:// 开头</string>
+    <string name="login_required">登录已失效，请重新配对</string>
+    <string name="unpair">解除配对</string>
+    <string name="back">返回</string>
+</resources>

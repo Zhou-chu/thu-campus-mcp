@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    />
+    <meta name="theme-color" content="#0f2f4f" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="清华校园独立助手：网络学堂、清华云盘、荷塘雨课堂" />
+    <title>清华校园助手</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app" hidden>
+      <header class="topbar">
+        <div class="brand">
+          <span class="dot" id="health-dot" aria-hidden="true"></span>
+          <h1>清华校园助手</h1>
+        </div>
+        <div class="topbar-meta">
+          <span id="account" class="chip" title="已绑定的校园账号"></span>
+          <button id="refresh" class="icon-btn" type="button" title="刷新状态" aria-label="刷新状态">⟳</button>
+        </div>
+      </header>
+
+      <main id="view" class="view" aria-live="polite"></main>
+
+      <nav class="tabbar" aria-label="主导航">
+        <button class="tab" data-view="chat" type="button">对话</button>
+        <button class="tab" data-view="sessions" type="button">会话</button>
+        <button class="tab" data-view="services" type="button">服务</button>
+        <button class="tab" data-view="tools" type="button">工具</button>
+        <button class="tab" data-view="settings" type="button">设置</button>
+      </nav>
+    </div>
+
+    <section id="pair" class="pair" hidden>
+      <div class="card pair-card">
+        <h2>连接到你的电脑</h2>
+        <p class="muted">
+          在电脑上运行 <code>node bin/thu-campus.mjs app serve</code>，控制台会打印一次性 6 位配对码；
+          也可以在已连接的设备「设置」页生成新码。配对后用你自己的清华账号完成登录，各设备共享同一份登录态。
+        </p>
+        <label class="field">
+          <span>服务器地址</span>
+          <input id="pair-base" type="url" inputmode="url" placeholder="http://192.168.1.23:8971" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>配对码</span>
+          <input
+            id="pair-code"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="6"
+            placeholder="000000"
+            autocomplete="one-time-code"
+          />
+        </label>
+        <p id="pair-error" class="error" role="alert" hidden></p>
+        <button id="pair-submit" class="primary" type="button">配对并连接</button>
+        <p class="muted small">
+          配对码 5 分钟内有效、只能用一次。应用不会向任何服务器上传你的密码或 Cookie。
+        </p>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

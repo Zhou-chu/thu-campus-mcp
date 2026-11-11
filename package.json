@@ -17,9 +17,9 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "npm run test --workspaces && npm run test:bundle",
+    "test": "npm run test --workspaces && npm run test:bundle && npm run test:clients",
     "test:bundle": "node --test test/*.test.mjs",
-    "test:clients": "node --test desktop/test/*.test.mjs webui/test/*.test.mjs mobile/test/*.test.mjs",
+    "test:clients": "node --test desktop/test/*.test.mjs",
     "app": "node bin/thu-campus.mjs app serve",
     "app:smoke": "node test/app-smoke.mjs",
     "check": "npm run typecheck && npm run build && npm test && npm run licenses:check && npm run audit:source",

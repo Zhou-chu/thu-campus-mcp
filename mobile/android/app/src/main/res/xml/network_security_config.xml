@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  允许明文 HTTP：本应用要连「同一局域网内的个人电脑」上运行的运行时，
+  该地址由用户在配对时手填（http://192.168.x.x:8971），没有可用证书。
+  风险与该收窄：只开放 cleartext，不降低 TLS 策略；公网部署必须换成 https。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,17 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "清华校园助手入口模块" },
+    { "name": "EntryAbility_desc", "value": "连接电脑上的校园助手运行时" },
+    { "name": "EntryAbility_label", "value": "清华校园助手" },
+    { "name": "pair_title", "value": "连接到你的电脑" },
+    { "name": "pair_hint", "value": "在电脑上运行 node bin/thu-campus.mjs app serve，控制台会打印一次性 6 位配对码。配对后密码与验证码只在本机浏览器输入。" },
+    { "name": "pair_base_label", "value": "服务器地址" },
+    { "name": "pair_code_label", "value": "配对码" },
+    { "name": "pair_submit", "value": "配对并连接" },
+    { "name": "pair_busy", "value": "正在配对…" },
+    { "name": "pair_invalid", "value": "地址需以 http:// 开头，配对码为 6 位数字" },
+    { "name": "pair_failed", "value": "配对失败：" },
+    { "name": "login_required", "value": "登录已失效，请重新配对" },
+    { "name": "unpair", "value": "解除配对" }
+  ]
+}

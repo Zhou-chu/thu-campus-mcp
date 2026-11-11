@@ -1,4 +1,4 @@
-# 清华校园 MCP · 独立浏览器与统一入口
+# 清华校园 MCP · 独立浏览器与独立 Agent 应用
 
 [![CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml)
 
@@ -7,6 +7,34 @@
 项目内置独立的 Chromium 运行时管理和持久浏览器工作区。首次完成本机登录后，后续启动复用 Cookie、localStorage 与 IndexedDB；API 会话过期时，统一入口优先尝试从已绑定的浏览器恢复同一账号。**默认不依赖 Edge、Chrome 或额外 Electron 程序。**
 
 程序可以移动、复制和升级；登录资料按 Windows 用户独立保存。每位新使用者需要完成自己的首次学校登录。学校撤销会话、要求验证码/多因素认证时，仍须在本机浏览器正常完成验证。
+
+## 独立应用：不接 Harness 也能用
+
+除 MCP 形态外，项目自带一个**本地 Agent 应用运行时**，把同样的 53 个工具、同一个持久浏览器和 MadModel 模型通道包装成独立应用：
+
+```powershell
+node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
+```
+
+| 形态 | 入口 | 说明 |
+| --- | --- | --- |
+| WebUI | `app serve` 后打开页面 | 自带对话、会话、服务、工具、设置五个界面，可安装为 PWA |
+| Windows 桌面 | `desktop\thu-campus-desktop.cmd` | 启动运行时并用包内 Chromium 以应用窗口打开，不引入 Electron |
+| Android | `mobile/android` | WebView 瘦客户端，配对后共享同一份登录态 |
+| HarmonyOS | `mobile/harmony` | ArkWeb 瘦客户端，同上 |
+
+**一键联通**：在电脑上用清华账号登录一次（`campus_browser_login` 或 MadModel 登录），运行时打印一次性 6 位配对码；手机、平板、另一台电脑输码配对后共享同一份会话。设备令牌只存 sha256 摘要 + DPAPI 加密，可随时在「设置」里吊销。
+
+**模型自主闭环**：对话默认走 MadModel（清华统一认证直连，`app serve` 内置模型路由），不需要外部模型 API Key；`THU_CAMPUS_APP_MODEL_ROUTE=openai` 时才改接任意 OpenAI 兼容端点。
+
+运行时的 HTTP/SSE 契约见 [设计契约](docs/superpowers/specs/2026-11-11-campus-agent-app.md)，实施计划见 [实施计划](docs/superpowers/plans/2026-11-11-campus-agent-app.md)。
+
+```powershell
+node bin/thu-campus.mjs app status           # 脱敏状态，不联网
+node bin/thu-campus.mjs app devices          # 已配对设备
+node bin/thu-campus.mjs app invite           # 设置固定令牌后可在运行中生成配对码
+npm run app:smoke                            # 真实启动运行时跑一遍配对与工具调用
+```
 
 ## 能做什么
 

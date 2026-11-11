@@ -1,0 +1,10 @@
+{
+  "app": {
+    "bundleName": "cn.edu.tsinghua.campusapp",
+    "vendor": "thu-campus-mcp",
+    "versionCode": 1000000,
+    "versionName": "1.3.0",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name"
+  }
+}
