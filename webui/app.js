@@ -567,7 +567,7 @@ function servicesView() {
       ]),
       el("span", { class: "state", dataset: { s: info.state }, text: texts[info.state] || info.state }),
     ]);
-    if (name !== "madmodel")
+    if (["learnx", "cloud", "hetang", "madmodel"].includes(name))
       row.append(
         el("button", {
           class: "ghost",
@@ -711,6 +711,27 @@ function toolItem(tool) {
   details.append(form);
   return details;
 }
+function pairLinkRow(label, value) {
+  const input = el("input", { type: "text", readonly: true, value });
+  const copy = el("button", {
+    class: "ghost",
+    type: "button",
+    text: "复制",
+    onclick: async () => {
+      try {
+        await navigator.clipboard.writeText(value);
+        toast(`${label}链接已复制`);
+      } catch {
+        input.select();
+        toast("已选中，请手动复制");
+      }
+    },
+  });
+  return el("div", { class: "stack", style: "gap:4px" }, [
+    el("span", { class: "small muted", text: label }),
+    el("div", { class: "row" }, [input, copy]),
+  ]);
+}
 function settingsView() {
   const wrap = el("div", { class: "stack" });
   wrap.append(el("h2", { text: "设置" }));
@@ -767,7 +788,7 @@ function settingsView() {
   });
   wrap.append(settingsCard);
   const codeNode = el("div", { class: "small muted", text: "" });
-  const urlsNode = el("div", { class: "small muted", text: "" });
+  const linkBox = el("div", { class: "stack", style: "gap:8px" });
   const inviteButton = el("button", {
     class: "ghost",
     type: "button",
@@ -775,8 +796,14 @@ function settingsView() {
     onclick: async () => {
       try {
         const data = await api("/api/pair/invite", { method: "POST" });
-        codeNode.textContent = `配对码 ${data.code}（${data.ttlSeconds} 秒内有效）`;
-        urlsNode.textContent = (data.lanUrls || []).join("  ") || "仅本机可用";
+        codeNode.textContent = `配对码 ${data.code}（${data.ttlSeconds} 秒内有效，一次性）`;
+        clear(linkBox);
+        const urls = (data.lanUrls || []).length ? data.lanUrls : [location.origin];
+        for (const url of urls) {
+          const web = `${url.replace(/\/+$/, "")}/#code=${data.code}`;
+          const app = `thucampus://pair?base=${encodeURIComponent(url)}&code=${data.code}`;
+          linkBox.append(pairLinkRow("浏览器打开", web), pairLinkRow("App 深链", app));
+        }
       } catch (e) {
         toast(e.message);
       }
@@ -788,7 +815,7 @@ function settingsView() {
       el("p", { class: "small muted", text: "在手机或另一台电脑的浏览器里打开本页地址，输入配对码即可共享同一份登录态。" }),
       inviteButton,
       codeNode,
-      urlsNode,
+      linkBox,
     ]),
   );
   wrap.append(
@@ -835,8 +862,10 @@ function render() {
   if (state.view === "sessions") void loadSessions().then(() => {
     if (state.view === "sessions") render();
   });
-  const scroller = $("#view");
-  scroller.scrollTop = scroller.scrollHeight;
+  if (state.view === "chat") {
+    const scroller = $("#view");
+    scroller.scrollTop = scroller.scrollHeight;
+  }
 }
 async function start() {
   bootToken();
@@ -853,7 +882,12 @@ async function start() {
     await refreshMeta();
     render();
   });
-  if (!state.token) return showPair();
+  if (!state.token) {
+    const autoPair = !!state.deeplinkCode;
+    showPair();
+    if (autoPair) setTimeout(() => void submitPair(), 120);
+    return;
+  }
   const ok = await refreshMeta();
   if (!ok) return;
   $("#app").hidden = false;
@@ -865,3 +899,6 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
+
+

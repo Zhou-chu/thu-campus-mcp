@@ -254,6 +254,8 @@ h3 {
   cursor: not-allowed;
 }
 .ghost {
+  white-space: nowrap;
+  flex: none;
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 10px;
