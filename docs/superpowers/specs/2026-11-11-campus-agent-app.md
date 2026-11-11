@@ -95,6 +95,8 @@ node bin/thu-campus.mjs app status            # 脱敏状态，不联网
 | PUT | `/api/settings` | 是 | 更新设置（白名单字段） |
 | GET | `/` 及静态资源 | 否 | WebUI |
 
+**客户端令牌来源**（按优先级）：`localStorage` 已保存的令牌 → URL 片段 `#token=<token>` → 查询串 `?token=<token>`。WebUI 读到片段或查询串里的令牌后必须立即用 `history.replaceState` 抹掉，再持久化到 `localStorage`。桌面外壳通过片段传入，避免令牌进入浏览器历史与服务端访问日志。
+
 ### 5.1 `/api/meta` 响应
 
 ```json
