@@ -8,6 +8,7 @@ const TAG: string = 'CampusApp';
 const PREF_NAME: string = 'campus-app';
 const KEY_BASE: string = 'baseUrl';
 const KEY_TOKEN: string = 'deviceToken';
+const JSON_HEADER: string = '{"Content-Type":"application/json"}';
 
 interface PairOk {
   ok?: boolean;
@@ -22,6 +23,12 @@ interface PairErrDetail {
 interface PairErr {
   ok?: boolean;
   error?: PairErrDetail;
+}
+
+interface PairRequest {
+  code: string;
+  deviceName: string;
+  platform: string;
 }
 
 /**
@@ -39,9 +46,14 @@ struct Index {
   @State pageUrl: string = 'about:blank';
   private controller: webview.WebviewController = new webview.WebviewController();
 
+  prefOptions(): preferences.Options {
+    const options: preferences.Options = { name: PREF_NAME };
+    return options;
+  }
+
   aboutToAppear(): void {
     const context = getContext(this) as common.UIAbilityContext;
-    const pref = preferences.getPreferencesSync(context, { name: PREF_NAME });
+    const pref = preferences.getPreferencesSync(context, this.prefOptions());
     const base = pref.getSync(KEY_BASE, '') as string;
     const token = pref.getSync(KEY_TOKEN, '') as string;
     if (base.length > 0 && token.length > 0) {
@@ -57,7 +69,7 @@ struct Index {
 
   savePair(base: string, token: string): void {
     const context = getContext(this) as common.UIAbilityContext;
-    const pref = preferences.getPreferencesSync(context, { name: PREF_NAME });
+    const pref = preferences.getPreferencesSync(context, this.prefOptions());
     pref.putSync(KEY_BASE, base);
     pref.putSync(KEY_TOKEN, token);
     pref.flush();
@@ -65,7 +77,7 @@ struct Index {
 
   clearPair(): void {
     const context = getContext(this) as common.UIAbilityContext;
-    const pref = preferences.getPreferencesSync(context, { name: PREF_NAME });
+    const pref = preferences.getPreferencesSync(context, this.prefOptions());
     pref.deleteSync(KEY_BASE);
     pref.deleteSync(KEY_TOKEN);
     pref.flush();
@@ -76,62 +88,71 @@ struct Index {
 
   startPair(): void {
     const base: string = this.baseUrl.trim().replace(/\/+$/, '');
-    if (!base.startsWith('http://') && !base.startsWith('https://')) {
-      this.errorText = '地址需以 http:// 开头，配对码为 6 位数字';
-      return;
-    }
-    if (!/^\d{6}$/.test(this.code)) {
+    const codeOk: boolean = /^\d{6}$/.test(this.code);
+    if ((!base.startsWith('http://') && !base.startsWith('https://')) || !codeOk) {
       this.errorText = '地址需以 http:// 开头，配对码为 6 位数字';
       return;
     }
     this.busy = true;
     this.errorText = '';
-    const request = http.createHttp();
-    const payload: string = JSON.stringify({
+    const payload: PairRequest = {
       code: this.code,
       deviceName: 'HarmonyOS',
       platform: 'harmony'
-    } as Record<string, string>);
-    request.request(base + '/api/pair/redeem', {
+    };
+    const options: http.HttpRequestOptions = {
       method: http.RequestMethod.POST,
-      header: { 'Content-Type': 'application/json' } as Record<string, string>,
-      extraData: payload,
+      header: JSON_HEADER,
+      extraData: JSON.stringify(payload),
       connectTimeout: 15000,
       readTimeout: 20000,
       expectDataType: http.HttpDataType.STRING
-    }).then((response: http.HttpResponse) => {
-      this.busy = false;
-      const text: string = response.result as string;
-      if (response.responseCode === 200) {
-        const ok = JSON.parse(text) as PairOk;
-        const token: string = ok.token ?? '';
-        if (token.length === 0) {
-          this.errorText = '配对失败：响应缺少令牌';
+    };
+    const request = http.createHttp();
+    request.request(base + '/api/pair/redeem', options)
+      .then((response: http.HttpResponse) => {
+        this.busy = false;
+        const text: string = response.result as string;
+        if (response.responseCode === 200) {
+          const ok = JSON.parse(text) as PairOk;
+          const token: string = ok.token ?? '';
+          if (token.length === 0) {
+            this.errorText = '配对失败：响应缺少令牌';
+            return;
+          }
+          this.savePair(base, token);
+          this.code = '';
+          this.showWeb(base, token);
           return;
         }
-        this.savePair(base, token);
-        this.code = '';
-        this.showWeb(base, token);
-        return;
-      }
-      this.errorText = '配对失败：' + this.describeError(text, response.responseCode);
-    }).catch((err: Error) => {
-      this.busy = false;
-      this.errorText = '配对失败：' + err.message;
-      hilog.error(0x0000, TAG, 'pair failed %{public}s', err.message);
-    }).finally(() => {
-      request.destroy();
-    });
+        this.errorText = '配对失败：' + this.describeError(text, response.responseCode);
+      })
+      .catch((err: Error) => {
+        this.busy = false;
+        this.errorText = '配对失败：' + err.message;
+        hilog.error(0x0000, TAG, 'pair failed %{public}s', err.message);
+      })
+      .finally(() => {
+        request.destroy();
+      });
   }
 
   describeError(text: string, status: number): string {
     try {
       const parsed = JSON.parse(text) as PairErr;
       const code: string = parsed.error?.code ?? '';
-      if (code === 'PAIRING_EXPIRED') return '配对码无效或已过期，请在电脑上重新生成';
-      if (code === 'PAIRING_LOCKED') return '尝试过于频繁，请稍后再试';
-      if (code === 'PAIRING_INVALID') return '配对码格式不对';
-      if (code === 'PAIRING_DISABLED') return '这台电脑使用固定令牌，请改用带令牌的链接';
+      if (code === 'PAIRING_EXPIRED') {
+        return '配对码无效或已过期，请在电脑上重新生成';
+      }
+      if (code === 'PAIRING_LOCKED') {
+        return '尝试过于频繁，请稍后再试';
+      }
+      if (code === 'PAIRING_INVALID') {
+        return '配对码格式不对';
+      }
+      if (code === 'PAIRING_DISABLED') {
+        return '这台电脑使用固定令牌，请改用带令牌的链接';
+      }
       return parsed.error?.message ?? ('HTTP ' + status);
     } catch (e) {
       return 'HTTP ' + status;

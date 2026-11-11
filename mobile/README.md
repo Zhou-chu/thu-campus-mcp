@@ -32,7 +32,7 @@
 | 目录 | 内容 | 状态 |
 | --- | --- | --- |
 | `android/` | Kotlin + WebView + Keystore AES-GCM 令牌 | 工程完整，**未编译**（本机缺 SDK platforms / build-tools） |
-| `harmony/` | ArkTS Stage + ArkWeb + preferences | 工程骨架完整，**未编译**（未在本机跑 hvigor） |
+| `harmony/` | ArkTS Stage + ArkWeb + preferences | **已在本机真实构建通过**，产出未签名 HAP（44.6 KB），未上真机 |
 
 两端的 `README.md` 里分别写了构建步骤、真实缺口与排错。
 

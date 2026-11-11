@@ -12,3 +12,13 @@ coverage/
 !*.example
 *-backup-*
 *.part
+
+# 移动端构建产物与本地工具缓存
+mobile/harmony/.hvigor/
+mobile/harmony/build/
+mobile/harmony/entry/build/
+mobile/harmony/**/oh_modules/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/local.properties
