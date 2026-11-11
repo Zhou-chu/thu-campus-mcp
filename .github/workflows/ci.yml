@@ -48,3 +48,34 @@ jobs:
           path: .local/release/thu-campus-mcp-windows-x64.zip*
           retention-days: 14
           if-no-files-found: error
+
+  android:
+    name: Android debug APK
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6e674f4b715d2a6dd0342bdb276069bd9a457c5 # v4.5.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: 构建调试 APK
+        working-directory: mobile/android
+        run: .\gradlew.bat assembleDebug --no-daemon --console=plain
+      - name: 校验 APK 结构
+        working-directory: mobile/android
+        shell: pwsh
+        run: |
+          $apk = "app/build/outputs/apk/debug/app-debug.apk"
+          if (-not (Test-Path $apk)) { throw "未生成 APK" }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $apk))[0..3]
+          if ((($bytes | ForEach-Object { $_.ToString('X2') }) -join ' ') -ne '50 4B 03 04') { throw "APK 不是合法 ZIP" }
+          "{0:N2} MB" -f ((Get-Item $apk).Length / 1MB)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: thu-campus-app-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error
