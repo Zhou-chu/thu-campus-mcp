@@ -5,15 +5,38 @@
  *   node scripts/verify-clients.mjs           # 缺产物只告警
  *   node scripts/verify-clients.mjs --strict  # 缺产物即失败（发布门禁用）
  *   node scripts/verify-clients.mjs --json    # 机器可读
+ *   node scripts/verify-clients.mjs --strict --require webui,desktop,android,runtime
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const strict = args.has("--strict");
 const asJson = args.has("--json");
+const TARGETS = ["webui", "desktop", "android", "harmony", "runtime"];
+function readRequired() {
+  const index = rawArgs.findIndex((item) => item === "--require" || item.startsWith("--require="));
+  if (index < 0) return null;
+  const value = rawArgs[index].includes("=")
+    ? rawArgs[index].split("=")[1]
+    : rawArgs[index + 1] || "";
+  const list = String(value)
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const unknown = list.filter((item) => !TARGETS.includes(item));
+  if (unknown.length) {
+    process.stderr.write(`未知的 --require 目标：${unknown.join(", ")}（可用：${TARGETS.join(", ")}）\n`);
+    process.exit(2);
+  }
+  return new Set(list);
+}
+const requiredArg = readRequired();
+const required = requiredArg || new Set(TARGETS);
+const mustFail = (target) => strict && required.has(target);
 const rows = [];
 function record(target, name, state, detail) {
   rows.push({ target, name, state, detail });
@@ -114,7 +137,7 @@ const webuiFiles = [
   }
   if (!found) {
     const message = "未构建（运行 mobile/android/gradlew.bat assembleRelease）";
-    if (strict) fail("android", "APK", message);
+    if (mustFail("android")) fail("android", "APK", message);
     else warn("android", "APK", message);
   }
   for (const rel of ["mobile/android/gradlew.bat", "mobile/android/gradle/wrapper/gradle-wrapper.jar"])
@@ -129,7 +152,7 @@ const webuiFiles = [
   const target = existsSync(file(signed)) ? signed : existsSync(file(hap)) ? hap : null;
   if (!target) {
     const message = "未构建（运行 hvigorw assembleHap，见 mobile/harmony/README.md）";
-    if (strict) fail("harmony", "HAP", message);
+    if (mustFail("harmony")) fail("harmony", "HAP", message);
     else warn("harmony", "HAP", message);
   } else if (zipMagic(target) !== "504b0304") {
     fail("harmony", "HAP", "不是合法 ZIP");
@@ -165,7 +188,7 @@ const failed = rows.filter((row) => row.state === "fail");
 const warned = rows.filter((row) => row.state === "warn");
 if (asJson) {
   process.stdout.write(
-    JSON.stringify({ ok: failed.length === 0, strict, rows }, null, 2) + "\n",
+    JSON.stringify({ ok: failed.length === 0, strict, required: [...required], rows }, null, 2) + "\n",
   );
 } else {
   let target = "";

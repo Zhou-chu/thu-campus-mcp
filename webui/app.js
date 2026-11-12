@@ -624,7 +624,87 @@ function servicesView() {
       text: "登录在本机独立浏览器窗口完成，密码与验证码只由你本人输入；应用不读取、不保存密码。",
     }),
   );
+  wrap.append(keepAliveCard());
   return wrap;
+}
+const STATE_TEXT = { ready: "就绪", "login-required": "需登录", expired: "已过期", unknown: "未知" };
+const SERVICE_LABEL = { learnx: "网络学堂", cloud: "云盘", hetang: "雨课堂", madmodel: "MadModel" };
+function keepAliveCard() {
+  const card = el("div", { class: "card stack" }, [el("h3", { text: "会话保活自检" })]);
+  const body = el("div", { class: "stack" });
+  card.append(body);
+  const draw = (data) => {
+    clear(body);
+    const minutes = Math.round((data.intervalMs || 0) / 60000);
+    body.append(
+      el("div", {
+        class: "muted small",
+        text: data.enabled
+          ? `每 ${minutes} 分钟自检一次${data.restoreExpired ? "，过期时自动尝试恢复" : "，只记录不恢复"}`
+          : "自检已关闭（设置为 0 分钟即关闭）",
+      }),
+    );
+    if (data.lastRunAt)
+      body.append(
+        el("div", { class: "muted small", text: `上次执行：${new Date(data.lastRunAt).toLocaleString()}` }),
+      );
+    if (data.nextRunAt)
+      body.append(
+        el("div", { class: "muted small", text: `下次执行：${new Date(data.nextRunAt).toLocaleString()}` }),
+      );
+    const runButton = el("button", {
+      class: "ghost",
+      type: "button",
+      text: data.running ? "自检中…" : "立即自检",
+      disabled: !!data.running,
+      onclick: async () => {
+        runButton.disabled = true;
+        runButton.textContent = "自检中…";
+        try {
+          draw(await api("/api/keepalive/run", { method: "POST", body: {} }));
+          toast("自检已完成");
+        } catch (e) {
+          toast(e.message);
+          runButton.disabled = false;
+          runButton.textContent = "立即自检";
+        }
+      },
+    });
+    body.append(runButton);
+    const history = data.history || [];
+    if (!history.length) {
+      body.append(el("div", { class: "empty", text: "还没有自检记录。" }));
+      return;
+    }
+    const timeline = el("div", { class: "timeline" });
+    for (const entry of history) timeline.append(timelineItem(entry));
+    body.append(timeline);
+  };
+  api("/api/keepalive")
+    .then(draw)
+    .catch((e) => body.append(el("div", { class: "empty", text: e.message })));
+  return card;
+}
+function timelineItem(entry) {
+  const states = Object.entries(entry.services || {})
+    .map(([name, state]) => `${SERVICE_LABEL[name] || name} ${STATE_TEXT[state] || state}`)
+    .join(" · ");
+  const trigger = { startup: "启动", timer: "定时", api: "手动" }[entry.trigger] || entry.trigger;
+  const item = el("div", { class: "timeline-item", dataset: { ok: entry.ok === false ? "bad" : "good" } }, [
+    el("div", { class: "timeline-time", text: `${new Date(entry.at).toLocaleString()} · ${trigger} · ${entry.durationMs || 0}ms` }),
+    el("div", { class: "small", text: states || "无服务状态" }),
+  ]);
+  for (const action of entry.actions || [])
+    item.append(
+      el("div", {
+        class: "small",
+        text:
+          action.action === "skipped"
+            ? `${SERVICE_LABEL[action.service] || action.service} 过期但未恢复`
+            : `${SERVICE_LABEL[action.service] || action.service} 恢复${action.ok ? "成功" : `失败（${action.code || "未知原因"}）`}`,
+      }),
+    );
+  return item;
 }
 async function pollJob(jobId) {
   if (!jobId) return;
@@ -923,6 +1003,7 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
 
 
 

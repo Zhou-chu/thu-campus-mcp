@@ -21,8 +21,11 @@ npm run app:smoke        # 真实起进程：配对、元信息、53 工具、�
 
 ```powershell
 npm run verify:clients   # 现状报告：缺产物只告警
-npm run verify:release   # 发布门禁：缺任一产物即失败
+npm run verify:release   # 发布门禁：四端全要
+node scripts/verify-clients.mjs --strict --require webui,desktop,android,runtime  # 只要求 CI 能产出的三项
 ```
+
+CI 里有一个 `workflow_dispatch` 手动的 `release` 任务：它自己构建 Android 包、跑发布门禁、出源码 ZIP 与便携 ZIP。**它不要求 HarmonyOS**——GitHub 上没有 DevEco，硬要求只会让门禁永远红。
 
 | 产物 | 生成命令 | 本机状态 |
 | --- | --- | --- |
