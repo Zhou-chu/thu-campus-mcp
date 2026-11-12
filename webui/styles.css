@@ -504,6 +504,32 @@ button:focus-visible {
     color: #16222e;
   }
 }
+/* 常用指令条：横向滚动，不挤压输入区 */
+.quick {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: none;
+  flex: none;
+}
+.quick::-webkit-scrollbar {
+  display: none;
+}
+.chip-btn {
+  white-space: nowrap;
+  font-size: 12.5px;
+  padding: 7px 12px;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}
+.chip-btn:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
 /* 对话视图占满可用高度，输入框贴底 */
 .chat {
   flex: 1;
@@ -523,3 +549,4 @@ button:focus-visible {
   white-space: nowrap;
   min-width: 64px;
 }
+

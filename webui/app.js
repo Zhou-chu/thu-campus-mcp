@@ -301,6 +301,13 @@ function pretty(value) {
     return String(value);
   }
 }
+const QUICK_ACTIONS = [
+  ["未交作业", "列出本学期尚未提交的作业和截止时间，按截止时间排序"],
+  ["更新课程", "把本学期所有课程增量更新到 D:\\\\网络学堂，按公告/作业/文件等专栏分类，并报告不完整的内容"],
+  ["云盘根目录", "列出我清华云盘各资料库的根目录内容"],
+  ["雨课堂课程", "列出我的荷塘雨课堂课程和最近课堂"],
+  ["登录状态", "用状态工具检查网络学堂、清华云盘、荷塘雨课堂和 MadModel 的登录状态，逐条说明"],
+];
 function chatView() {
   const wrap = el("div", { class: "stack chat" });
   const messages = el("div", { class: "messages", id: "messages" });
@@ -312,7 +319,24 @@ function chatView() {
   const sendButton = el("button", { class: "primary", type: "button", text: "发送" });
   const stopButton = el("button", { class: "ghost danger", type: "button", text: "停止", hidden: true });
   const composer = el("div", { class: "composer" }, [textarea, sendButton, stopButton]);
-  wrap.append(messages, composer);
+  const quick = el("div", { class: "quick", role: "group", "aria-label": "常用指令" });
+  for (const [label, instruction] of QUICK_ACTIONS) {
+    quick.append(
+      el("button", {
+        class: "chip-btn",
+        type: "button",
+        text: label,
+        title: instruction,
+        onclick: () => {
+          textarea.value = instruction;
+          autoGrow(textarea);
+          textarea.focus();
+          textarea.setSelectionRange(instruction.length, instruction.length);
+        },
+      }),
+    );
+  }
+  wrap.append(messages, quick, composer);
   if (!state.messages.length && !state.sessionId) {
     messages.append(
       el("div", { class: "empty", text: "还没有对话。先点「服务」确认登录状态，再开始提问。" }),
@@ -899,6 +923,7 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
 
 
 

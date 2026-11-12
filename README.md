@@ -25,7 +25,11 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 **一键联通**：在电脑上用清华账号登录一次（`campus_browser_login` 或 MadModel 登录），运行时打印一次性 6 位配对码；手机、平板、另一台电脑输码配对后共享同一份会话。设备令牌只存 sha256 摘要 + DPAPI 加密，可随时在「设置」里吊销。
 
+**会话保活**：运行时每 30 分钟自检四个服务的登录态（`THU_CAMPUS_APP_KEEPALIVE_MINUTES`，0 关闭），发现过期就调用既有的 `browser restore` 尝试续期，结果可在 `/api/keepalive` 与「设置」页查看。
+
 **模型自主闭环**：对话默认走 MadModel（清华统一认证直连，`app serve` 内置模型路由），不需要外部模型 API Key；`THU_CAMPUS_APP_MODEL_ROUTE=openai` 时才改接任意 OpenAI 兼容端点。
+
+发布前请照 [发布清单](docs/release-checklist.md) 走一遍，其中「未完成」的两项是真机验收。
 
 运行时的 HTTP/SSE 契约见 [设计契约](docs/superpowers/specs/2026-11-11-campus-agent-app.md)，实施计划见 [实施计划](docs/superpowers/plans/2026-11-11-campus-agent-app.md)。
 
@@ -37,6 +41,7 @@ node bin/thu-campus.mjs app devices          # 已配对设备
 node bin/thu-campus.mjs app invite           # 设置固定令牌后可在运行中生成配对码
 npm run app:smoke                            # 真实启动运行时跑一遍配对与工具调用
 npm run verify:clients                       # 核对四端：静态资源、启动器、APK/HAP 结构与大小
+npm run verify:release                       # 发布门禁：缺任一产物即失败
 ```
 
 ## 能做什么
@@ -300,5 +305,6 @@ CI 在 Windows Node 22/24 上检查，不使用学校账号，不进入真实课
 兼容分服务模式：不加 `--unified` 的 `install` / `config` 仍保留原有三个注册；模块命令 `learnx`、`cloud`、`hetang` 仍可单独调用。统一入口才提供集中浏览器工具及自动恢复。原工具参考见 [TOOLS.md](docs/TOOLS.md)。
 
 浏览器持久化机制使用 Playwright 的 [Persistent Context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context) 和 [Storage State](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)；独立内核由其[官方浏览器安装器](https://playwright.dev/docs/browsers)准备。
+
 
 

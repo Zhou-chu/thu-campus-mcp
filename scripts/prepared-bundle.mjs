@@ -30,6 +30,28 @@ execFileSync("git", ["archive", "--format=zip", "--output", source, "HEAD"], {
 });
 execFileSync("tar.exe", ["-xf", source, "-C", stage]);
 await unlink(source);
+// 独立应用的前端与桌面壳必须真的随包分发，否则便携包只能当 MCP 用。
+const requiredEntries = [
+  "webui/index.html",
+  "webui/app.js",
+  "webui/manifest.webmanifest",
+  "desktop/launcher.mjs",
+  "desktop/thu-campus-desktop.cmd",
+  "bin/thu-campus.mjs",
+  "lib/app/server.mjs",
+  "lib/app/agent.mjs",
+  "lib/app/keepalive.mjs",
+  "lib/app/states.mjs",
+  "lib/app/runtime-state.mjs",
+];
+for (const entry of requiredEntries) {
+  const present = await lstat(path.join(stage, entry)).then(
+    () => true,
+    () => false,
+  );
+  if (!present)
+    throw new Error(`Prepared release is missing ${entry}; 独立应用将无法启动。`);
+}
 for (const s of services)
   await cp(
     path.join(root, "packages", s.directory, "dist"),
@@ -176,6 +198,8 @@ console.log(
     filename: destination,
     sha256,
     includes:
-      "Node.js, production dependencies, compiled services and independent Chromium; no user profiles",
+      "Node.js, production dependencies, compiled services, webui, desktop shell and independent Chromium; no user profiles",
   }),
 );
+
+

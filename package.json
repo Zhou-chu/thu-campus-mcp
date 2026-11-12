@@ -23,6 +23,7 @@
     "app": "node bin/thu-campus.mjs app serve",
     "app:smoke": "node test/app-smoke.mjs",
     "verify:clients": "node scripts/verify-clients.mjs",
+    "verify:release": "node scripts/verify-clients.mjs --strict",
     "check": "npm run typecheck && npm run build && npm test && npm run licenses:check && npm run audit:source",
     "smoke": "npm run smoke --workspaces && node test/smoke.mjs",
     "licenses": "node scripts/licenses.mjs",
@@ -39,4 +40,5 @@
     "proper-lockfile": "4.1.2"
   }
 }
+
 

@@ -105,7 +105,7 @@ function scriptedRoute() {
     },
   };
 }
-async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {} } = {}) {
+async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {}, keepAlive = null } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-app-http-"));
   const config = {
     root: path.resolve(import.meta.dirname, ".."),
@@ -135,6 +135,7 @@ async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(),
     version: "1.3.0-test",
     // 默认指向不存在的目录，测试内置占位页；真实 WebUI 由仓库 webui/ 提供。
     webuiDir: path.join(dir, "webui"),
+    keepAlive,
   });
   const url = await app.listen();
   t.after(async () => {
@@ -391,4 +392,73 @@ test("过期的邀请码文件不会被接受", async (t) => {
     body: JSON.stringify({ code: "111111", deviceName: "过期设备", platform: "webui" }),
   });
   assert.equal(response.status, 403);
+});
+
+function fakeKeepAlive() {
+  const history = [];
+  let calls = 0;
+  return {
+    calls: () => calls,
+    status: () => ({
+      enabled: true,
+      intervalMs: 60000,
+      restoreExpired: true,
+      running: false,
+      lastRunAt: null,
+      nextRunAt: null,
+      expiredServices: [],
+      lastResult: history[0] || null,
+      history: history.slice(0, 10),
+    }),
+    runOnce: async (trigger) => {
+      calls += 1;
+      const entry = { at: new Date().toISOString(), trigger, services: {}, actions: [], ok: true };
+      history.unshift(entry);
+      return entry;
+    },
+    configure: () => ({ intervalMs: 60000, restoreExpired: true }),
+    stop: () => {},
+  };
+}
+
+test("保活自检可查询、可立即执行，参数越界被拒绝", async (t) => {
+  const keepAlive = fakeKeepAlive();
+  const { url, pairing } = await boot(t, { keepAlive });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const view = await (await fetch(url + "/api/keepalive", { headers })).json();
+  assert.equal(view.ok, true);
+  assert.equal(view.enabled, true);
+  assert.equal(view.intervalMs, 60000);
+  const run = await fetch(url + "/api/keepalive/run", { method: "POST", headers, body: "{}" });
+  const ran = await run.json();
+  assert.equal(ran.result.trigger, "api");
+  assert.equal(keepAlive.calls(), 1);
+  assert.equal(ran.history.length, 1);
+  const meta = await (await fetch(url + "/api/meta", { headers })).json();
+  assert.equal(meta.keepAlive.enabled, true);
+  const settings = await (await fetch(url + "/api/settings", { headers })).json();
+  assert.equal(settings.settings.keepAliveMinutes, 1);
+  const bad = await fetch(url + "/api/settings", {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ keepAliveMinutes: 5000 }),
+  });
+  assert.equal(bad.status, 400);
+  const good = await fetch(url + "/api/settings", {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ keepAliveMinutes: 15, keepAliveRestore: false }),
+  });
+  assert.equal(good.status, 200);
+});
+
+test("没有保活组件时接口仍给出明确空状态", async (t) => {
+  const { url, pairing } = await boot(t);
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token };
+  const view = await (await fetch(url + "/api/keepalive", { headers })).json();
+  assert.equal(view.ok, true);
+  assert.equal(view.enabled, false);
+  assert.deepEqual(view.history, []);
 });
