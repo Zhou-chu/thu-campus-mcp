@@ -462,3 +462,130 @@ test("没有保活组件时接口仍给出明确空状态", async (t) => {
   assert.equal(view.enabled, false);
   assert.deepEqual(view.history, []);
 });
+
+/* ---------------- 写入审批 ---------------- */
+function approvalRoute() {
+  return {
+    route: "madmodel",
+    async models() {
+      return [{ id: "m", label: "M" }];
+    },
+    async status() {
+      return { route: "madmodel", available: true, configured: true, masked: "" };
+    },
+    async chat(body) {
+      const hasTool = body.messages.some((m) => m.role === "tool");
+      if (!hasTool)
+        return sseResponse([
+          chunk({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_destructive",
+                      function: {
+                        name: "learn_submit_assignment",
+                        arguments: JSON.stringify({ preparationId: "prep-1" }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          "data: [DONE]\n\n",
+        ]);
+      return sseResponse([
+        chunk({ choices: [{ delta: { content: "好的" } }] }),
+        "data: [DONE]\n\n",
+      ]);
+    },
+  };
+}
+
+async function readChatWithApproval(response, onConfirm) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const events = [];
+  let buffer = "";
+  let decided = false;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let index;
+    while ((index = buffer.indexOf("\n\n")) >= 0) {
+      const raw = buffer.slice(0, index);
+      buffer = buffer.slice(index + 2);
+      let name = "message";
+      const data = [];
+      for (const line of raw.split("\n")) {
+        if (line.startsWith("event:")) name = line.slice(6).trim();
+        else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
+      }
+      if (!data.length) continue;
+      const payload = JSON.parse(data.join("\n"));
+      events.push({ event: name, data: payload });
+      if (name === "confirm" && !decided) {
+        decided = true;
+        await onConfirm(payload);
+      }
+    }
+  }
+  return events;
+}
+
+test("写入类工具在用户允许前不会执行，拒绝后回灌明确失败", async (t) => {
+  const calls = [];
+  const { url, pairing } = await boot(t, { route: approvalRoute(), host: fakeHost(calls) });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const response = await fetch(url + "/api/chat", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text: "帮我提交作业" }),
+  });
+  const events = await readChatWithApproval(response, async (payload) => {
+    assert.equal(payload.name, "learn_submit_assignment");
+    assert.ok(payload.sessionId, "confirm 事件必须带 sessionId");
+    assert.equal(payload.args.preparationId, "prep-1");
+    const decided = await fetch(url + `/api/chat/${payload.sessionId}/confirm`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ callId: payload.callId, allow: false }),
+    });
+    assert.equal(decided.ok, true);
+  });
+  assert.ok(!calls.some((c) => c.name === "learn_submit_assignment"), "拒绝后不能真的调用工具");
+  assert.ok(!events.some((e) => e.event === "tool" && e.data.phase === "start"), "拒绝后不应出现工具开始事件");
+  const ended = events.find((e) => e.event === "tool" && e.data.phase === "end");
+  assert.equal(ended.data.ok, false);
+  assert.equal(ended.data.error.code, "USER_DENIED");
+});
+
+test("允许后工具才真正执行", async (t) => {
+  const calls = [];
+  const { url, pairing } = await boot(t, { route: approvalRoute(), host: fakeHost(calls) });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const response = await fetch(url + "/api/chat", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text: "提交作业" }),
+  });
+  const events = await readChatWithApproval(response, async (payload) => {
+    await fetch(url + `/api/chat/${payload.sessionId}/confirm`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ callId: payload.callId, allow: true }),
+    });
+  });
+  assert.ok(
+    calls.some((c) => c.name === "learn_submit_assignment"),
+    "允许后应真正调用工具",
+  );
+  assert.ok(events.some((e) => e.event === "tool" && e.data.phase === "start"));
+});
+

@@ -287,6 +287,41 @@ function applyToolState(block) {
     block.resultNode.textContent = pretty(block.result);
   else if (block.error && block.resultNode) block.resultNode.textContent = JSON.stringify(block.error, null, 2);
 }
+/** 写入类工具执行前的确认卡片：默认不执行，必须由人点允许。 */
+function confirmCardFor(block) {
+  const node = el("div", { class: "confirm-card" });
+  node.append(
+    el("div", { class: "eyebrow", text: "NEEDS CONFIRMATION" }),
+    el("div", { class: "small", text: "接下来要执行一个会改动校园数据的操作：" }),
+    el("div", { class: "tool-name", text: block.name }),
+    el("pre", { text: pretty(block.args) }),
+  );
+  const actions = el("div", { class: "confirm-actions" });
+  const allowBtn = el("button", { class: "primary", type: "button", text: "允许执行" });
+  const denyBtn = el("button", { class: "ghost danger", type: "button", text: "拒绝" });
+  const decide = async (allow) => {
+    if (block.decided) return;
+    block.decided = true;
+    allowBtn.disabled = true;
+    denyBtn.disabled = true;
+    try {
+      await api(`/api/chat/${state.sessionId}/confirm`, {
+        method: "POST",
+        body: { callId: block.callId, allow },
+      });
+      node.append(el("div", { class: "small muted", text: allow ? "已允许，继续执行…" : "已拒绝，本次不会执行。" }));
+    } catch (e) {
+      toast(e.message);
+      node.append(el("div", { class: "small", text: `提交失败：${e.message}` }));
+    }
+  };
+  allowBtn.addEventListener("click", () => decide(true));
+  denyBtn.addEventListener("click", () => decide(false));
+  actions.append(allowBtn, denyBtn);
+  node.append(actions);
+  block.node = node;
+  return node;
+}
 function pretty(value) {
   if (typeof value === "string") {
     try {
@@ -381,6 +416,7 @@ function appendBlock(block) {
   if (!container) return null;
   let node;
   if (block.kind === "tool") node = toolCardFor(block);
+  else if (block.kind === "confirm") node = confirmCardFor(block);
   else if (block.kind === "error") {
     node = el("div", { class: "bubble err", text: (block.code ? `[${block.code}] ` : "") + block.message });
   } else if (block.kind === "notice") {
@@ -490,6 +526,16 @@ async function sendTurn(text, ui) {
             }
           }
           scrollIfNearBottom();
+        } else if (event === "confirm") {
+          const card = {
+            kind: "confirm",
+            callId: payload.callId,
+            name: payload.name,
+            args: payload.args,
+          };
+          state.messages.push(card);
+          appendBlock(card);
+          scrollIfNearBottom();
         } else if (event === "notice") {
           appendBlock({ kind: "notice", message: payload.message || payload.code });
         } else if (event === "error") {
@@ -518,7 +564,7 @@ function sessionsView() {
   const wrap = el("div", { class: "stack" });
   wrap.append(
     el("div", { class: "row between" }, [
-      el("h2", { text: "会话" }),
+      el("h2", { text: "会话", dataset: { eyebrow: "CONVERSATIONS" } }),
       el("button", {
         class: "ghost",
         type: "button",
@@ -581,7 +627,7 @@ function servicesView() {
   const wrap = el("div", { class: "stack" });
   const labels = { learnx: "网络学堂", cloud: "清华云盘", hetang: "荷塘雨课堂", madmodel: "MadModel 模型" };
   const texts = { ready: "已就绪", "login-required": "需要登录", expired: "会话过期", unknown: "未知" };
-  wrap.append(el("h2", { text: "服务状态" }));
+  wrap.append(el("h2", { text: "服务状态", dataset: { eyebrow: "CAMPUS SERVICES" } }));
   const services = state.meta?.services || {};
   for (const [name, info] of Object.entries(services)) {
     const row = el("div", { class: "item" }, [
@@ -728,7 +774,7 @@ function toolsView() {
   const wrap = el("div", { class: "stack" });
   const search = el("input", { type: "search", placeholder: "搜索工具名或描述…" });
   const list = el("div", { class: "list" });
-  wrap.append(el("h2", { text: "工具" }), search, list);
+  wrap.append(el("h2", { text: "工具", dataset: { eyebrow: "TOOL INDEX" } }), search, list);
   const draw = () => {
     clear(list);
     const keyword = search.value.trim().toLowerCase();
@@ -890,7 +936,7 @@ function residentCard() {
 }
 function settingsView() {
   const wrap = el("div", { class: "stack" });
-  wrap.append(el("h2", { text: "设置" }));
+  wrap.append(el("h2", { text: "设置", dataset: { eyebrow: "PREFERENCES" } }));
   const meta = state.meta || {};
   wrap.append(
     el("div", { class: "card stack" }, [
@@ -1031,6 +1077,17 @@ async function start() {
       state.view = tab.dataset.view;
       render();
     });
+  const applyTheme = (mode) => {
+    document.documentElement.dataset.theme = mode;
+    try {
+      localStorage.setItem("campus.theme", mode);
+    } catch {}
+    $("#theme-light").setAttribute("aria-pressed", String(mode === "light"));
+    $("#theme-dark").setAttribute("aria-pressed", String(mode === "dark"));
+  };
+  $("#theme-light").addEventListener("click", () => applyTheme("light"));
+  $("#theme-dark").addEventListener("click", () => applyTheme("dark"));
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
   $("#pair-submit").addEventListener("click", submitPair);
   $("#pair-code").addEventListener("keydown", (event) => {
     if (event.key === "Enter") void submitPair();
@@ -1056,6 +1113,7 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
 
 
 

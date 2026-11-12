@@ -13,17 +13,25 @@
     <title>清华校园助手</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div id="app" class="app" hidden>
       <header class="topbar">
         <div class="brand">
-          <span class="dot" id="health-dot" aria-hidden="true"></span>
-          <h1>清华校园助手</h1>
+          <span class="eyebrow">THU CAMPUS · AGENT</span>
+          <div class="brand-row">
+            <span class="dot" id="health-dot" aria-hidden="true"></span>
+            <h1>清华校园助手</h1>
+          </div>
         </div>
         <div class="topbar-meta">
           <span id="account" class="chip" title="已绑定的校园账号"></span>
+          <div class="theme-switch" role="group" aria-label="配色">
+            <button id="theme-light" class="theme-btn" type="button" aria-pressed="true">自然</button>
+            <button id="theme-dark" class="theme-btn" type="button" aria-pressed="false">深色</button>
+          </div>
           <button id="refresh" class="icon-btn" type="button" title="刷新状态" aria-label="刷新状态">⟳</button>
         </div>
       </header>
@@ -41,6 +49,7 @@
 
     <section id="pair" class="pair" hidden>
       <div class="card pair-card">
+        <span class="eyebrow">PAIR THIS DEVICE</span>
         <h2>连接到你的电脑</h2>
         <p class="muted">
           在电脑上运行 <code>node bin/thu-campus.mjs app serve</code>，控制台会打印一次性 6 位配对码；
