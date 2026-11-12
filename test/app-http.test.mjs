@@ -4,7 +4,7 @@ import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createAppServer } from "../lib/app/server.mjs";
-import { PairingCodes } from "../lib/app/pairing.mjs";
+import { PairingCodes, writeInvite, readInvite } from "../lib/app/pairing.mjs";
 import { DeviceStore } from "../lib/app/devices.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
 import { readSseEvents } from "../lib/app/sse.mjs";
@@ -357,4 +357,38 @@ test("托管模式：白名单来源被接受，未列入的来源仍被拒绝",
     headers: { ...headers, origin: "https://evil.example.com" },
   });
   assert.equal(denied.status, 403);
+});
+
+test("守护进程场景：命令行预生成的邀请码可兑换且只能用一次", async (t) => {
+  const { url, dir } = await boot(t);
+  const code = "424242";
+  const expiresAt = Date.now() + 60000;
+  writeInvite(dir, { code, expiresAt });
+  assert.equal(readInvite(dir).code, code);
+  const first = await fetch(url + "/api/pair/redeem", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code, deviceName: "命令行设备", platform: "webui" }),
+  });
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).ok, true);
+  assert.equal(readInvite(dir), null, "兑换后必须清除邀请码文件");
+  const second = await fetch(url + "/api/pair/redeem", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code, deviceName: "命令行设备", platform: "webui" }),
+  });
+  assert.equal(second.status, 403);
+});
+
+test("过期的邀请码文件不会被接受", async (t) => {
+  const { url, dir } = await boot(t);
+  writeInvite(dir, { code: "111111", expiresAt: Date.now() - 1000 });
+  assert.equal(readInvite(dir), null);
+  const response = await fetch(url + "/api/pair/redeem", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: "111111", deviceName: "过期设备", platform: "webui" }),
+  });
+  assert.equal(response.status, 403);
 });
