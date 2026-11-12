@@ -19,6 +19,8 @@ import {
   uninstallStartup,
   startupStatus,
   explainFailure,
+  wrapperMismatch,
+  readWrapperPort,
 } from "../lib/app/service.mjs";
 
 test("启动包装脚本带上环境变量、目录守卫、日志重定向与 CRLF", () => {
@@ -179,4 +181,29 @@ test("权限被拒时给出可执行的替代建议", () => {
   assert.match(mapped.message, /--startup/);
   const other = new Error("something else");
   assert.equal(explainFailure(other), other);
+});
+
+test("端口改动会被识别为包装脚本漂移", () => {
+  const base = wrapperContent({
+    nodePath: "node.exe",
+    entryPath: "app.mjs",
+    port: 8971,
+    host: "127.0.0.1",
+    stateDir: "C:\\state",
+    logFile: "C:\\state\\service.log",
+  });
+  const moved = wrapperContent({
+    nodePath: "node.exe",
+    entryPath: "app.mjs",
+    port: 9000,
+    host: "127.0.0.1",
+    stateDir: "C:\\state",
+    logFile: "C:\\state\\service.log",
+  });
+  assert.equal(wrapperMismatch(base, base), false);
+  assert.equal(wrapperMismatch(base, moved), true);
+  assert.equal(wrapperMismatch(base.replace(/\r\n/g, "\n"), base), false, "换行差异不算漂移");
+  assert.equal(readWrapperPort(base), 8971);
+  assert.equal(readWrapperPort(moved), 9000);
+  assert.equal(readWrapperPort("nothing"), null);
 });
