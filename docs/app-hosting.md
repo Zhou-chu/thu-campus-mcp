@@ -135,6 +135,21 @@ WantedBy=multi-user.target
 
 `window:false` 时**不要**指望能完成首次校园登录：`campus_browser_login` 会尝试打开可见窗口并失败。已经存在的会话仍然可以无界面续登（`browser restore --headless`、`madmodel login --headless`），运行时会在到期前自动续期。
 
+### 无图形主机的首次登录：只有一条可行路径
+
+`loginCapability.window === false` 时，必须在别处完成**首次**登录。实际可用的做法只有一种：临时给这台机器一个虚拟显示，然后把一次性验证码交给本人。
+
+```bash
+# Linux：临时虚拟显示 + 只开放给本机的 VNC
+Xvfb :99 -screen 0 1280x800x24 &
+export DISPLAY=:99
+x11vnc -display :99 -localhost -nopw -forever &   # 再用 SSH 隧道访问 5900
+node bin/thu-campus.mcp 2>/dev/null || node bin/thu-campus.mjs browser login learnx
+# 本人在 TUNNEL 里完成登录后，杀掉 Xvfb/x11vnc，会话已落到持久浏览器工作区
+```
+
+之后就可以纯无界面续登。注意两点：**不能把 Windows 上的 DPAPI 凭据拷到 Linux**（必然解不开）；**不能把验证码当作可自动化环节**。
+
 ## 部署前必须知道的三件事
 
 1. **鲜登是人工步骤，且要看得见浏览器。** 网络学堂/云盘/雨课堂的首次登录、以及学校要求验证码或多因素认证时，需要在**有图形界面**的环境里弹出独立 Chromium 由本人完成。纯无头的云主机无法完成首次登录；`browser restore --headless` 与 `madmodel login --headless` 只在**已有有效会话**时能续登。
@@ -149,3 +164,4 @@ WantedBy=multi-user.target
 - [ ] 反代不要加缓存（尤其 `/api/chat`），不要在 `/api/*` 上做路径重写。
 - [ ] 只开放 443；`8971` 不要直接对公网。
 - [ ] 日志里不要出现令牌：启动器与运行时都已做脱敏，排查问题时仍然先看 `desktop.log` 的脱敏形态。
+
