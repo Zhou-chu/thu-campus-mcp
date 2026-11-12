@@ -17,6 +17,13 @@
   --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   --rail: 208px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -188,6 +195,7 @@ h3 {
   border-color: var(--ink);
 }
 .view {
+  counter-reset: entry;
   overflow: auto;
   padding: 22px 18px calc(env(safe-area-inset-bottom) + 22px);
   display: flex;
@@ -228,6 +236,8 @@ h3 {
   .view {
     grid-area: main;
     padding: 34px 40px 40px;
+    /* 编辑排版：内容列有上限，不做满屏拉伸 */
+    max-width: 980px;
   }
   .tabbar {
     grid-area: nav;
@@ -288,9 +298,20 @@ h3 {
   white-space: nowrap;
   cursor: pointer;
 }
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 88%, var(--paper));
+}
+.primary:active:not(:disabled),
+.ghost:active:not(:disabled) {
+  transform: translateY(1px);
+}
 .primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.primary[aria-busy="true"] {
+  opacity: 0.65;
+  cursor: progress;
 }
 .ghost {
   background: transparent;
@@ -346,9 +367,10 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
-summary:focus-visible {
-  outline: 1px solid var(--ink);
-  outline-offset: 1px;
+summary:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 /* ---------------- 配对 ---------------- */
@@ -583,12 +605,37 @@ summary:focus-visible {
 .item:hover {
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
+.item:active {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
 .item-title {
   font-family: var(--serif);
   font-size: 15.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 工具页用的是 details.card，让它在编号索引里也像一行，而不是一块卡片 */
+.list > .card {
+  position: relative;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 12px 2px 12px 34px;
+  gap: 6px;
+}
+.list > .card::before {
+  counter-increment: entry;
+  content: counter(entry, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 13px;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.list > .card > summary {
+  cursor: pointer;
 }
 .state {
   font-size: 10.5px;
@@ -652,6 +699,26 @@ summary:focus-visible {
 }
 
 /* ---------------- 提示 ---------------- */
+/* 骨架屏：只在真的在等网络时用，别拿来占位动画 */
+.skeleton {
+  display: block;
+  height: 14px;
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+.skeleton + .skeleton {
+  margin-top: var(--space-2);
+}
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
 .toast {
   position: fixed;
   left: 50%;
@@ -716,4 +783,8 @@ h2[data-eyebrow]::before {
   color: var(--muted);
   margin-bottom: 8px;
 }
+
+
+
+
 
