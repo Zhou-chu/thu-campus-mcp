@@ -25,7 +25,7 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 **一键联通**：在电脑上用清华账号登录一次（`campus_browser_login` 或 MadModel 登录），运行时打印一次性 6 位配对码；手机、平板、另一台电脑输码配对后共享同一份会话。设备令牌只存 sha256 摘要 + DPAPI 加密，可随时在「设置」里吊销。
 
-**常驻**：`node bin/thu-campus.mjs app service install` 会把启动项写进当前用户的「启动」文件夹，登录即运行，不需要管理员权限；`app service status|uninstall` 可查可卸。刻意不做 Windows 系统服务——SYSTEM 身份解不开 DPAPI 凭据，会变成永远登录不上的空壳。
+**常驻**：`node bin/thu-campus.mjs app service install` 会给当前用户注册一个**登录计划任务**（Task Scheduler COM，不需要管理员权限；`schtasks.exe` 在普通权限下会被拒绝，已实测），`app service start|status|uninstall` 可启可查可卸；`install --startup` 是等价的「启动」文件夹备选。刻意不做 Windows 系统服务——SYSTEM 身份解不开 DPAPI 凭据，会变成永远登录不上的空壳。
 
 **会话保活**：运行时每 30 分钟自检四个服务的登录态（`THU_CAMPUS_APP_KEEPALIVE_MINUTES`，0 关闭），发现过期就调用既有的 `browser restore` 尝试续期，结果可在 `/api/keepalive` 与「设置」页查看。
 
@@ -307,6 +307,7 @@ CI 在 Windows Node 22/24 上检查，不使用学校账号，不进入真实课
 兼容分服务模式：不加 `--unified` 的 `install` / `config` 仍保留原有三个注册；模块命令 `learnx`、`cloud`、`hetang` 仍可单独调用。统一入口才提供集中浏览器工具及自动恢复。原工具参考见 [TOOLS.md](docs/TOOLS.md)。
 
 浏览器持久化机制使用 Playwright 的 [Persistent Context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context) 和 [Storage State](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)；独立内核由其[官方浏览器安装器](https://playwright.dev/docs/browsers)准备。
+
 
 
 

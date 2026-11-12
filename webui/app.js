@@ -691,7 +691,11 @@ function timelineItem(entry) {
     .join(" · ");
   const trigger = { startup: "启动", timer: "定时", api: "手动" }[entry.trigger] || entry.trigger;
   const item = el("div", { class: "timeline-item", dataset: { ok: entry.ok === false ? "bad" : "good" } }, [
-    el("div", { class: "timeline-time", text: `${new Date(entry.at).toLocaleString()} · ${trigger} · ${entry.durationMs || 0}ms` }),
+    el("div", {
+      class: "timeline-time",
+      text: `${new Date(entry.at).toLocaleString()}（${sinceText(entry.at)}） · ${trigger} · ${entry.durationMs || 0}ms`,
+      title: `接口返回 ${entry.at}（UTC ISO），此处按本机时区显示`,
+    }),
     el("div", { class: "small", text: states || "无服务状态" }),
   ]);
   for (const action of entry.actions || [])
@@ -836,6 +840,54 @@ function pairLinkRow(label, value) {
     el("div", { class: "row" }, [input, copy]),
   ]);
 }
+/** 相对时间：接口给的是 UTC ISO，展示按本机时区。 */
+function sinceText(iso) {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "时间未知";
+  const diff = Date.now() - then;
+  if (diff < 0) return "刚刚";
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.floor(hours / 24)} 天前`;
+}
+function residentCard() {
+  const card = el("div", { class: "card stack" }, [el("h3", { text: "常驻运行" })]);
+  const body = el("div", { class: "stack" });
+  card.append(body);
+  const draw = (data) => {
+    clear(body);
+    if (!data.supported) {
+      body.append(el("div", { class: "small muted", text: `当前平台 ${data.platform} 不支持自动安装，请用 systemd 或同类方式守护 app serve。` }));
+      return;
+    }
+    const modeText = { "scheduled-task": "登录计划任务（推荐）", "startup-folder": "启动文件夹", none: "尚未安装" }[data.mode] || data.mode;
+    body.append(
+      el("div", { class: "row between" }, [
+        el("span", { class: "small", text: `方式：${modeText}` }),
+        el("span", { class: "state", dataset: { s: data.installed ? "ready" : "unknown" }, text: data.installed ? "已安装" : "未安装" }),
+      ]),
+    );
+    if (data.task?.installed && data.task.state)
+      body.append(el("div", { class: "small muted", text: `任务状态：${data.task.state}` }));
+    if (data.startup?.entryPath)
+      body.append(el("div", { class: "small muted", text: `启动项：${data.startup.installed ? data.startup.entryPath : "未创建"}` }));
+    body.append(el("div", { class: "small muted", text: `日志：${data.logFile}` }));
+    body.append(
+      el("p", {
+        class: "small muted",
+        text: "以 SYSTEM 身份运行的系统服务解不开 DPAPI 凭据，会变成永远登录不上的空壳，所以这里用当前用户的登录任务。",
+      }),
+    );
+    body.append(pairLinkRow("安装命令（在仓库目录执行）", data.installHint));
+  };
+  api("/api/service")
+    .then(draw)
+    .catch((e) => body.append(el("div", { class: "empty", text: e.message })));
+  return card;
+}
 function settingsView() {
   const wrap = el("div", { class: "stack" });
   wrap.append(el("h2", { text: "设置" }));
@@ -922,6 +974,7 @@ function settingsView() {
       linkBox,
     ]),
   );
+  wrap.append(residentCard());
   wrap.append(
     el("div", { class: "card stack" }, [
       el("h3", { text: "安全" }),
@@ -1003,6 +1056,7 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
 
 
 

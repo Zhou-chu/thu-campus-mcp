@@ -61,6 +61,22 @@ node scripts/verify-prepared.mjs
 
 发布前请务必把上面两个 ❌ 补掉；本仓库的 README 也按此口径描述——只声明"编译通过"，不声明"可用"。
 
+## 4.5 常驻（可选，但推荐）
+
+```powershell
+node bin/thu-campus.mjs app service install     # 当前用户登录计划任务（COM，无需管理员）
+node bin/thu-campus.mjs app service start       # 立即启动一次
+node bin/thu-campus.mjs app service status      # 任务状态 + 启动项状态
+node bin/thu-campus.mjs app service uninstall   # 任务与启动项一并清理
+```
+
+| 项 | 状态 |
+| --- | --- |
+| COM 注册登录任务（无管理员） | ✅ 本机实测：注册 → `Get-ScheduledTask` 可见 → `Start-ScheduledTask` 真拉起服务 → 卸载干净 |
+| `schtasks.exe /sc onlogon` | ❌ 普通权限下 `Access is denied.`，因此不作为实现 |
+| 启动文件夹备选（`--startup`） | ✅ 本机实测 |
+| 开机即启（无需登录） | ❌ 未实现：需要管理员或用系统服务，而系统服务解不开 DPAPI |
+
 ## 5. 已知阻塞与风险
 
 1. **首次校园登录需要图形界面**：`loginCapability.window === false` 的主机无法完成首次登录，只能用 Xvfb/VNC 临时提供显示（见 [托管部署](app-hosting.md)）。
@@ -78,3 +94,4 @@ git push origin main
 ```
 
 提交信息用简洁中文祈使句；一批相关改动一个提交，不要为每个小改动单独开提交或审查轮次。
+

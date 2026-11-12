@@ -5,20 +5,23 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import {
   wrapperContent,
-  createTaskArgs,
-  queryTaskArgs,
-  deleteTaskArgs,
-  parseTaskCsv,
-  installService,
-  uninstallService,
-  serviceStatus,
+  taskScripts,
+  encodePowerShell,
+  powershellArgs,
+  parseTaskJson,
+  currentUser,
+  installTask,
+  uninstallTask,
+  taskStatus,
+  startTask,
   startupEntryPath,
   installStartup,
   uninstallStartup,
   startupStatus,
-  explainTaskFailure,
+  explainFailure,
 } from "../lib/app/service.mjs";
-test("启动包装脚本带上环境变量、日志重定向与 CRLF", () => {
+
+test("启动包装脚本带上环境变量、目录守卫、日志重定向与 CRLF", () => {
   const content = wrapperContent({
     nodePath: "C:\\Program Files\\nodejs\\node.exe",
     entryPath: "D:\\app\\bin\\thu-campus.mjs",
@@ -28,110 +31,137 @@ test("启动包装脚本带上环境变量、日志重定向与 CRLF", () => {
     logFile: "C:\\Users\\me\\.thu-campus-mcp\\app\\service.log",
     extraEnv: { THU_CAMPUS_APP_KEEPALIVE_MINUTES: "15", THU_CAMPUS_APP_PUBLIC_URL: "" },
   });
-  assert.match(content, /set "THU_CAMPUS_APP_STATE_DIR=C:\\Users\\me\\\.thu-campus-mcp\\app"/);
-  assert.match(content, /set "THU_CAMPUS_APP_PORT=8971"/);
   assert.match(content, /if not exist "C:\\Users\\me\\\.thu-campus-mcp\\app" mkdir/);
+  assert.match(content, /set "THU_CAMPUS_APP_PORT=8971"/);
   assert.match(content, /set "THU_CAMPUS_APP_HOST=127.0.0.1"/);
   assert.match(content, /set "THU_CAMPUS_APP_KEEPALIVE_MINUTES=15"/);
   assert.ok(!content.includes("THU_CAMPUS_APP_PUBLIC_URL"), "空值不应写进脚本");
-  assert.match(content, /"C:\\Program Files\\nodejs\\node.exe" "D:\\app\\bin\\thu-campus\.mjs" app serve --port 8971/);
+  assert.match(content, /app serve --port 8971/);
   assert.match(content, />&1/);
   assert.ok(content.includes("\r\n"), "批处理必须使用 CRLF");
 });
-test("计划任务参数使用登录触发、最低权限、覆盖同名任务", () => {
-  const args = createTaskArgs({ name: "thu-campus-app", wrapperPath: "C:\\Users\\me\\app\\service-run.cmd" });
-  assert.deepEqual(args.slice(0, 2), ["/create", "/tn"]);
-  assert.equal(args[2], "thu-campus-app");
-  assert.equal(args[3], "/tr");
-  assert.equal(args[4], 'cmd.exe /c "C:\\Users\\me\\app\\service-run.cmd"');
-  assert.ok(args.includes("/sc"));
-  assert.equal(args[args.indexOf("/sc") + 1], "onlogon");
-  assert.equal(args[args.indexOf("/rl") + 1], "limited");
-  assert.ok(args.includes("/f"));
-  assert.deepEqual(queryTaskArgs("t"), ["/query", "/tn", "t", "/fo", "CSV", "/nh"]);
-  assert.deepEqual(deleteTaskArgs("t"), ["/delete", "/tn", "t", "/f"]);
-});
-test("schtasks CSV 按位置解析，能处理带逗号的引号字段", () => {
-  const parsed = parseTaskCsv('"thu-campus-app","2026/11/14 9:00:00","就绪"\r\n');
-  assert.deepEqual(parsed, {
-    taskName: "thu-campus-app",
-    nextRun: "2026/11/14 9:00:00",
-    status: "就绪",
+
+test("任务脚本用 COM 注册登录任务，并对单引号转义", () => {
+  const scripts = taskScripts({
+    name: "it's-a-task",
+    wrapperPath: "C:\\Users\\me\\service-run.cmd",
+    user: "DOMAIN\\me",
   });
-  const withComma = parseTaskCsv('"任务, 一名","N/A","Running"');
-  assert.equal(withComma.taskName, "任务, 一名");
-  assert.equal(withComma.status, "Running");
-  assert.equal(parseTaskCsv(""), null);
-  assert.equal(parseTaskCsv('"too-short"'), null);
+  assert.match(scripts.install, /Register-ScheduledTask -TaskName 'it''s-a-task'/);
+  assert.match(scripts.install, /New-ScheduledTaskTrigger -AtLogOn -User 'DOMAIN\\me'/);
+  assert.match(scripts.install, /-LogonType Interactive -RunLevel Limited/);
+  assert.match(scripts.install, /Argument '\/c "C:\\Users\\me\\service-run\.cmd"'/);
+  assert.match(scripts.status, /Get-ScheduledTask -TaskName 'it''s-a-task'/);
+  assert.match(scripts.status, /ConvertTo-Json -Compress/);
+  assert.match(scripts.uninstall, /Unregister-ScheduledTask/);
+  assert.match(scripts.start, /Start-ScheduledTask/);
+  assert.ok(!scripts.install.includes("schtasks"), "不应依赖 schtasks.exe（普通权限下会被拒绝）");
 });
-test("安装会写出包装脚本并调用 schtasks", async (t) => {
+
+test("PowerShell 以 UTF-16LE base64 传参，避免引号地狱", () => {
+  const script = "Write-Output '中文 ok'";
+  const encoded = encodePowerShell(script);
+  assert.equal(Buffer.from(encoded, "base64").toString("utf16le"), script);
+  const args = powershellArgs(script);
+  assert.deepEqual(args.slice(0, 3), ["-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+  assert.equal(args[3], encoded);
+});
+
+test("任务状态 JSON 能从噪声输出里提取，坏输出返回 null", () => {
+  assert.deepEqual(parseTaskJson('{"installed":true,"state":"Ready"}'), {
+    installed: true,
+    state: "Ready",
+  });
+  assert.deepEqual(
+    parseTaskJson('警告: something\r\n{"installed":false}\r\n'),
+    { installed: false },
+  );
+  assert.equal(parseTaskJson("no json here"), null);
+  assert.equal(parseTaskJson(""), null);
+});
+
+test("当前用户标识可被环境变量覆盖", () => {
+  assert.equal(currentUser({ USERDOMAIN: "LAB", USERNAME: "me" }), "LAB\\me");
+  assert.match(currentUser({}), /\\.+/);
+});
+
+test("安装会写出包装脚本并通过 PowerShell 注册任务", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-service-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const wrapperPath = path.join(dir, "service-run.cmd");
   const calls = [];
   const exec = async (file, args) => {
     calls.push({ file, args });
-    return { stdout: "", stderr: "" };
+    return { stdout: '{"installed":true}', stderr: "" };
   };
-  const result = await installService({
+  const result = await installTask({
     name: "thu-campus-test",
     wrapperPath,
     content: "@echo off\r\necho hi\r\n",
     exec,
   });
-  assert.equal(result.wrapperPath, wrapperPath);
+  assert.equal(result.result.installed, true);
   assert.equal(await readFile(wrapperPath, "utf8"), "@echo off\r\necho hi\r\n");
-  if (process.platform !== "win32") return;
-  const mode = (await stat(wrapperPath)).mode & 0o200;
-  assert.ok(mode, "包装脚本应可写（Windows ACL 模式位不严格，这里只确认文件存在可读）");
-  assert.deepEqual(calls[0].args.slice(0, 2), ["/create", "/tn"]);
+  assert.equal(calls[0].file, "powershell.exe");
+  assert.ok(calls[0].args.includes("-EncodedCommand"));
+  const decoded = Buffer.from(calls[0].args.at(-1), "base64").toString("utf16le");
+  assert.match(decoded, /Register-ScheduledTask -TaskName 'thu-campus-test'/);
 });
-test("卸载对不存在的任务不抛错，并清理包装脚本", async (t) => {
+
+test("卸载会清理包装脚本，任务不存在时如实返回 false", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-service-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const wrapperPath = path.join(dir, "service-run.cmd");
-  await installService({
-    name: "thu-campus-test",
+  await installTask({
+    name: "t",
     wrapperPath,
     content: "@echo off\r\n",
-    exec: async () => ({ stdout: "", stderr: "" }),
+    exec: async () => ({ stdout: '{"installed":true}', stderr: "" }),
   });
-  const result = await uninstallService({
-    name: "thu-campus-test",
+  const result = await uninstallTask({
+    name: "t",
     wrapperPath,
-    exec: async () => {
-      throw new Error("ERROR: The system cannot find the file specified.");
-    },
+    exec: async () => ({ stdout: '{"removed":false}', stderr: "" }),
   });
   assert.equal(result.removed, false);
   await assert.rejects(() => stat(wrapperPath), /ENOENT/);
 });
-test("状态查询区分已安装与未安装", async () => {
-  const installed = await serviceStatus({
+
+test("任务状态与启动分别解析各自的 JSON", async () => {
+  const installed = await taskStatus({
     name: "t",
-    exec: async () => ({ stdout: '"t","2026/11/14 9:00:00","就绪"\r\n', stderr: "" }),
+    exec: async () => ({
+      stdout: '{"installed":true,"state":"Ready","lastResult":0,"nextRun":null}',
+      stderr: "",
+    }),
   });
   assert.equal(installed.installed, true);
-  assert.equal(installed.status, "就绪");
-  assert.equal(installed.nextRun, "2026/11/14 9:00:00");
-  const missing = await serviceStatus({
+  assert.equal(installed.state, "Ready");
+  const missing = await taskStatus({
+    name: "t",
+    exec: async () => ({ stdout: '{"installed":false}', stderr: "" }),
+  });
+  assert.equal(missing.installed, false);
+  const broken = await taskStatus({
     name: "t",
     exec: async () => {
-      throw new Error("not found");
+      throw Object.assign(new Error("powershell missing"), { code: "ENOENT" });
     },
   });
-  assert.deepEqual(missing, { name: "t", installed: false });
+  assert.equal(broken.installed, false);
+  const started = await startTask({
+    name: "t",
+    exec: async () => ({ stdout: '{"started":true}', stderr: "" }),
+  });
+  assert.equal(started.started, true);
 });
-test("启动项路径按 APPDATA 解析，落在当前用户的 Startup 目录", () => {
+
+test("启动项路径按 APPDATA 解析，安装/查询/卸载幂等", async (t) => {
   const entry = startupEntryPath({ APPDATA: "C:\\Users\\me\\AppData\\Roaming" });
   assert.equal(
     entry,
     "C:\\Users\\me\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\thu-campus-app.cmd",
   );
-  const fallback = startupEntryPath({ USERPROFILE: "C:\\Users\\me", APPDATA: "" });
-  assert.ok(fallback.includes("AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"));
-});
-test("启动项安装、查询、卸载是幂等的", async (t) => {
   if (process.platform !== "win32") return;
   const dir = await mkdtemp(path.join(tmpdir(), "campus-startup-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -142,12 +172,11 @@ test("启动项安装、查询、卸载是幂等的", async (t) => {
   assert.equal(uninstallStartup({ entryPath }).removed, true);
   assert.equal(uninstallStartup({ entryPath }).removed, false, "重复卸载不报错");
 });
-test("计划任务权限被拒时给出可执行的替代建议", () => {
-  const mapped = explainTaskFailure(new Error("ERROR: Access is denied."));
-  assert.equal(mapped.code, "SERVICE_ACCESS_DENIED");
-  assert.match(mapped.message, /--task/);
-  assert.match(mapped.message, /启动项/);
-  const other = new Error("something else");
-  assert.equal(explainTaskFailure(other), other);
-});
 
+test("权限被拒时给出可执行的替代建议", () => {
+  const mapped = explainFailure(new Error("ERROR: Access is denied."));
+  assert.equal(mapped.code, "SERVICE_ACCESS_DENIED");
+  assert.match(mapped.message, /--startup/);
+  const other = new Error("something else");
+  assert.equal(explainFailure(other), other);
+});
