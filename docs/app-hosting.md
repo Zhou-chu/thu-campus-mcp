@@ -144,7 +144,7 @@ WantedBy=multi-user.target
 Xvfb :99 -screen 0 1280x800x24 &
 export DISPLAY=:99
 x11vnc -display :99 -localhost -nopw -forever &   # 再用 SSH 隧道访问 5900
-node bin/thu-campus.mcp 2>/dev/null || node bin/thu-campus.mjs browser login learnx
+node bin/thu-campus.mjs browser login learnx --account <你的学号>
 # 本人在 TUNNEL 里完成登录后，杀掉 Xvfb/x11vnc，会话已落到持久浏览器工作区
 ```
 
@@ -164,4 +164,5 @@ node bin/thu-campus.mcp 2>/dev/null || node bin/thu-campus.mjs browser login lea
 - [ ] 反代不要加缓存（尤其 `/api/chat`），不要在 `/api/*` 上做路径重写。
 - [ ] 只开放 443；`8971` 不要直接对公网。
 - [ ] 日志里不要出现令牌：启动器与运行时都已做脱敏，排查问题时仍然先看 `desktop.log` 的脱敏形态。
+
 
