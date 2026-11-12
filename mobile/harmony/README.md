@@ -78,6 +78,28 @@ cd mobile/harmony
 
 编译通过后仍有 15 条 WARN，主要是 `Function may throw exceptions`（`preferences` 调用未包 try/catch）与 `getContext` 已废弃。它们不阻塞构建，但真机验收前建议改用 `this.getUIContext()` 并把偏好读写包进 try/catch。
 
+## 真机验证：当前被硬阻塞
+
+```
+> hdc list targets
+[Empty]
+```
+
+没有任何 HarmonyOS 设备连接，也没有创建过模拟器实例（`%USERPROFILE%\.Huawei\Emulator` 不存在，`tools\emulator` 只是 QEMU 可执行文件，无系统镜像）。要真正验证 ArkWeb 渲染与深链唤起，需要：
+
+1. 一台真机开启「开发者模式 + USB 调试」，或
+2. 在 DevEco Studio 里创建模拟器并下载系统镜像（需登录华为账号，且依赖 Hyper-V/WHPX）。
+
+拿到设备后：
+
+```powershell
+& "D:\deveco\sdk\default\openharmony\toolchains\hdc.exe" list targets
+& "D:\deveco\sdk\default\openharmony\toolchains\hdc.exe" install -r entry-default-signed.hap
+& "D:\deveco\sdk\default\openharmony\toolchains\hdc.exe" shell aa start -a EntryAbility -b cn.edu.tsinghua.campusapp
+```
+
+**没有这两样东西之前，本仓库不会声称 HAP「可用」，只声称「编译通过」。** 签名同理：`signingConfigs` 为空，构建会跳过签名（`Will skip sign 'hos_hap'`），产物是 unsigned。
+
 ## 未验证
 
 - **未安装到真机或模拟器**：没有签名证书，也没有启动模拟器。
@@ -94,3 +116,4 @@ entry/src/main/ets/entryability/EntryAbility.ets
 entry/src/main/ets/pages/Index.ets             配对表单 + Web 组件 + 401 回退
 entry/src/main/resources/base/…                中文文案、图标、页面清单
 ```
+

@@ -119,6 +119,22 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
+## 运行时怎么告诉你"这台机器能不能登录"
+
+`/api/meta` 与 `app status` 都会返回：
+
+```json
+"loginCapability": { "window": true, "reason": "desktop", "hint": "" }
+```
+
+| 场景 | window | reason |
+| --- | --- | --- |
+| Windows / macOS | `true` | `desktop` |
+| Linux 有 `DISPLAY` 或 `WAYLAND_DISPLAY` | `true` | `display` |
+| Linux 无图形会话 | `false` | `no-display`，`hint` 给出处置建议 |
+
+`window:false` 时**不要**指望能完成首次校园登录：`campus_browser_login` 会尝试打开可见窗口并失败。已经存在的会话仍然可以无界面续登（`browser restore --headless`、`madmodel login --headless`），运行时会在到期前自动续期。
+
 ## 部署前必须知道的三件事
 
 1. **鲜登是人工步骤，且要看得见浏览器。** 网络学堂/云盘/雨课堂的首次登录、以及学校要求验证码或多因素认证时，需要在**有图形界面**的环境里弹出独立 Chromium 由本人完成。纯无头的云主机无法完成首次登录；`browser restore --headless` 与 `madmodel login --headless` 只在**已有有效会话**时能续登。

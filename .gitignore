@@ -22,3 +22,8 @@ mobile/android/.gradle/
 mobile/android/build/
 mobile/android/app/build/
 mobile/android/local.properties
+
+# Android 签名材料一律不入库
+mobile/android/keystore.properties
+*.jks
+*.keystore

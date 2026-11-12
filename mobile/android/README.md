@@ -53,6 +53,46 @@ BUILD SUCCESSFUL in 4m 7s
 
 本机原来是「只有 `platform-tools`」的裸 SDK，编译链是临时自举的：下载 `commandlinetools-win-11076708` 解压到 `D:\Android\cmdline-tools\latest`，接受许可后装 platform 35 与 build-tools 35，再用 `D:\Android\gradle-8.9` 构建。`local.properties` 指向本机 SDK，已在 `.gitignore` 中，不随仓库分发。
 
+## 签名 release 包（本机已实测通过）
+
+debug 包用的是 Android 默认调试签名，只能自己装。正式发布要自己的密钥：
+
+```powershell
+# 1) 生成密钥（放在仓库外或 .local/，绝不提交）
+keytool -genkeypair -v -keystore .local/android-signing/release.jks `
+  -alias thu-campus -keyalg RSA -keysize 4096 -validity 3650 `
+  -storepass <口令> -keypass <口令> -dname "CN=你的名字, O=personal, L=Beijing, C=CN"
+
+# 2) 在本目录写 keystore.properties（已被 .gitignore 排除）
+#    storeFile=<jks 绝对路径，反斜杠要写两次>
+#    storePassword=<口令>
+#    keyAlias=thu-campus
+#    keyPassword=<口令>
+
+# 3) 构建并校验
+.\gradlew.bat assembleRelease
+$env:JAVA_HOME='<JDK17+>'
+apksigner.bat verify --print-certs --verbose app\build\outputs\apk\release\app-release.apk
+```
+
+`app/build.gradle.kts` 只在 `keystore.properties` 存在时启用 release 签名；缺该文件时 release 仍可编译（未签名），便于在干净环境跑通。
+
+本机实测结果：
+
+```
+BUILD SUCCESSFUL in 1m 46s
+app-release.apk  2.42 MB
+Verifies
+Verified using v2 scheme (APK Signature Scheme v2): true
+Signer #1 certificate DN: CN=thu-campus app, OU=personal, O=personal, L=Beijing, ST=Beijing, C=CN
+Signer #1 key algorithm: RSA / 4096 bits
+Signer #1 certificate SHA-256 digest: bb68743c84477bc1ed7876d35d29509eeb79da81ab38026af0e28a618117e0a0
+app-release.apk SHA-256: 700EA1CA2E532D58D61D23E2541A9B685600CD048AF3DEB46A78E535551FEA4D
+package: name='cn.edu.tsinghua.campusapp' versionName='1.3.0'
+```
+
+该证书只是为了在本机验证签名链路，**不要用于正式分发**——发布前请自己生成并妥善保管密钥，keystore 丢失后无法升级同包名应用。
+
 ## 仍未验证
 
 - **没有装到真机或模拟器上运行过**：只验证到「编译通过 + APK 结构正确」。

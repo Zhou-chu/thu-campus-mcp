@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { appConfig, maskAccount, lanUrls, publicBase } from "../lib/app/settings.mjs";
+import { appConfig, maskAccount, lanUrls, publicBase, loginCapability } from "../lib/app/settings.mjs";
 import { DeviceStore, newToken } from "../lib/app/devices.mjs";
 import { PairingCodes, PairingError } from "../lib/app/pairing.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
@@ -188,4 +188,18 @@ test("对外地址优先 PUBLIC_URL，其次按是否启用 TLS 拼协议", () =
   );
   assert.equal(publicBase({ publicUrl: "", tlsCert: "x.pem", host: "0.0.0.0", port: 443 }), "https://0.0.0.0:443");
   assert.equal(publicBase({ publicUrl: "", tlsCert: "", host: "127.0.0.1", port: 8971 }), "http://127.0.0.1:8971");
+});
+
+test("登录窗口能力按平台与图形会话判断", () => {
+  assert.equal(loginCapability({}, "win32").window, true);
+  assert.equal(loginCapability({}, "win32").reason, "desktop");
+  assert.equal(loginCapability({}, "darwin").window, true);
+  assert.equal(loginCapability({ DISPLAY: ":99" }, "linux").window, true);
+  assert.equal(loginCapability({ DISPLAY: ":99" }, "linux").reason, "display");
+  assert.equal(loginCapability({ WAYLAND_DISPLAY: "wayland-0" }, "linux").window, true);
+  const headless = loginCapability({}, "linux");
+  assert.equal(headless.window, false);
+  assert.equal(headless.reason, "no-display");
+  assert.match(headless.hint, /Xvfb/);
+  assert.match(headless.hint, /无界面续登/);
 });
