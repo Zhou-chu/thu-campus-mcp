@@ -112,3 +112,19 @@ test("简化文案不删除输入名称、配对帮助或写入风险确认", ()
   for (const text of ["允许执行", "拒绝", "使用说明", "诊断信息"])
     assert.ok(app.includes(text), "缺少必要交互：" + text);
 });
+
+
+test("UI字阶统一且不重新引入微型操作字号", () => {
+  for (const role of ["body", "chat", "ui", "meta", "code", "title", "heading", "section"])
+    assert.ok(css.includes("--text-" + role + ":"));
+  assert.match(css, /--text-chat:\s*1\.25rem/);
+  assert.match(css, /@media \(min-width: 1600px\)/);
+  assert.doesNotMatch(css, /font-size:\s*(?:10|11|12|13)(?:\.\d+)?px/);
+  assert.match(design, /只测空白页/);
+  assert.match(design, /computed font-size/);
+});
+
+test("UI不保留机械工具步数设置", () => {
+  assert.doesNotMatch(app, /maxSteps|stepsInput|最大工具步数/);
+  assert.match(design, /不设.*固定工具轮数截断/);
+});

@@ -18,7 +18,7 @@ test("配置默认只监听回环，非回环无固定令牌时拒绝启动", ()
   assert.equal(base.host, "127.0.0.1");
   assert.equal(base.port, 8971);
   assert.equal(base.modelRoute, "madmodel");
-  assert.equal(base.maxSteps, 12);
+  assert.equal(Object.hasOwn(base, "maxSteps"), false);
   assert.match(base.stateDir, /\.thu-campus-mcp[\\/]app$/);
   assert.throws(
     () => appConfig({ THU_CAMPUS_APP_HOST: "0.0.0.0" }),
@@ -34,10 +34,10 @@ test("配置默认只监听回环，非回环无固定令牌时拒绝启动", ()
     () => appConfig({ THU_CAMPUS_APP_MODEL_ROUTE: "bedrock" }),
     (e) => e.code === "INVALID_SETTINGS",
   );
-  assert.throws(
-    () => appConfig({ THU_CAMPUS_APP_MAX_STEPS: "0" }),
-    (e) => e.code === "INVALID_SETTINGS",
-  );
+  for (const legacy of ["12", "24", "0", "invalid"]) {
+    const config = appConfig({ THU_CAMPUS_APP_MAX_STEPS: legacy });
+    assert.equal(Object.hasOwn(config, "maxSteps"), false, `旧环境变量 ${legacy} 必须被忽略`);
+  }
   assert.deepEqual(lanUrls(8971), lanUrls(8971));
 });
 test("账号脱敏保留首尾并隐藏中间", () => {

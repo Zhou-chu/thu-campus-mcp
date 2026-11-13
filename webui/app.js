@@ -1153,40 +1153,7 @@ function settingsView() {
       el("div", { class: "small", text: `账号 ${meta.account?.masked || "未绑定"}` }),
     ]),
   ]);
-  const stepsInput = el("input", { type: "number", min: 1, max: 24 });
-  const save = el("button", { class: "primary", type: "button", text: "保存设置", disabled: true });
-  const settingsCard = el("div", { class: "card stack" }, [el("h3", { text: "对话偏好" })]);
-  settingsCard.append(
-    modelPicker("settings-model"),
-    (() => {
-      const label = el("label", { class: "field" });
-      label.append(el("span", { text: "单轮最大工具步数（1–24）" }), stepsInput);
-      return label;
-    })(),
-    save,
-  );
-  api("/api/settings")
-    .then((data) => {
-      state.settings = data.settings;
-      stepsInput.value = data.settings.maxSteps ?? 12;
-      save.disabled = false;
-    })
-    .catch((e) => toast(e.message));
-  save.addEventListener("click", async () => {
-    save.disabled = true;
-    try {
-      const data = await api("/api/settings", {
-        method: "PUT",
-        body: { ...(stepsInput.value ? { maxSteps: Number(stepsInput.value) } : {}) },
-      });
-      state.settings = data.settings;
-      toast("已保存");
-    } catch (e) {
-      toast(e.message);
-    } finally {
-      save.disabled = false;
-    }
-  });
+  const settingsCard = el("div", { class: "card stack" }, [modelPicker("settings-model")]);
   wrap.append(settingsCard);
   const codeNode = el("div", { class: "small muted", text: "" });
   const linkBox = el("div", { class: "stack", style: "gap:8px" });

@@ -124,7 +124,6 @@ async function main() {
     modelBaseUrl: "",
     modelApiKey: "",
     modelName: "",
-    maxSteps: 8,
     hostname: "e2e-host",
     version: "9.9.9",
     requireApproval: true,
@@ -142,6 +141,15 @@ async function main() {
       role: "assistant",
       content: "| 截止时间 | 课程 |\n| --- | --- |\n| 11-16 | 电力电子技术基础 |",
     },
+  ]);
+  // 有实际消息、Markdown表格和工具记录的排版样本，不能只验空白页。
+  await sessionStore.append(history.id, [
+    { role: "assistant", content: "这是排版回归样本，不代表真实课程结果。\n\n长段中文与EnglishIdentifier需要在宽屏、窄屏中保持适当的阅读比例，不能用微型字号配合大片留白。工具名称、完成状态与操作控件也必须清楚可读。" },
+    ...Array.from({ length: 6 }, (_, index) => [
+      { role: "assistant", content: "", toolCalls: [{ id: "layout-" + index, name: index === 0 ? "learn_sync_semester" : "learn_sync_status", arguments: "{}" }] },
+      { role: "tool", toolCallId: "layout-" + index, name: "learn_sync_status", content: JSON.stringify({ ok: true, data: { phase: "running", completed: index, total: 14, fixture: true } }) },
+    ]).flat(),
+    { role: "assistant", content: "排版样本结束。实际后台任务未完成时必须如实报告状态，不能编造结果。" },
   ]);
   app = createAppServer({
     config,
@@ -239,10 +247,10 @@ async function main() {
     await page.fill('input[type="search"]', "");
     record("清空搜索恢复全部", (await page.locator(".session-row").count()) === 4);
     step("准备点重命名");
-    const firstRow = page.locator(".session-row").first();
+    const firstRow = page.locator(".session-row").filter({ hasText: "雨课堂签到的自动提醒" }).first();
     await firstRow.getByRole("button", { name: "重命名" }).click({ timeout: 8000 });
     step("已进入重命名");
-    const titleInput = firstRow.locator('input[type="text"]');
+    const titleInput = page.getByRole("textbox", { name: "会话标题", exact: true });
     await titleInput.fill("端到端改名");
     await titleInput.press("Enter");
     await page.waitForFunction(() => document.body.innerText.includes("端到端改名"), null, { timeout: 8000 });
@@ -252,7 +260,7 @@ async function main() {
     await page.click('button[data-view="sessions"]');
     await page.waitForSelector(".session-row");
     await page.fill('input[type="search"]', "历史会话回归");
-    await page.locator(".session-row .item").first().click();
+    await page.locator(".session-row .item").filter({ hasText: "历史会话回归" }).first().click();
     await page.waitForSelector("#messages .bubble");
     record("历史消息已渲染", (await page.locator("#messages .bubble").count()) >= 2);
     record("Markdown 表格已渲染", (await page.locator("#messages table.rich-table").count()) === 1);
@@ -265,6 +273,7 @@ async function main() {
     await page.click('button[data-view="settings"]');
     const help = page.locator(".help-panel");
     record("帮助默认折叠", (await help.getAttribute("open")) === null);
+    record("设置不再提供机械工具步数限制", (await page.locator('#view input[type="number"]').count()) === 0 && !(await page.locator("#view").innerText()).includes("工具步数"));
     record("说明与诊断不常驻", !(await page.locator("#view").innerText()).includes("运行信息"));
     record("开发设计入口默认隐藏", !(await page.locator('a[href="/preview.html"]').isVisible()));
     await page.locator(".help-panel > summary").click();
@@ -318,8 +327,12 @@ async function main() {
       record("重试成功收起错误行", await page.locator(".model-status").isHidden());
     }
 
-    // 在用户截图同级宽屏下检查真实几何，不仅测CSS字符串。
-    for (const width of [1920, 2560, 1280, 390]) {
+    // 载入有消息、表格及工具记录的会话，再检查几何和实际computed字号。
+    await page.click('button[data-view="sessions"]');
+    await page.fill('input[type="search"]', "历史会话回归");
+    await page.locator(".session-row .item").filter({ hasText: "历史会话回归" }).first().click();
+    await page.waitForSelector("#messages .tool-card");
+    for (const width of [1920, 2560, 1536, 1280, 390]) {
       await page.setViewportSize({ width, height: width < 900 ? 844 : 1080 });
       await page.click('button[data-view="chat"]');
       const geometry = await page.evaluate(() => {
@@ -337,7 +350,26 @@ async function main() {
         };
       });
       record(width + '宽布局居中且输入区可见', Object.values(geometry).every(Boolean), JSON.stringify(geometry));
+      const typography = await page.evaluate(() => {
+        const size = selector => parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
+        return { message: size(".bubble.assistant"), tool: size(".tool-name"), status: size(".tool-state"), button: size("#chat-send"), select: size("#chat-model"), table: size(".rich-table") };
+      });
+      const large = width >= 1600, desktop = width >= 900;
+      const legible = typography.message >= (large ? 20 : desktop ? 18 : 16)
+        && typography.button >= (large ? 17 : desktop ? 16 : 15)
+        && typography.status >= (large ? 16 : desktop ? 15 : 14)
+        && typography.tool >= 16 && typography.select >= 16 && typography.table >= 16;
+      record(width + "宽带内容字号符合阅读比例", legible, JSON.stringify(typography));
+      if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) {
+        await page.evaluate(() => { document.querySelector("#messages").scrollTop = 0; });
+        await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, "readability-" + width + ".png") });
+      }
     }
+    await page.setViewportSize({ width: 390, height: 640 });
+    record("窄屏矮窗口仍可输入和阅读", await page.evaluate(() => document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight && document.querySelector("#messages").getBoundingClientRect().height > 150));
+    await page.click("#theme-dark");
+    record("深色带内容字号不缩水", await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".bubble.assistant")).fontSize) >= 16));
+    await page.click("#theme-light");
     await page.setViewportSize({ width: 1280, height: 900 });
 
     // 7. 设计目录：色块真的画出来了

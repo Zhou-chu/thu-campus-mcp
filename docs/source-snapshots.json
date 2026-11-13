@@ -87,6 +87,10 @@
         "sha256": "f97f58eb0d8f5505f931d63b091966c48f705ac7d70672e416facf08b0347479",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
+      "test/download.test.ts": {
+        "sha256": "3c7bc8565801b8a3b668bcc2796ebf2aa5d79bd522858f98ce0d3863b6e0abd5",
+        "reason": "Use controlled timers for streaming progress across the unchanged 80ms deadline and assert idle timeout; remove Windows load-dependent timing flakiness without changing production behavior."
+      },
       "test/browser-auth.test.ts": {
         "sha256": "5217382a7de60d21a323e021e60a65e0aac4ca3b6505b77c3929a7525673b62c",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"

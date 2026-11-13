@@ -61,7 +61,7 @@ node bin/thu-campus.mjs app status            # 脱敏状态，不联网
 | `THU_CAMPUS_APP_MODEL_BASE_URL` | 空 | `openai` 路由的 Base URL |
 | `THU_CAMPUS_APP_MODEL_API_KEY` | 空 | `openai` 路由的密钥 |
 | `THU_CAMPUS_APP_MODEL_NAME` | 自动 | 首选模型名 |
-| `THU_CAMPUS_APP_MAX_STEPS` | `12` | 单轮 agent 最大工具步数 |
+| `THU_CAMPUS_APP_MAX_STEPS` | 已停用 | 兼容忽略旧值；不再按固定工具轮数截断，执行到模型完成、用户停止或实际错误 |
 | `THU_CAMPUS_APP_ALLOW_REMOTE` | 空 | `1` 允许「非回环 + 无固定令牌」启动（托管模式） |
 | `THU_CAMPUS_APP_PUBLIC_URL` | 空 | 对外可达地址；配对响应回填，并自动进入 Host 白名单 |
 | `THU_CAMPUS_APP_TLS_CERT` / `_KEY` | 空 | PEM 证书与私钥，成对提供则直出 HTTPS |

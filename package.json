@@ -1,6 +1,6 @@
 {
   "name": "thu-campus-mcp",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "private": true,
   "description": "清华校园 MCP 整合包与独立 Agent 应用：网络学堂、清华云盘、荷塘雨课堂、MadModel",
   "license": "MIT",

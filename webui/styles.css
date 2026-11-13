@@ -24,7 +24,40 @@
   --space-5: 24px;
   --space-6: 32px;
   --space-7: 48px;
+  --text-body: 1rem;
+  --text-chat: 1rem;
+  --text-ui: .9375rem;
+  --text-meta: .875rem;
+  --text-code: 1rem;
+  --text-title: 1.25rem;
+  --text-heading: 1.75rem;
+  --text-section: 1.125rem;
+  --reading-width: 52rem;
   color-scheme: light;
+}
+/* 字阶随可用画布调整，rem保留浏览器字号偏好与缩放。 */
+@media (min-width: 900px) {
+  :root {
+    --text-body: 1.0625rem;
+    --text-chat: 1.125rem;
+    --text-ui: 1rem;
+    --text-meta: .9375rem;
+    --text-title: 1.375rem;
+    --text-heading: 1.875rem;
+    --text-section: 1.25rem;
+  }
+}
+@media (min-width: 1600px) {
+  :root {
+    --text-body: 1.125rem;
+    --text-chat: 1.25rem;
+    --text-ui: 1.0625rem;
+    --text-meta: 1rem;
+    --text-code: 1.0625rem;
+    --text-title: 1.5rem;
+    --text-heading: 2rem;
+    --text-section: 1.375rem;
+  }
 }
 :root[data-theme="dark"] {
   --paper: #0f0f0e;
@@ -53,7 +86,7 @@ body {
 body {
   background: var(--paper);
   color: var(--ink);
-  font: 14px/1.75 var(--sans);
+  font: var(--text-body)/1.75 var(--sans);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
 }
@@ -77,7 +110,7 @@ pre {
   max-height: 300px;
   padding: 10px 12px;
   background: color-mix(in srgb, var(--line) 28%, transparent);
-  font-size: 12.5px;
+  font-size: var(--text-code);
   line-height: 1.6;
 }
 h1,
@@ -89,17 +122,17 @@ h3 {
   letter-spacing: 0.01em;
 }
 h1 {
-  font-size: 17px;
+  font-size: var(--text-title);
 }
 h2 {
-  font-size: 24px;
+  font-size: var(--text-heading);
   line-height: 1.35;
   padding-bottom: 10px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--line-strong);
 }
 h3 {
-  font-size: 15px;
+  font-size: var(--text-section);
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 2px;
@@ -108,12 +141,12 @@ h3 {
   color: var(--muted);
 }
 .small {
-  font-size: 12.5px;
+  font-size: var(--text-meta);
   line-height: 1.7;
 }
 .eyebrow {
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: var(--text-meta);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--muted);
@@ -171,7 +204,7 @@ h3 {
   min-width: 0;
 }
 .chip {
-  font-size: 11.5px;
+  font-size: var(--text-meta);
   letter-spacing: 0.06em;
   color: var(--muted);
   border: 1px solid var(--line);
@@ -189,7 +222,7 @@ h3 {
   flex: none;
   display: grid;
   place-items: center;
-  font-size: 18px;
+  font-size: var(--text-title);
   cursor: pointer;
 }
 .icon-btn:hover {
@@ -216,7 +249,7 @@ h3 {
   background: transparent;
   padding: 13px 2px;
   min-height: 44px;
-  font-size: 11.5px;
+  font-size: var(--text-ui);
   letter-spacing: 0.14em;
   color: var(--muted);
   cursor: pointer;
@@ -256,7 +289,7 @@ h3 {
   .tab {
     text-align: left;
     padding: 9px 22px;
-    font-size: 12px;
+    font-size: var(--text-ui);
   }
   .tab[aria-current="page"] {
     box-shadow: inset 2px 0 0 var(--ink);
@@ -298,7 +331,7 @@ h3 {
   border: 1px solid var(--ink);
   padding: 11px 18px;
   min-height: 44px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   letter-spacing: 0.12em;
   white-space: nowrap;
   cursor: pointer;
@@ -323,7 +356,7 @@ h3 {
   border: 1px solid var(--line-strong);
   padding: 9px 14px;
   min-height: 44px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   letter-spacing: 0.08em;
   white-space: nowrap;
   flex: none;
@@ -347,7 +380,7 @@ h3 {
   margin-bottom: 10px;
 }
 .field > span {
-  font-size: 12.5px;
+  font-size: var(--text-meta);
   color: var(--ink-soft);
 }
 input,
@@ -390,13 +423,13 @@ a:focus-visible {
   padding: 30px 28px;
 }
 .pair-card h2 {
-  font-size: 30px;
+  font-size: var(--text-heading);
   border-bottom: 0;
   padding-bottom: 0;
 }
 #pair-code {
   letter-spacing: 0.42em;
-  font-size: 22px;
+  font-size: var(--text-title);
   text-align: center;
   font-family: var(--mono);
 }
@@ -430,10 +463,11 @@ a:focus-visible {
   gap: 4px;
   flex: 0 1 360px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--text-meta);
   color: var(--muted);
 }
 .model-field select {
+  font-size: var(--text-body);
   min-width: 0;
   color: var(--ink);
 }
@@ -468,10 +502,10 @@ a:focus-visible {
   flex: none;
 }
 .bubble {
-  max-width: min(720px, 100%);
+  max-width: min(var(--reading-width), 100%);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: 14px;
+  font-size: var(--text-chat);
   line-height: 1.8;
 }
 .bubble.user {
@@ -479,7 +513,7 @@ a:focus-visible {
   border-left: 2px solid var(--ink);
   background: color-mix(in srgb, var(--line) 34%, transparent);
   padding: 8px 14px;
-  max-width: min(560px, 92%);
+  max-width: min(40rem, 92%);
 }
 .bubble.assistant {
   align-self: flex-start;
@@ -497,11 +531,11 @@ a:focus-visible {
   background: color-mix(in srgb, var(--danger) 7%, transparent);
   color: var(--danger);
   padding: 8px 14px;
-  font-size: 13px;
+  font-size: var(--text-ui);
 }
 .bubble.notice {
   align-self: stretch;
-  font-size: 12.5px;
+  font-size: var(--text-meta);
   color: var(--warn);
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -515,6 +549,7 @@ a:focus-visible {
   padding-top: 12px;
 }
 .composer textarea {
+  font-size: var(--text-chat);
   border: 0;
   padding: 10px 2px;
   min-height: 44px;
@@ -524,7 +559,7 @@ a:focus-visible {
   border-bottom: 1px solid var(--ink);
 }
 
-/* 常用指令：细线下的小字，不做胶囊 */
+/* 常用指令：可读文字与细线，不做胶囊或微型字号。 */
 .quick {
   display: flex;
   gap: 16px;
@@ -542,7 +577,7 @@ a:focus-visible {
   border-bottom: 1px solid var(--line-strong);
   padding: 3px 0;
   min-height: 44px;
-  font-size: 12px;
+  font-size: var(--text-ui);
   letter-spacing: 0.04em;
   color: var(--muted);
   white-space: nowrap;
@@ -556,11 +591,11 @@ a:focus-visible {
 /* 工具卡片：左侧墨线 + 细框 */
 .tool-card {
   align-self: flex-start;
-  width: min(720px, 100%);
+  width: min(var(--reading-width), 100%);
   border: 1px solid var(--line);
   border-left: 2px solid var(--ink);
   padding: 9px 13px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   background: var(--panel);
 }
 .tool-card[data-state="failed"] {
@@ -570,6 +605,7 @@ a:focus-visible {
   border-left-color: var(--warn);
 }
 .tool-card summary {
+  min-height: 44px;
   cursor: pointer;
   list-style: none;
   display: flex;
@@ -580,11 +616,14 @@ a:focus-visible {
   display: none;
 }
 .tool-name {
-  font-size: 12.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-code);
 }
 .tool-state {
+  flex: none;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-meta);
   letter-spacing: 0.1em;
   margin-left: auto;
 }
@@ -617,7 +656,7 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--text-body);
 }
 .confirm-actions {
   display: flex;
@@ -647,7 +686,7 @@ a:focus-visible {
   counter-increment: entry;
   content: counter(entry, decimal-leading-zero);
   font-family: var(--sans);
-  font-size: 10.5px;
+  font-size: var(--text-meta);
   letter-spacing: 0.12em;
   color: var(--muted);
   flex: none;
@@ -661,7 +700,7 @@ a:focus-visible {
 }
 .item-title {
   font-family: var(--serif);
-  font-size: 15.5px;
+  font-size: var(--text-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -681,7 +720,7 @@ a:focus-visible {
   position: absolute;
   left: 0;
   top: 13px;
-  font-size: 10.5px;
+  font-size: var(--text-meta);
   letter-spacing: 0.12em;
   color: var(--muted);
 }
@@ -689,7 +728,7 @@ a:focus-visible {
   cursor: pointer;
 }
 .state {
-  font-size: 10.5px;
+  font-size: var(--text-meta);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
@@ -711,7 +750,7 @@ a:focus-visible {
   color: var(--muted);
   text-align: center;
   padding: 30px 12px;
-  font-size: 12.5px;
+  font-size: var(--text-meta);
   letter-spacing: 0.04em;
 }
 
@@ -743,7 +782,7 @@ a:focus-visible {
   background: var(--warn);
 }
 .timeline-time {
-  font-size: 11.5px;
+  font-size: var(--text-meta);
   letter-spacing: 0.04em;
   color: var(--muted);
   font-family: var(--mono);
@@ -778,7 +817,7 @@ a:focus-visible {
   background: var(--ink);
   color: var(--paper);
   padding: 9px 18px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   letter-spacing: 0.06em;
   z-index: 20;
   max-width: 88vw;
@@ -809,7 +848,7 @@ a:focus-visible {
   border: 0;
   background: transparent;
   padding: 5px 9px;
-  font-size: 11px;
+  font-size: var(--text-ui);
   letter-spacing: 0.1em;
   color: var(--muted);
   cursor: pointer;
@@ -859,7 +898,7 @@ a:focus-visible {
   background: var(--ink);
   color: var(--paper);
   padding: 8px 14px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
 }
 .skip:focus {
   left: 8px;
@@ -928,21 +967,21 @@ a:focus-visible {
 }
 .spec-display {
   font-family: var(--serif);
-  font-size: 30px;
+  font-size: var(--text-heading);
   line-height: 1.2;
 }
 .spec-h2 {
   font-family: var(--serif);
-  font-size: 24px;
+  font-size: var(--text-heading);
   line-height: 1.35;
 }
 .spec-item {
   font-family: var(--serif);
-  font-size: 15.5px;
+  font-size: var(--text-section);
   line-height: 1.5;
 }
 .spec-body {
-  font-size: 14px;
+  font-size: var(--text-chat);
   line-height: 1.75;
 }
 .btn-row {
@@ -995,7 +1034,7 @@ a:focus-visible {
 .rich-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 13px;
+  font-size: var(--text-body);
   line-height: 1.6;
 }
 .rich-table th,
@@ -1008,7 +1047,7 @@ a:focus-visible {
 }
 .rich-table th {
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--text-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -1016,4 +1055,12 @@ a:focus-visible {
 }
 .rich-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+/* 窄屏保留可读字号：顶栏换行，不压小账号和操作控件。 */
+@media (max-width: 600px) {
+  .topbar { flex-wrap: wrap; gap: var(--space-2); }
+  .brand { flex-basis: 100%; }
+  .topbar-meta { width: 100%; gap: var(--space-2); }
+  .topbar-meta .chip { margin-right: auto; max-width: 45vw; }
 }

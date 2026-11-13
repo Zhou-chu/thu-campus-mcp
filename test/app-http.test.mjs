@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createAppServer } from "../lib/app/server.mjs";
 import { PairingCodes, writeInvite, readInvite } from "../lib/app/pairing.mjs";
@@ -105,8 +105,9 @@ function scriptedRoute() {
     },
   };
 }
-async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {}, keepAlive = null } = {}) {
+async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {}, keepAlive = null, savedSettings = null } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-app-http-"));
+  if (savedSettings) await writeFile(path.join(dir, "settings.json"), JSON.stringify(savedSettings));
   const config = {
     root: path.resolve(import.meta.dirname, ".."),
     host: "127.0.0.1",
@@ -298,23 +299,23 @@ test("设置接口只接受白名单字段并持久化", async (t) => {
   const { body } = await pair(url, pairing);
   const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
   const initial = await (await fetch(url + "/api/settings", { headers })).json();
-  assert.equal(initial.settings.maxSteps, 8);
-  const bad = await fetch(url + "/api/settings", {
+  assert.equal(Object.hasOwn(initial.settings, "maxSteps"), false);
+  const legacy = await fetch(url + "/api/settings", {
     method: "PUT",
     headers,
     body: JSON.stringify({ maxSteps: 99 }),
   });
-  assert.equal(bad.status, 400);
+  assert.equal(legacy.status, 200, "旧字段必须被忽略，不再校验或限制执行");
   const good = await fetch(url + "/api/settings", {
     method: "PUT",
     headers,
     body: JSON.stringify({ maxSteps: 4, modelName: "test-model", ignored: "x" }),
   });
   const saved = await good.json();
-  assert.equal(saved.settings.maxSteps, 4);
+  assert.equal(Object.hasOwn(saved.settings, "maxSteps"), false);
   assert.equal(saved.settings.ignored, undefined);
-  const raw = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(dir, "settings.json"), "utf8"));
-  assert.equal(raw.maxSteps, 4);
+  const raw = JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8"));
+  assert.deepEqual(raw, { modelName: "test-model" });
 });
 test("静态资源不回退到目录外，缺 WebUI 时给出可读占位页", async (t) => {
   const { url } = await boot(t);
@@ -689,4 +690,131 @@ test("对话请求始终带上具体模型名，不回落到空值", async (t) =
   });
   await response.text();
   assert.equal(seenModel, "first-model", "未指定模型时应取模型列表第一项");
+});
+
+for (const maxSteps of [12, 24]) {
+  test(`旧持久设置maxSteps=${maxSteps}与旧HTTP字段不截断30轮工具执行`, async (t) => {
+    const calls = [];
+    let turns = 0;
+    const route = {
+      ...scriptedRoute(),
+      async chat() {
+        turns++;
+        return sseResponse([
+          chunk({ choices: [{ delta: turns <= 30 ? { tool_calls: [{ index: 0, id: `c-${turns}`, function: { name: "learn_status", arguments: "{}" } }] } : { content: "30轮后真正完成" } }] }),
+          "data: [DONE]\n\n",
+        ]);
+      },
+    };
+    const { url, dir, app } = await boot(t, {
+      token: "test", route, host: fakeHost(calls), config: { maxSteps }, savedSettings: { modelName: "saved-model", maxSteps },
+    });
+    const headers = { authorization: "Bearer test", "content-type": "application/json" };
+    const initial = await (await fetch(url + "/api/settings", { headers })).json();
+    assert.equal(initial.settings.modelName, "saved-model");
+    assert.equal(Object.hasOwn(initial.settings, "maxSteps"), false);
+    const save = await fetch(url + "/api/settings", { method: "PUT", headers, body: JSON.stringify({ maxSteps }) });
+    assert.equal(save.status, 200);
+    assert.equal(Object.hasOwn((await save.json()).settings, "maxSteps"), false);
+    assert.deepEqual(app.overrides, { modelName: "saved-model" });
+    assert.deepEqual(JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8")), { modelName: "saved-model" });
+    const response = await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "长任务", maxSteps: 1 }) });
+    const events = [];
+    for await (const event of readSseEvents(response.body)) events.push({ event: event.event, data: JSON.parse(event.data) });
+    assert.equal(turns, 31);
+    assert.equal(calls.length, 30);
+    assert.equal(events.at(-1).event, "done");
+    assert.equal(events.at(-1).data.steps, 31);
+    assert.ok(events.some((e) => e.data.text === "30轮后真正完成"));
+    assert.ok(!events.some((e) => e.event === "notice" || e.event === "error"));
+  });
+}
+
+test("等待写入确认时HTTP停止立即退出，不误报拒绝也不调用工具", async (t) => {
+  const calls = [];
+  const { url } = await boot(t, { token: "test", route: approvalRoute(), host: fakeHost(calls) });
+  const headers = { authorization: "Bearer test", "content-type": "application/json" };
+  const response = await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "提交前停止" }) });
+  const events = await readChatWithApproval(response, async (payload) => {
+    const stop = await fetch(url + `/api/chat/${payload.sessionId}/abort`, { method: "POST", headers, body: "{}" });
+    assert.equal((await stop.json()).aborted, true);
+  });
+  assert.equal(calls.length, 0);
+  assert.equal(events.at(-1).event, "done");
+  assert.equal(events.at(-1).data.aborted, true);
+  assert.ok(!events.some((e) => e.event === "error" || e.data.error));
+});
+
+test("实际工具错误结束HTTP轮次并释放会话锁，不自动重试", async (t) => {
+  let attempts = 0;
+  const host = fakeHost();
+  host.call = async () => { attempts++; throw new Error("真实工具异常"); };
+  const { url, sessions } = await boot(t, { token: "test", host });
+  const session = await sessions.create({});
+  const headers = { authorization: "Bearer test", "content-type": "application/json" };
+  for (let i = 0; i < 2; i++) {
+    const response = await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "工具异常", sessionId: session.id }) });
+    assert.equal(response.status, 200);
+    const text = await response.text();
+    assert.match(text, /TURN_FAILED/);
+    assert.match(text, /event: done/);
+  }
+  assert.equal(attempts, 2, "只有用户显式开始下一轮才再次调用");
+});
+
+test("HTTP非法对话请求返回明确错误，不进入模型循环", async (t) => {
+  const { url } = await boot(t, { token: "test", route: { models: () => assert.fail("不应进入模型") } });
+  const headers = { authorization: "Bearer test", "content-type": "application/json" };
+  for (const [body, status, code] of [
+    ["{", 400, "INVALID_JSON"],
+    [JSON.stringify({ text: "x", sessionId: "bad" }), 400, "INVALID_SESSION"],
+    [JSON.stringify({ text: "x".repeat(20001) }), 400, "INVALID_ARGUMENTS"],
+    [JSON.stringify({ text: "x".repeat(70000) }), 413, "PAYLOAD_TOO_LARGE"],
+  ]) {
+    const response = await fetch(url + "/api/chat", { method: "POST", headers, body });
+    assert.equal(response.status, status);
+    assert.equal((await response.json()).error.code, code);
+  }
+});
+
+test("超过12轮后HTTP停止仍生效，模型取消不误报失败且释放会话", async (t) => {
+  let turns = 0;
+  let reached;
+  const waiting = new Promise((resolve) => { reached = resolve; });
+  const route = {
+    ...scriptedRoute(),
+    async chat(_body, { signal }) {
+      turns++;
+      if (turns > 15) {
+        reached();
+        return new Promise((_resolve, reject) => {
+          const stop = () => reject(new DOMException("用户停止", "AbortError"));
+          if (signal.aborted) stop();
+          else signal.addEventListener("abort", stop, { once: true });
+        });
+      }
+      return sseResponse([
+        chunk({ choices: [{ delta: { tool_calls: [{ index: 0, id: `stop-${turns}`, function: { name: "learn_status", arguments: "{}" } }] } }] }),
+        "data: [DONE]\n\n",
+      ]);
+    },
+  };
+  const { url, sessions } = await boot(t, { token: "test", route, config: { maxSteps: 12 } });
+  const session = await sessions.create({});
+  const headers = { authorization: "Bearer test", "content-type": "application/json" };
+  const response = await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "运行直到停止", sessionId: session.id }) });
+  await waiting;
+  const duplicate = await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "不能并发", sessionId: session.id }) });
+  assert.equal(duplicate.status, 409);
+  assert.equal((await duplicate.json()).error.code, "TURN_RUNNING");
+  const stop = await fetch(url + `/api/chat/${session.id}/abort`, { method: "POST", headers, body: "{}" });
+  assert.equal((await stop.json()).aborted, true);
+  const events = [];
+  for await (const event of readSseEvents(response.body)) events.push({ event: event.event, data: JSON.parse(event.data) });
+  assert.equal(turns, 16);
+  assert.equal(events.at(-1).data.aborted, true);
+  assert.equal(events.at(-1).data.steps, 16);
+  assert.ok(!events.some((e) => e.event === "error"));
+  const stopped = await fetch(url + `/api/chat/${session.id}/abort`, { method: "POST", headers, body: "{}" });
+  assert.equal((await stopped.json()).aborted, false);
 });
