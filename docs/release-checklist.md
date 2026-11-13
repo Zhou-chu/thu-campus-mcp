@@ -61,6 +61,25 @@ node scripts/verify-prepared.mjs
 
 发布前请务必把上面两个 ❌ 补掉；本仓库的 README 也按此口径描述——只声明"编译通过"，不声明"可用"。
 
+## 4.2 WebUI 上线前必跑
+
+```powershell
+npm run e2e:web     # 真实 Chromium 跑一遍：配对页、五个视图、编号索引、设计目录、主题持久化、控制台无报错
+```
+
+这条命令会自己起一个临时服务端、自己找仓库内 Chromium，跑完即清理；目前覆盖 21 项断言。它抓过四个只在浏览器里才暴露的问题（meta 里的 frame-ancestors 无效、favicon 404、只改 hash 不重载、版本号注入取错字段），所以不要再绕过它。
+
+托管（HTTPS）自测：
+
+```powershell
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 2 -subj "//CN=127.0.0.1"
+$env:THU_CAMPUS_APP_TLS_CERT="...\cert.pem"; $env:THU_CAMPUS_APP_TLS_KEY="...\key.pem"
+node bin/thu-campus.mjs app serve --port 8998
+curl.exe -k https://127.0.0.1:8998/healthz
+```
+
+预期：`healthz` 200；首页 HTML 里 `?v=<版本号>` 已替换且无 `__ASSET_VERSION__` 残留；响应头含 `X-Frame-Options: DENY`。
+
 ## 4.5 常驻（可选，但推荐）
 
 ```powershell
@@ -94,4 +113,5 @@ git push origin main
 ```
 
 提交信息用简洁中文祈使句；一批相关改动一个提交，不要为每个小改动单独开提交或审查轮次。
+
 

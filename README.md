@@ -27,6 +27,9 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 **常驻**：`node bin/thu-campus.mjs app service install` 会给当前用户注册一个**登录计划任务**（Task Scheduler COM，不需要管理员权限；`schtasks.exe` 在普通权限下会被拒绝，已实测），`app service start|status|uninstall` 可启可查可卸；`install --startup` 是等价的「启动」文件夹备选。刻意不做 Windows 系统服务——SYSTEM 身份解不开 DPAPI 凭据，会变成永远登录不上的空壳。
 
+**界面**：纸墨单色的 PWA，规范见 `DESIGN.md`，色板/字阶/组件状态在 `webui/preview.html`（设置页有入口）。静态资源版本号由服务端在分发时注入（`__ASSET_VERSION__`），只有 `package.json` 一处来源。
+**上线前自检**：`npm run e2e:web` 用仓库内 Chromium 真跑一遍界面与交互（21 项断言），详见 `docs/release-checklist.md`。
+
 **会话保活**：运行时每 30 分钟自检四个服务的登录态（`THU_CAMPUS_APP_KEEPALIVE_MINUTES`，0 关闭），发现过期就调用既有的 `browser restore` 尝试续期，结果可在 `/api/keepalive` 与「设置」页查看。
 
 **模型自主闭环**：对话默认走 MadModel（清华统一认证直连，`app serve` 内置模型路由），不需要外部模型 API Key；`THU_CAMPUS_APP_MODEL_ROUTE=openai` 时才改接任意 OpenAI 兼容端点。
@@ -307,6 +310,7 @@ CI 在 Windows Node 22/24 上检查，不使用学校账号，不进入真实课
 兼容分服务模式：不加 `--unified` 的 `install` / `config` 仍保留原有三个注册；模块命令 `learnx`、`cloud`、`hetang` 仍可单独调用。统一入口才提供集中浏览器工具及自动恢复。原工具参考见 [TOOLS.md](docs/TOOLS.md)。
 
 浏览器持久化机制使用 Playwright 的 [Persistent Context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context) 和 [Storage State](https://playwright.dev/docs/api/class-browsercontext#browser-context-storage-state)；独立内核由其[官方浏览器安装器](https://playwright.dev/docs/browsers)准备。
+
 
 
 
