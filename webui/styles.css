@@ -1052,6 +1052,35 @@ a:focus-visible {
   min-width: 0;
 }
 
+/* 安全Markdown与workspace作业：沿用阅读字阶，不压缩正文。 */
+.rich { white-space: normal; }
+.rich p { margin: 0; white-space: pre-wrap; }
+.rich p + p { margin-top: var(--space-2); }
+.rich :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--serif);
+  font-size: var(--text-section);
+  font-weight: 400;
+  line-height: 1.5;
+  margin: var(--space-4) 0 var(--space-2);
+  padding: 0;
+  border: 0;
+}
+.rich h1 { font-size: var(--text-heading); }
+.rich h2 { font-size: var(--text-title); }
+.rich :is(ul, ol) { margin: var(--space-2) 0; padding-left: var(--space-5); }
+.rich li + li { margin-top: var(--space-1); }
+.rich a { color: var(--ink); text-underline-offset: .2em; overflow-wrap: anywhere; }
+.rich a:hover { text-decoration-thickness: 2px; }
+.rich a[aria-busy="true"] { opacity: .6; cursor: progress; }
+.download-error { display: block; font-size: var(--text-meta); }
+.job-meta { font: var(--text-code)/1.6 var(--mono); overflow-wrap: anywhere; }
+.job-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.job-logs { min-width: 0; }
+.job-logs > summary { font-size: var(--text-ui); }
+.job-logs pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-job { padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); }
+.tool-card > summary .tool-state { white-space: nowrap; }
+
 /* 对话里的 Markdown 表格：横向可滚，风格与正文一致 */
 .rich-table-wrap {
   overflow-x: auto;

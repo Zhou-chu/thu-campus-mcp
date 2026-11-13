@@ -1,0 +1,6 @@
+# Only the scientific sandbox recipe is part of the image build context.
+# Never send local browser state, credentials, dependencies, logs or screenshots.
+**
+!sandbox/
+!sandbox/Dockerfile
+!sandbox/requirements.txt

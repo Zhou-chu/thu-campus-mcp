@@ -1,6 +1,6 @@
 {
   "name": "thu-campus-mcp",
-  "version": "1.3.7",
+  "version": "1.4.0",
   "private": true,
   "description": "清华校园 MCP 整合包与独立 Agent 应用：网络学堂、清华云盘、荷塘雨课堂、MadModel",
   "license": "MIT",
@@ -24,6 +24,8 @@
     "app:smoke": "node test/app-smoke.mjs",
     "e2e:web": "node scripts/e2e-web.mjs",
     "e2e:stream": "node scripts/e2e-streaming.mjs",
+    "e2e:workspace": "node scripts/e2e-workspace.mjs",
+    "e2e:sandbox": "node scripts/e2e-sandbox.mjs",
     "verify:clients": "node scripts/verify-clients.mjs",
     "verify:release": "node scripts/verify-clients.mjs --strict",
     "check": "npm run typecheck && npm run build && npm test && npm run licenses:check && npm run audit:source",

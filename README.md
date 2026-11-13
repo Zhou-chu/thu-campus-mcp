@@ -27,12 +27,14 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 **常驻**：`node bin/thu-campus.mjs app service install` 会给当前用户注册一个**登录计划任务**（Task Scheduler COM，不需要管理员权限；`schtasks.exe` 在普通权限下会被拒绝，已实测），`app service start|status|uninstall` 可启可查可卸；`install --startup` 是等价的「启动」文件夹备选。刻意不做 Windows 系统服务——SYSTEM 身份解不开 DPAPI 凭据，会变成永远登录不上的空壳。
 
-**界面**：纸墨单色的 PWA，规范见 `DESIGN.md`，色板/字阶/组件状态在 `webui/preview.html`（设置页有入口）。静态资源版本号由服务端在分发时注入（`__ASSET_VERSION__`），只有 `package.json` 一处来源。
+**界面**：纸墨单色的PWA，规范见[UIdesign.md](<UIdesign.md>)，色板/字阶/组件状态在[组件预览](<webui/preview.html>)（设置页有入口）。静态资源版本号由服务端在分发时注入（`__ASSET_VERSION__`），只有 `package.json` 一处来源。
 **上线前自检**：`npm run e2e:web` 用仓库内 Chromium 真跑一遍界面与交互（21 项断言），详见 `docs/release-checklist.md`。
 
 **会话保活**：运行时每 30 分钟自检四个服务的登录态（`THU_CAMPUS_APP_KEEPALIVE_MINUTES`，0 关闭），发现过期就调用既有的 `browser restore` 尝试续期，结果可在 `/api/keepalive` 与「设置」页查看。
 
 **模型自主闭环**：对话默认走 MadModel（清华统一认证直连，`app serve` 内置模型路由），不需要外部模型 API Key；`THU_CAMPUS_APP_MODEL_ROUTE=openai` 时才改接任意 OpenAI 兼容端点。
+
+**实际任务执行**：独立Agent增加会话工作区工具，可经确认导入本地附件、读文本/解包ZIP、写代码、在真正隔离的Python/Node容器中运行，核对实际PDF/图表/代码并打包下载。代码仅容器执行，禁网、非root、只挂单会话目录；Docker或本地镜像未就绪时明确不可运行，绝不回退宿主机。镜像由应用所有者提前准备，Python环境用uv管理、无Conda。后台提交、退出成功、产物生成与校园提交分别验收，提交仍需独立确认。准备方式与限制见[Agent工作区与隔离执行](<docs/agent-workspace.md>)。
 
 发布前请照 [发布清单](docs/release-checklist.md) 走一遍，其中「未完成」的两项是真机验收。
 

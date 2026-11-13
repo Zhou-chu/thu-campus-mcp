@@ -171,7 +171,23 @@ route.chat({ model, messages, tools, stream, signal })  // → Response
 - `openai`：任意 OpenAI 兼容 Base URL，使用 `THU_CAMPUS_APP_MODEL_API_KEY`。
 - 两个路由都只在服务端持有密钥，绝不下发到客户端。
 
-Agent 循环：`system prompt → 用户消息 → 模型（带 tools）→ 若 tool_calls 则执行并回填 → 重复`，最多 `MAX_STEPS` 步，超限以 `notice` 提示并输出当前结果。工具执行失败作为 `role: "tool"` 的结果返回给模型，不中断循环；只有模型调用失败才 `error`。
+Agent循环：`system prompt → 用户消息 → 模型（带tools）→ 若tool_calls则执行并回填 → 重复`，不设固定工具轮数上限；由模型完成、用户停止或实际错误结束。工具失败作为`role: "tool"`结果回灌，不编造成功。
+
+### 7.1 会话工作区与隔离作业（1.4.0）
+
+校园MCP与应用工作区组合，增加`workspace_status/list/read/import/write/zip/run/job/stop`九项工具。工作区按有效会话UUID隔离。找到附件路径不等于读取内容：本机单文件导入必须确认精确来源，随后才能读文本/解包/处理二进制。普通工作区新文件写入不需校园写入确认，覆盖需另行确认。
+
+运行仅真实Linux Docker容器：本地镜像冻结image ID、非root、禁网络、只读根、无capabilities、no-new-privileges与资源/时间限制，只挂当前会话工作区，不挂凭据目录或Docker socket。镜像准备由应用所有者主动进行，执行时不pull/build/安装依赖，缺少则`SANDBOX_UNAVAILABLE`，永不宿主机回退。Python镜像由uv管理venv，无Conda。
+
+运行/导入审批不可被`requireApproval=false`关闭；确认绑定会话与完整冻结主脚本/精确来源，模型参数不能自行授权。后台job返回`running`不等于成功；退出码、日志、实际产物与校园提交分别确认。独立作业停止只回收精确自有容器，删除会话/运行时关闭也回收；恢复不明确状态不得假报成功。可信作业账本不在容器挂载范围内。
+
+| 方法 | 路径 | 行为 |
+| --- | --- | --- |
+| GET | `/api/workspaces/:sessionId/files?path=relative` | 设备鉴权、会话存在、路径边界，attachment下载真实文件，no-store/nosniff/CSP |
+| GET | `/api/workspaces/:sessionId/jobs/:jobId` | 当前会话作业的真实状态与有界输出 |
+| POST | `/api/workspaces/:sessionId/jobs/:jobId/stop` | 停止精确容器任务，不等同停止对话 |
+
+`POST /api/tools/workspace_*`拒绝绕过对话审批，工具目录使用“在对话中使用”。产物Markdown链接由前端fetch附Bearer并以Blob下载，不在URL放令牌。确认事件可含风险说明`risk`与完整冻结`args`，缺省保留校园写入风险语义。详见[工作区契约](<../../agent-workspace.md>)。
 
 ## 8. 写作用域（并行开发防冲突）
 

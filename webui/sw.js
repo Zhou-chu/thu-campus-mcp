@@ -1,5 +1,5 @@
-const CACHE = "campus-app-v5";
-const ASSETS = ["/", "/index.html", "/app.js?v=__ASSET_VERSION__", "/chat-stream.js", "/styles.css?v=__ASSET_VERSION__", "/manifest.webmanifest", "/icons/icon.svg"];
+const CACHE = "campus-app-v6";
+const ASSETS = ["/", "/index.html", "/app.js?v=__ASSET_VERSION__", "/chat-stream.js", "/workspace.js", "/styles.css?v=__ASSET_VERSION__", "/manifest.webmanifest", "/icons/icon.svg"];
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches

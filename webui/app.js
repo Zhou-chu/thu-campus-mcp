@@ -1,4 +1,5 @@
 import { readChatEvents } from "./chat-stream.js";
+import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABELS } from "./workspace.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -52,80 +53,29 @@ function toast(message) {
     node.hidden = true;
   }, 3200);
 }
-/** 最小安全 markdown：先当纯文本，再只识别围栏代码、行内代码与粗体。 */
 function renderRich(text) {
-  const fragment = document.createDocumentFragment();
-  const blocks = String(text ?? "").split(/```/);
-  blocks.forEach((block, index) => {
-    if (index % 2 === 1) {
-      const newline = block.indexOf("\n");
-      fragment.append(el("pre", { text: newline < 0 ? block : block.slice(newline + 1) }));
-      return;
-    }
-    const lines = block.split("\n");
-    let i = 0;
-    while (i < lines.length) {
-      if (i > 0) fragment.append(document.createTextNode("\n"));
-      const line = lines[i];
-      // Markdown 表格：当前行以 | 开头，且下一行是 |---| 分隔行
-      if (/^\s*\|/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
-        const header = splitRow(line);
-        const rows = [];
-        let j = i + 2;
-        while (j < lines.length && /^\s*\|/.test(lines[j])) {
-          rows.push(splitRow(lines[j]));
-          j += 1;
-        }
-        fragment.append(tableNode(header, rows));
-        i = j;
-        continue;
-      }
-      appendInline(fragment, line);
-      i += 1;
-    }
-  });
-  return fragment;
+  return renderMarkdown(text, { origin: location.origin, onArtifact: downloadArtifact });
 }
-function splitRow(line) {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
-}
-function appendInline(fragment, line) {
-  const parts = line.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g);
-  for (const part of parts) {
-    if (!part) continue;
-    if (part.startsWith("`") && part.endsWith("`") && part.length > 2)
-      fragment.append(el("code", { text: part.slice(1, -1) }));
-    else if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
-      fragment.append(el("strong", { text: part.slice(2, -2) }));
-    else fragment.append(document.createTextNode(part));
-  }
-}
-function tableNode(header, rows) {
-  const table = el("table", { class: "rich-table" });
-  const headRow = el("tr");
-  for (const cell of header) headRow.append(el("th", { text: cell }));
-  const thead = el("thead");
-  thead.append(headRow);
-  const tbody = el("tbody");
-  for (const row of rows) {
-    const tr = el("tr");
-    for (const cell of row) tr.append(el("td", { text: cell }));
-    tbody.append(tr);
-  }
-  table.append(thead, tbody);
-  const wrap = el("div", { class: "rich-table-wrap" });
-  wrap.append(table);
-  return wrap;
+async function downloadArtifact(link, anchor) {
+  if (anchor.getAttribute("aria-busy") === "true") return;
+  anchor.setAttribute("aria-busy", "true");
+  anchor.parentNode?.querySelector(".download-error")?.remove();
+  try {
+    const { blob, filename } = await fetchArtifact(link.href, { origin: location.origin, base: state.base, token: state.token });
+    const url = URL.createObjectURL(blob);
+    const download = el("a", { href: url, download: filename, hidden: true });
+    document.body.append(download);
+    download.click();
+    download.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    anchor.after(el("span", { class: "download-error error", role: "alert", text: "下载失败：" + error.message + " 点击链接重试。" }));
+  } finally { anchor.removeAttribute("aria-busy"); }
 }
 function endpoint(path) {
   return (state.base || "").replace(/\/+$/, "") + path;
 }
-async function api(path, { method = "GET", body } = {}) {
+async function api(path, { method = "GET", body, signal } = {}) {
   const headers = {};
   if (body !== undefined) headers["content-type"] = "application/json";
   if (state.token) headers.authorization = "Bearer " + state.token;
@@ -133,6 +83,7 @@ async function api(path, { method = "GET", body } = {}) {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
   let data = {};
   try {
@@ -411,6 +362,82 @@ function updateReasoning(block) {
   block.contentNode.textContent = block.text || "";
   scrollIfNearBottom(block.contentNode);
 }
+const workspaceJobs = new Map();
+const jobPoller = createJobPoller({
+  isActive: () => state.view === "chat" && !document.hidden && !!state.token && !$("#app").hidden,
+  getJobs: () => [...workspaceJobs.values()].filter(job => job.sessionId === state.sessionId),
+  readJob: (job, signal) => api(job.statusUrl, { signal }),
+  onUpdate: job => rememberJob(job),
+  onError: (job, error) => rememberJob({ ...job, requestError: "查询失败：" + error.message }),
+});
+function rememberJob(job) {
+  workspaceJobs.set(job.statusUrl, job);
+  for (const block of state.messages) {
+    if (block.job?.statusUrl === job.statusUrl) { block.job = job; applyToolState(block); }
+  }
+}
+function attachJob(block) {
+  const parsed = workspaceJob(block.result);
+  if (parsed) {
+    block.job = parsed.state !== "running" ? parsed : workspaceJobs.get(parsed.statusUrl) || parsed;
+    workspaceJobs.set(parsed.statusUrl, block.job);
+  }
+}
+function useInChat(text) {
+  state.view = "chat";
+  render();
+  const input = $("#composer");
+  input.value = text;
+  autoGrow(input);
+  input.focus();
+}
+function drawWorkspaceJob(block) {
+  const job = block.job;
+  const panel = clear(block.jobNode);
+  panel.hidden = !job;
+  if (!job) return;
+  const info = [job.runtime, job.scriptPath].filter(Boolean).join(" · ");
+  if (info) panel.append(el("div", { class: "job-meta", text: info }));
+  const actions = el("div", { class: "job-actions" });
+  if (job.state === "running") actions.append(el("button", {
+    class: "ghost danger", type: "button", text: job.stopping ? "正在停止…" : "停止作业", disabled: job.stopping,
+    onclick: async () => {
+      rememberJob({ ...job, stopping: true });
+      jobPoller.sync();
+      try {
+        const data = await api(job.statusUrl + "/stop", { method: "POST" });
+        const next = data?.ok === true ? workspaceJob(data.job) : null;
+        if (!next || next.statusUrl !== job.statusUrl) throw new Error("停止响应无效，请查询实际状态。");
+        rememberJob(next);
+      } catch (error) {
+        const latest = workspaceJobs.get(job.statusUrl) || job;
+        rememberJob({ ...latest, stopping: false, requestError: "停止失败：" + error.message });
+      } finally { jobPoller.sync(); }
+    },
+  }));
+  if (job.requestError) {
+    panel.append(el("div", { class: "error", role: "alert", text: job.requestError }));
+    actions.append(el("button", {
+      class: "ghost", type: "button", text: "重试查询",
+      onclick: async () => {
+        const latest = workspaceJobs.get(job.statusUrl) || job;
+        rememberJob({ ...latest, requestError: "" });
+        jobPoller.sync();
+      },
+    }));
+  }
+  if (["failed", "timed_out", "interrupted"].includes(job.state)) actions.append(el("button", {
+    class: "ghost", type: "button", text: "在对话中处理",
+    onclick: () => useInChat(`请检查作业${job.jobId}的状态与日志，说明失败原因并给出恢复方案；再次执行前先确认。`),
+  }));
+  if (actions.childNodes.length) panel.append(actions);
+  const logs = el("details", { class: "job-logs", open: !!block.logsOpen });
+  logs.addEventListener("toggle", () => { block.logsOpen = logs.open; });
+  logs.append(el("summary", { text: "作业日志" }));
+  for (const key of ["stdout", "stderr"]) logs.append(el("div", { class: "small muted", text: key }), el("pre", { text: job[key] || "（暂无输出）" }));
+  if (job.error) logs.append(el("pre", { text: pretty(job.error) }));
+  panel.append(logs);
+}
 function toolCardFor(block) {
   const details = el("details", { class: "tool-card", dataset: { state: block.state || "done" } });
   const summary = el("summary", {});
@@ -420,23 +447,34 @@ function toolCardFor(block) {
   const body = el("div", { class: "stack" });
   const args = el("pre", { text: pretty(block.args) });
   const result = el("pre", {});
-  body.append(el("div", { class: "small muted", text: "参数" }), args, el("div", { class: "small muted", text: "结果" }), result);
+  const resultLabel = el("div", { class: "small muted", text: "结果" });
+  const jobNode = el("div", { class: "workspace-job stack", hidden: true });
+  details.open = !!block.open;
+  details.addEventListener("toggle", () => { block.open = details.open; });
+  body.append(jobNode, el("div", { class: "small muted", text: "参数" }), args, resultLabel, result);
   details.append(summary, body);
   block.node = details;
   block.summary = summary;
   block.stateText = stateText;
   block.resultNode = result;
+  block.resultLabel = resultLabel;
+  block.jobNode = jobNode;
+  attachJob(block);
   applyToolState(block);
   return details;
 }
 function applyToolState(block) {
   if (!block.node) return;
-  block.node.dataset.state = block.state || "done";
+  const job = block.job;
+  block.node.dataset.state = job ? job.state === "running" ? "running" : job.state === "succeeded" ? "done" : "failed" : block.state || "done";
   clear(block.stateText);
-  if (block.state === "running") {
+  if (job) block.stateText.textContent = JOB_LABELS[job.state];
+  else if (block.state === "running") {
     block.stateText.append(el("span", { class: "spinner" }), document.createTextNode("执行中"));
   } else if (block.state === "failed") block.stateText.textContent = "失败";
   else block.stateText.textContent = "完成";
+  block.resultNode.hidden = block.resultLabel.hidden = !!job;
+  drawWorkspaceJob(block);
   if (block.result !== undefined && block.resultNode)
     block.resultNode.textContent = pretty(block.result);
   else if (block.error && block.resultNode) block.resultNode.textContent = JSON.stringify(block.error, null, 2);
@@ -446,7 +484,7 @@ function confirmCardFor(block) {
   const node = el("div", { class: "confirm-card" });
   node.append(
     el("h3", { text: "确认操作" }),
-    el("div", { class: "small", text: "此操作会改动校园数据。" }),
+    el("div", { class: "small", text: typeof block.risk === "string" && block.risk.trim() ? block.risk : "此操作会改动校园数据。" }),
     el("div", { class: "tool-name", text: block.name }),
     el("pre", { text: pretty(block.args) }),
   );
@@ -683,12 +721,14 @@ async function sendTurn(text) {
             card.state = payload.ok ? "done" : "failed";
             card.result = payload.ok ? payload.result : undefined;
             card.error = payload.ok ? undefined : payload.error;
+            attachJob(card);
             applyToolState(card);
+            jobPoller.sync();
           }
         }
         scrollIfNearBottom();
       } else if (event === "confirm") {
-        const card = { kind: "confirm", callId: payload.callId, name: payload.name, args: payload.args };
+        const card = { kind: "confirm", callId: payload.callId, name: payload.name, args: payload.args, risk: payload.risk };
         state.messages.push(card);
         appendBlock(card);
       } else if (event === "notice") addStatus({ kind: "notice", message: payload.message || payload.code });
@@ -1046,7 +1086,8 @@ function toolItem(tool) {
     form.append(label);
   }
   const output = el("pre", {});
-  const submit = el("button", { class: "primary", type: "submit", text: "调用" });
+  const workspaceTool = tool.service === "workspace" || tool.name.startsWith("workspace_");
+  const submit = el("button", { class: "primary", type: "submit", text: workspaceTool ? "在对话中使用" : "调用" });
   form.append(submit, output);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1058,6 +1099,10 @@ function toolItem(tool) {
         else if (schema.type === "array") args[key] = input.value.split(",").map((v) => v.trim()).filter(Boolean);
         else args[key] = input.value;
       }
+    }
+    if (workspaceTool) {
+      useInChat(`请使用工具${tool.name}，参数：${JSON.stringify(args)}。需要执行或导入时请先展示风险并等待我的确认。`);
+      return;
     }
     submit.disabled = true;
     output.textContent = "调用中…";
@@ -1224,6 +1269,7 @@ async function loadSessions() {
   }
 }
 function render() {
+  jobPoller.stop();
   const view = $("#view");
   clear(view);
   for (const tab of document.querySelectorAll(".tab"))
@@ -1237,6 +1283,7 @@ function render() {
   };
   view.append((views[state.view] || chatView)());
   syncModelPickers();
+  jobPoller.sync();
   if (state.view === "chat") {
     const scroller = $("#messages");
     scroller.scrollTop = scroller.scrollHeight;
@@ -1244,6 +1291,8 @@ function render() {
 }
 async function start() {
   bootToken();
+  document.addEventListener("visibilitychange", () => jobPoller.sync());
+  window.addEventListener("pagehide", () => jobPoller.stop());
   for (const tab of document.querySelectorAll(".tab"))
     tab.addEventListener("click", () => {
       state.view = tab.dataset.view;

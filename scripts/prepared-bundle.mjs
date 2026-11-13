@@ -43,6 +43,16 @@ const requiredEntries = [
   "lib/app/keepalive.mjs",
   "lib/app/states.mjs",
   "lib/app/runtime-state.mjs",
+  "lib/app/workspace.mjs",
+  "lib/app/workspace-http.mjs",
+  "lib/app/workspace-files.mjs",
+  "lib/app/workspace-paths.mjs",
+  "lib/app/workspace-zip.mjs",
+  "lib/app/sandbox.mjs",
+  "webui/workspace.js",
+  "sandbox/Dockerfile",
+  "sandbox/requirements.txt",
+  ".dockerignore",
 ];
 for (const entry of requiredEntries) {
   const present = await lstat(path.join(stage, entry)).then(
