@@ -585,40 +585,64 @@ function sessionsView() {
       }),
     ]),
   );
-  if (!state.sessions.length) wrap.append(el("div", { class: "empty", text: "还没有历史会话。" }));
-  for (const session of state.sessions) {
-    const open = el("button", { class: "item", type: "button" }, [
-      el("div", { class: "grow stack", style: "gap:2px" }, [
-        el("div", { class: "item-title", text: session.title || "未命名对话" }),
-        el("div", {
-          class: "small muted",
-          text: `${new Date(session.updatedAt).toLocaleString()} · ${session.messageCount} 条`,
-        }),
-      ]),
-    ]);
-    open.addEventListener("click", async () => {
-      try {
-        const data = await api(`/api/sessions/${session.id}`);
-        state.sessionId = data.session.id;
-        state.messages = blocksFromSession(data.session);
-        state.view = "chat";
-        render();
-      } catch (e) {
-        toast(e.message);
-      }
+  const search = el("input", { type: "search", placeholder: "搜索会话标题…", "aria-label": "搜索会话" });
+  const list = el("div", { class: "list" });
+  wrap.append(search, list);
+  const draw = () => {
+    clear(list);
+    const keyword = search.value.trim().toLowerCase();
+    const matched = state.sessions.filter(
+      (session) => !keyword || String(session.title || "").toLowerCase().includes(keyword),
+    );
+    if (!matched.length) {
+      list.append(
+        el("div", { class: "empty", text: keyword ? "没有匹配的会话。" : "还没有历史会话。" }),
+      );
+      return;
+    }
+    for (const session of matched) list.append(sessionRow(session));
+  };
+  search.addEventListener("input", draw);
+  draw();
+  return wrap;
+}
+function sessionRow(session) {
+  const row = el("div", { class: "session-row" });
+  const open = el("button", { class: "item", type: "button" }, [
+    el("span", { class: "grow stack" }, [
+      el("span", { class: "item-title", text: session.title || "未命名对话" }),
+      el("span", {
+        class: "small muted",
+        text: new Date(session.updatedAt).toLocaleString() + " · " + session.messageCount + " 条",
+      }),
+    ]),
+  ]);
+  open.addEventListener("click", async () => {
+    try {
+      const data = await api("/api/sessions/" + session.id);
+      state.sessionId = data.session.id;
+      state.messages = blocksFromSession(data.session);
+      state.view = "chat";
+      render();
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+  const startRename = () => {
+    clear(row);
+    const input = el("input", {
+      type: "text",
+      value: session.title || "",
+      maxlength: "80",
+      "aria-label": "会话标题",
     });
-    const remove = el("button", {
-      class: "ghost danger",
+    const save = el("button", {
+      class: "primary",
       type: "button",
-      text: "删除",
-      onclick: async (event) => {
-        event.stopPropagation();
+      text: "保存",
+      onclick: async () => {
         try {
-          await api(`/api/sessions/${session.id}`, { method: "DELETE" });
-          if (state.sessionId === session.id) {
-            state.sessionId = null;
-            state.messages = [];
-          }
+          await api("/api/sessions/" + session.id, { method: "PATCH", body: { title: input.value } });
           await loadSessions();
           render();
         } catch (e) {
@@ -626,9 +650,45 @@ function sessionsView() {
         }
       },
     });
-    wrap.append(el("div", { class: "row" }, [el("div", { class: "grow" }, [open]), remove]));
-  }
-  return wrap;
+    const cancel = el("button", { class: "ghost", type: "button", text: "取消", onclick: () => render() });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") void save.click();
+      if (event.key === "Escape") cancel.click();
+    });
+    row.append(input, save, cancel);
+    input.focus();
+    input.select();
+  };
+  const rename = el("button", {
+    class: "ghost",
+    type: "button",
+    text: "重命名",
+    onclick: (event) => {
+      event.stopPropagation();
+      startRename();
+    },
+  });
+  const remove = el("button", {
+    class: "ghost danger",
+    type: "button",
+    text: "删除",
+    onclick: async (event) => {
+      event.stopPropagation();
+      try {
+        await api("/api/sessions/" + session.id, { method: "DELETE" });
+        if (state.sessionId === session.id) {
+          state.sessionId = null;
+          state.messages = [];
+        }
+        await loadSessions();
+        render();
+      } catch (e) {
+        toast(e.message);
+      }
+    },
+  });
+  row.append(open, rename, remove);
+  return row;
 }
 function servicesView() {
   const wrap = el("div", { class: "stack" });
@@ -1079,9 +1139,6 @@ function render() {
     settings: settingsView,
   };
   view.append((views[state.view] || chatView)());
-  if (state.view === "sessions") void loadSessions().then(() => {
-    if (state.view === "sessions") render();
-  });
   if (state.view === "chat") {
     const scroller = $("#view");
     scroller.scrollTop = scroller.scrollHeight;
@@ -1093,6 +1150,11 @@ async function start() {
     tab.addEventListener("click", () => {
       state.view = tab.dataset.view;
       render();
+      // 只在切到会话页时取一次数据；不能让 render 自己触发加载，否则会自激。
+      if (state.view === "sessions")
+        void loadSessions().then(() => {
+          if (state.view === "sessions") render();
+        });
     });
   const applyTheme = (mode) => {
     document.documentElement.dataset.theme = mode;
@@ -1130,6 +1192,7 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
 
 
 

@@ -636,3 +636,29 @@ test("静态 HTML 的版本号来自 version 参数，而不是 config", async (
   assert.equal(icon.status, 200, "favicon 不应 404");
 });
 
+
+test("会话可重命名，空标题与不存在的会话被拒", async (t) => {
+  const { url, pairing } = await boot(t, {});
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const id = "11111111-1111-4111-8111-111111111111";
+  const created = await fetch(url + `/api/sessions/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ title: "改过的标题" }),
+  });
+  assert.equal(created.status, 404, "会话不存在时应 404");
+  const empty = await fetch(url + `/api/sessions/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ title: "   " }),
+  });
+  assert.equal(empty.status, 400, "空标题先于存在性校验被拒");
+  const long = await fetch(url + `/api/sessions/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ title: "x".repeat(200) }),
+  });
+  assert.equal(long.status, 400, "超长标题先于存在性校验被拒");
+});
+

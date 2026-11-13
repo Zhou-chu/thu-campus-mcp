@@ -908,3 +908,20 @@ h2[data-eyebrow]::before {
 .skeleton-narrow {
   width: 42%;
 }
+
+/* 会话行：主体、重命名、删除并排，避免按钮套按钮 */
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+.session-row > .item {
+  border-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+.session-row > input {
+  flex: 1;
+  min-width: 0;
+}

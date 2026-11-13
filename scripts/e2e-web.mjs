@@ -8,7 +8,7 @@
  * 用法：node scripts/e2e-web.mjs [--headed] [--json]
  */
 import path from "node:path";
-import { mkdtemp, rm, readdir, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { chromium } from "playwright-core";
 import { createAppServer } from "../lib/app/server.mjs";
@@ -19,7 +19,10 @@ import { SessionStore } from "../lib/app/sessions.mjs";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const headed = process.argv.includes("--headed");
 const asJson = process.argv.includes("--json");
-const TOKEN = "e2e-token";
+// 可选：直接对已经在跑的目标做验收（例如解压后的便携包），不自己起服务。
+const urlArg = process.argv.find((arg) => arg.startsWith("--url="))?.slice("--url=".length) || "";
+const tokenArg = process.argv.find((arg) => arg.startsWith("--token="))?.slice("--token=".length);
+const TOKEN = tokenArg || "e2e-token";
 const TOOLS = [
   { name: "learn_status", description: "检查网络学堂认证配置", readOnly: true },
   { name: "learn_list_courses", description: "列出课程", readOnly: true },
@@ -87,13 +90,28 @@ async function findChromium() {
 }
 
 const checks = [];
+const startedAt = Date.now();
+// 看门狗：任何一个浏览器动作卡住都不该让脚本无限等待。
+const watchdog = setTimeout(() => {
+  process.stderr.write(`\n✖ 端到端超时（${Math.round((Date.now() - startedAt) / 1000)}s 未完成）\n`);
+  process.exit(1);
+}, 120000);
+watchdog.unref();
+function step(label) {
+  process.stdout.write(`  · ${label}\n`);
+}
 function record(name, ok, detail = "") {
   checks.push({ name, ok, detail });
+  process.stdout.write(`  ${ok ? "✔" : "✖"} ${name}${detail ? `（${detail}）` : ""}\n`);
   if (!ok) throw new Error(`${name}${detail ? `：${detail}` : ""}`);
 }
 
 async function main() {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "campus-e2e-"));
+  let app = null;
+  let stateDir = "";
+  let base = urlArg ? urlArg.replace(/\/+$/, "") : "";
+  if (!base) {
+  stateDir = await mkdtemp(path.join(tmpdir(), "campus-e2e-"));
   const config = {
     root: ROOT,
     host: "127.0.0.1",
@@ -112,19 +130,29 @@ async function main() {
     keepAliveMinutes: 30,
   };
   const devices = new DeviceStore(stateDir, { encrypt: async (buffer) => buffer });
-  const app = createAppServer({
+  const sessionStore = new SessionStore(stateDir);
+  for (const title of ["把本学期课程更新到 D:\\网络学堂", "列出尚未提交的作业", "雨课堂签到的自动提醒"])
+    await sessionStore.create({ title });
+  app = createAppServer({
     config,
     host: fakeHost(),
     route,
     devices,
     pairing: new PairingCodes(),
-    sessions: new SessionStore(stateDir),
+    sessions: sessionStore,
     version: config.version,
     webuiDir: path.join(ROOT, "webui"),
     keepAlive: null,
   });
-  const base = await app.listen();
-  const browser = await chromium.launch({ executablePath: await findChromium(), headless: !headed });
+  base = await app.listen();
+  } else {
+    record("目标可达", (await fetch(base + "/healthz")).ok, base);
+  }
+  const browser = await chromium.launch({
+    executablePath: await findChromium(),
+    headless: !headed,
+    timeout: 20000,
+  });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const consoleErrors = [];
   page.on("console", (message) => {
@@ -143,8 +171,15 @@ async function main() {
     record("主应用隐藏", !(await page.locator("#app").isVisible()));
 
     // 2. 注入版本号：页面里不应残留占位符
+    const expectedVersion = urlArg
+      ? JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8")).version
+      : "9.9.9";
     const rawHtml = await (await fetch(`${base}/`)).text();
-    record("服务端注入版本号", rawHtml.includes("?v=9.9.9") && !rawHtml.includes("__ASSET_VERSION__"));
+    record(
+      "服务端注入版本号",
+      rawHtml.includes(`?v=${expectedVersion}`) && !rawHtml.includes("__ASSET_VERSION__"),
+      `期望 ${expectedVersion}`,
+    );
 
     // 3. 带令牌 → 主应用
     await page.goto(`${base}/?e2e=1#token=${TOKEN}`, { waitUntil: "load" });
@@ -169,6 +204,30 @@ async function main() {
     });
     record("工具行挂上编号计数器", String(pseudo.content).includes("counter("), JSON.stringify(pseudo));
     record("编号按行递增", String(pseudo.increment).includes("entry"), JSON.stringify(pseudo));
+
+    // 5.5 会话：搜索与重命名（这两个是纯前端交互，只有真浏览器能验）
+    step("切到会话页");
+    await page.click('button[data-view="sessions"]');
+    await page.waitForSelector(".session-row");
+    step("会话行已渲染");
+    record("会话列表三条", (await page.locator(".session-row").count()) === 3);
+    step("准备填搜索框");
+    await page.fill('input[type="search"]', "雨课堂", { timeout: 8000 });
+    step("搜索已填");
+    const filteredCount = await page.locator(".session-row").count();
+    const searchValue = await page.inputValue('input[type="search"]');
+    record("搜索按标题过滤", filteredCount === 1, `行数=${filteredCount} 输入=${searchValue}`);
+    await page.fill('input[type="search"]', "");
+    record("清空搜索恢复全部", (await page.locator(".session-row").count()) === 3);
+    step("准备点重命名");
+    const firstRow = page.locator(".session-row").first();
+    await firstRow.getByRole("button", { name: "重命名" }).click({ timeout: 8000 });
+    step("已进入重命名");
+    const titleInput = firstRow.locator('input[type="text"]');
+    await titleInput.fill("端到端改名");
+    await titleInput.press("Enter");
+    await page.waitForFunction(() => document.body.innerText.includes("端到端改名"), null, { timeout: 8000 });
+    record("重命名即时生效", true);
 
     // 6. 设置页：常驻卡片与设计目录入口
     await page.click('button[data-view="settings"]');
@@ -209,27 +268,34 @@ async function main() {
     record("控制台无报错", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
   } finally {
     await browser.close().catch(() => {});
-    await app.close?.().catch?.(() => {});
-    await rm(stateDir, { recursive: true, force: true }).catch(() => {});
+    if (app) await app.close?.().catch?.(() => {});
+    if (stateDir) await rm(stateDir, { recursive: true, force: true }).catch(() => {});
   }
 
   if (asJson) process.stdout.write(JSON.stringify({ ok: true, checks }, null, 2) + "\n");
   else {
-    for (const check of checks) process.stdout.write(`  ✔ ${check.name}${check.detail ? `（${check.detail}）` : ""}\n`);
     process.stdout.write(`\nWebUI 端到端通过 ${checks.length} 项。\n`);
   }
+  // 浏览器与临时服务都已关闭；显式退出，避免个别句柄把进程吊住。
+  process.exit(0);
 }
 
 main().catch((error) => {
   const failed = checks.filter((check) => !check.ok).at(-1);
   if (asJson) process.stdout.write(JSON.stringify({ ok: false, failed: failed?.name, error: error.message }, null, 2) + "\n");
   else {
-    for (const check of checks)
-      process.stdout.write(`  ${check.ok ? "✔" : "✖"} ${check.name}${check.detail ? `（${check.detail}）` : ""}\n`);
     process.stderr.write(`\n✖ ${error.message}\n`);
   }
   process.exit(1);
 });
+
+
+
+
+
+
+
+
 
 
 

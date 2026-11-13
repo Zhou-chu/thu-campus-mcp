@@ -29,6 +29,8 @@ jobs:
       - run: npm ci
       - run: node bin/thu-campus.mjs browser install
       - run: npm run check
+      - name: WebUI 端到端（真实 Chromium）
+        run: npm run e2e:web
       - run: npm run verify:clients
       - run: npm run smoke
       - run: npm run bundle
@@ -107,6 +109,8 @@ jobs:
       - name: 发布门禁（CI 无 DevEco，因此只要求四项目标中的三项）
         run: node scripts/verify-clients.mjs --strict --require webui,desktop,android,runtime
       - run: npm run check
+      - name: WebUI 端到端（真实 Chromium）
+        run: npm run e2e:web
       - run: npm run bundle
       - run: npm run bundle:prepared
       - run: node scripts/verify-prepared.mjs
@@ -128,3 +132,4 @@ jobs:
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
           if-no-files-found: error
+
