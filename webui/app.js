@@ -12,6 +12,11 @@ const state = {
   tools: [],
   sessions: [],
   settings: null,
+  models: [],
+  selectedModel: "",
+  modelsLoading: false,
+  modelSaving: false,
+  modelsError: "",
   deeplinkCode: "",
 };
 const el = (tag, props = {}, children = []) => {
@@ -253,6 +258,7 @@ async function submitPair() {
 async function refreshMeta() {
   try {
     state.meta = await api("/api/meta");
+    acceptModels(state.meta.models, state.meta.model?.name);
     $("#health-dot").className = "dot ok";
     $("#account").textContent = state.meta.account?.masked || state.meta.hostname || "";
     return true;
@@ -265,6 +271,77 @@ async function refreshMeta() {
     toast(e.message);
     return false;
   }
+}
+/* ---------------- 模型目录与选择 ---------------- */
+function acceptModels(models, current) {
+  state.models = Array.isArray(models) ? models.filter((model) => model?.id) : [];
+  state.selectedModel = current || state.selectedModel || state.models[0]?.id || "";
+  state.modelsError = state.models.length ? "" : "未获取到可用模型，请刷新模型列表。";
+}
+function syncModelPickers() {
+  const send = $("#chat-send");
+  if (send) send.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel;
+  for (const picker of document.querySelectorAll(".model-picker")) picker.updateModels();
+}
+async function refreshModels() {
+  if (state.modelsLoading || state.modelSaving) return;
+  state.modelsLoading = true;
+  state.modelsError = "";
+  syncModelPickers();
+  try {
+    const data = await api("/api/models?refresh=1");
+    acceptModels(data.models, data.current);
+  } catch (e) {
+    state.modelsError = e.message + (state.models.length ? "（仍显示上次成功获取的列表）" : "");
+  } finally {
+    state.modelsLoading = false;
+    syncModelPickers();
+  }
+}
+function modelPicker(id) {
+  const select = el("select", { id, "aria-label": "对话模型" });
+  const refresh = el("button", { class: "ghost", type: "button", text: "刷新模型", onclick: refreshModels });
+  const status = el("span", { class: "small muted model-status", role: "status", "aria-live": "polite" });
+  const label = el("label", { class: "model-field", htmlFor: id }, [el("span", { text: "对话模型" }), select]);
+  const picker = el("div", { class: "model-picker" }, [label, refresh, status]);
+  picker.updateModels = () => {
+    clear(select);
+    for (const model of state.models)
+      select.append(el("option", { value: model.id, text: model.label === model.id ? model.id : `${model.label} · ${model.id}` }));
+    if (!state.models.some((model) => model.id === state.selectedModel)) {
+      select.prepend(el("option", {
+        value: state.selectedModel,
+        text: state.selectedModel ? `${state.selectedModel}（当前目录中不可用）` : "暂无可用模型",
+        disabled: true,
+      }));
+    }
+    select.value = state.selectedModel;
+    select.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.models.length;
+    refresh.disabled = state.busy || state.modelSaving || state.modelsLoading;
+    status.className = "small model-status " + (state.modelsError ? "error" : "muted");
+    status.textContent = state.modelsLoading ? "正在拉取全部模型…" : state.modelSaving ? "正在保存…" : state.modelsError || `共${state.models.length}个模型 · 选择后自动保存`;
+  };
+  select.addEventListener("change", async () => {
+    const previous = state.selectedModel;
+    const chosen = select.value;
+    state.modelSaving = true;
+    syncModelPickers();
+    try {
+      const data = await api("/api/settings", { method: "PUT", body: { modelName: chosen } });
+      state.settings = data.settings;
+      state.selectedModel = data.settings.modelName;
+      if (state.meta?.model) state.meta.model.name = state.selectedModel;
+      toast("模型已切换为" + state.selectedModel);
+    } catch (e) {
+      state.selectedModel = previous;
+      toast("模型未切换：" + e.message);
+    } finally {
+      state.modelSaving = false;
+      syncModelPickers();
+    }
+  });
+  picker.updateModels();
+  return picker;
 }
 /* ---------------- 对话 ---------------- */
 function blocksFromSession(session) {
@@ -406,7 +483,7 @@ function chatView() {
     rows: 1,
     placeholder: "问我：把本学期课程更新到 D:\\网络学堂……（Enter 发送，Shift+Enter 换行）",
   });
-  const sendButton = el("button", { class: "primary", type: "button", text: "发送" });
+  const sendButton = el("button", { id: "chat-send", class: "primary", type: "button", text: "发送" });
   const stopButton = el("button", { class: "ghost danger", type: "button", text: "停止", hidden: true });
   const composer = el("div", { class: "composer" }, [textarea, sendButton, stopButton]);
   const quick = el("div", { class: "quick", role: "group", "aria-label": "常用指令" });
@@ -426,7 +503,8 @@ function chatView() {
       }),
     );
   }
-  wrap.append(messages, quick, composer);
+  const dock = el("div", { class: "chat-dock" }, [modelPicker("chat-model"), quick, composer]);
+  wrap.append(messages, dock);
   if (!state.messages.length && !state.sessionId) {
     messages.append(
       el("div", { class: "empty", text: "还没有对话。先点「服务」确认登录状态，再开始提问。" }),
@@ -435,7 +513,7 @@ function chatView() {
   for (const block of state.messages) messages.append(blockNode(block));
   const send = async () => {
     const text = textarea.value.trim();
-    if (!text || state.busy) return;
+    if (!text || state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel) return;
     textarea.value = "";
     autoGrow(textarea);
     await sendTurn(text, { messages, sendButton, stopButton, textarea });
@@ -496,6 +574,7 @@ function scrollIfNearBottom(container) {
 }
 async function sendTurn(text, ui) {
   state.busy = true;
+  syncModelPickers();
   ui.sendButton.disabled = true;
   ui.stopButton.hidden = false;
   const empty = $("#messages .empty");
@@ -519,7 +598,7 @@ async function sendTurn(text, ui) {
     const response = await fetch(endpoint("/api/chat"), {
       method: "POST",
       headers,
-      body: JSON.stringify({ text, sessionId: state.sessionId || undefined }),
+      body: JSON.stringify({ text, sessionId: state.sessionId || undefined, model: state.selectedModel || undefined }),
       signal: state.controller.signal,
     });
     if (!response.ok || !response.body) {
@@ -566,10 +645,18 @@ async function sendTurn(text, ui) {
         } else if (event === "reasoning") {
           /* 推理增量不单独渲染，避免干扰阅读 */
         } else if (event === "message") {
-          if (payload.role === "assistant" && typeof payload.content === "string" && payload.content && !assistant?.text) {
-            assistant = { kind: "assistant", text: payload.content };
-            state.messages.push(assistant);
-            appendBlock(assistant);
+          if (payload.role === "assistant") {
+            if (frame) cancelAnimationFrame(frame);
+            if (assistant) {
+              assistant.text = payload.content || assistant.text;
+              flush();
+            } else if (payload.content) {
+              const completed = { kind: "assistant", text: payload.content, done: true };
+              state.messages.push(completed);
+              appendBlock(completed);
+            }
+            // 每个模型步骤独立成段；快速完成时也必须提交最后一帧。
+            assistant = null;
           }
         } else if (event === "tool") {
           if (payload.phase === "start") {
@@ -613,7 +700,7 @@ async function sendTurn(text, ui) {
   } finally {
     state.busy = false;
     state.controller = null;
-    ui.sendButton.disabled = false;
+    syncModelPickers();
     ui.stopButton.hidden = true;
     scrollIfNearBottom();
     void loadSessions();
@@ -1066,16 +1153,11 @@ function settingsView() {
       el("div", { class: "small", text: `账号 ${meta.account?.masked || "未绑定"}` }),
     ]),
   );
-  const modelInput = el("input", { type: "text", placeholder: meta.model?.name || "自动选择" });
   const stepsInput = el("input", { type: "number", min: 1, max: 24 });
-  const save = el("button", { class: "primary", type: "button", text: "保存设置" });
+  const save = el("button", { class: "primary", type: "button", text: "保存设置", disabled: true });
   const settingsCard = el("div", { class: "card stack" }, [el("h3", { text: "对话偏好" })]);
   settingsCard.append(
-    (() => {
-      const label = el("label", { class: "field" });
-      label.append(el("span", { text: "模型名" }), modelInput);
-      return label;
-    })(),
+    modelPicker("settings-model"),
     (() => {
       const label = el("label", { class: "field" });
       label.append(el("span", { text: "单轮最大工具步数（1–24）" }), stepsInput);
@@ -1086,19 +1168,16 @@ function settingsView() {
   api("/api/settings")
     .then((data) => {
       state.settings = data.settings;
-      modelInput.value = data.settings.modelName || "";
       stepsInput.value = data.settings.maxSteps ?? 12;
+      save.disabled = false;
     })
-    .catch(() => {});
+    .catch((e) => toast(e.message));
   save.addEventListener("click", async () => {
     save.disabled = true;
     try {
       const data = await api("/api/settings", {
         method: "PUT",
-        body: {
-          modelName: modelInput.value.trim(),
-          ...(stepsInput.value ? { maxSteps: Number(stepsInput.value) } : {}),
-        },
+        body: { ...(stepsInput.value ? { maxSteps: Number(stepsInput.value) } : {}) },
       });
       state.settings = data.settings;
       toast("已保存");
@@ -1192,6 +1271,7 @@ function render() {
     settings: settingsView,
   };
   view.append((views[state.view] || chatView)());
+  syncModelPickers();
   if (state.view === "chat") {
     const scroller = $("#view");
     scroller.scrollTop = scroller.scrollHeight;
@@ -1245,19 +1325,3 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

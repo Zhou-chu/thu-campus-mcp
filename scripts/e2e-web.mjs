@@ -63,15 +63,17 @@ function fakeHost() {
   };
 }
 
+let lastRequestedModel = "";
 const route = {
   route: "madmodel",
   async models() {
-    return [{ id: "e2e-model", label: "E2E 模型" }];
+    return [{ id: "e2e-model", label: "E2E 模型" }, { id: "e2e-second", label: "第二个模型" }];
   },
   async status() {
     return { route: "madmodel", available: true, configured: true, masked: "2024****0419" };
   },
-  async chat() {
+  async chat(request) {
+    lastRequestedModel = request.model;
     const body = `data: ${JSON.stringify({ choices: [{ delta: { content: "端到端回复" } }] })}\n\ndata: [DONE]\n\n`;
     return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
   },
@@ -257,6 +259,51 @@ async function main() {
     record("设置页有常驻卡片", settingsText.includes("常驻"));
     record("设置页链接设计目录", (await page.locator('a[href="/preview.html"]').count()) === 1);
 
+    // 模型全量列表、自动保存、持久化和真实请求参数（不消耗上游额度）
+    if (!urlArg) {
+      await page.waitForFunction(() => document.querySelector('#settings-model')?.options.length === 2);
+      record("完整模型目录供选择", (await page.locator('#settings-model option').count()) === 2);
+      await page.selectOption('#settings-model', 'e2e-second');
+      await page.waitForFunction(() => !document.querySelector('#settings-model').disabled);
+      const saved = await (await fetch(base + '/api/settings', { headers: { authorization: 'Bearer ' + TOKEN } })).json();
+      record("选择模型自动保存", saved.settings.modelName === 'e2e-second');
+      await page.click('button[data-view="chat"]');
+      record("对话与设置模型一致", (await page.inputValue('#chat-model')) === 'e2e-second');
+      await page.fill('#composer', '保留这份草稿');
+      await page.getByRole('button', { name: '刷新模型', exact: true }).click();
+      await page.waitForFunction(() => !document.querySelector('#chat-model').disabled);
+      record("刷新模型不丢草稿", (await page.inputValue('#composer')) === '保留这份草稿');
+      await page.fill('#composer', '模型参数测试');
+      await page.click('#chat-send');
+      await page.waitForFunction(() => document.querySelector('#messages')?.textContent.includes('端到端回复') && !document.querySelector('#chat-send').disabled);
+      record("所选模型实际发送到后端", lastRequestedModel === 'e2e-second', lastRequestedModel);
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector('#chat-model');
+      record("刷新页面保留模型选择", (await page.inputValue('#chat-model')) === 'e2e-second');
+    }
+
+    // 在用户截图同级宽屏下检查真实几何，不仅测CSS字符串。
+    for (const width of [1920, 2560, 1280, 390]) {
+      await page.setViewportSize({ width, height: width < 900 ? 844 : 1080 });
+      await page.click('button[data-view="chat"]');
+      const geometry = await page.evaluate(() => {
+        const chat = document.querySelector('.chat').getBoundingClientRect();
+        const dock = document.querySelector('.chat-dock').getBoundingClientRect();
+        const messages = document.querySelector('#messages').getBoundingClientRect();
+        const composer = document.querySelector('.composer').getBoundingClientRect();
+        const nav = document.querySelector('.tabbar').getBoundingClientRect();
+        const rail = innerWidth >= 900 ? nav.right : 0;
+        return {
+          centered: Math.abs((chat.left - rail) - (innerWidth - chat.right)) < 3,
+          aligned: Math.abs(messages.left - dock.left) < 2 && Math.abs(messages.right - dock.right) < 2,
+          visible: composer.bottom <= innerHeight && composer.top > 0 && messages.height > 150,
+          noOverflow: document.documentElement.scrollWidth <= innerWidth,
+        };
+      });
+      record(width + '宽布局居中且输入区可见', Object.values(geometry).every(Boolean), JSON.stringify(geometry));
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+
     // 7. 设计目录：色块真的画出来了
     await page.goto(`${base}/preview.html`, { waitUntil: "load" });
     record("色块数量为 8", (await page.locator(".swatch").count()) === 8);
@@ -309,18 +356,3 @@ main().catch((error) => {
   }
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

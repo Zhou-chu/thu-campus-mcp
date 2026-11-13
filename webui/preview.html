@@ -94,6 +94,14 @@
 
       <section class="card">
         <h3>输入</h3>
+        <div class="model-picker">
+          <label class="model-field" for="preview-model">
+            <span>对话模型</span>
+            <select id="preview-model"><option>从MadModel自动拉取的模型</option></select>
+          </label>
+          <button class="ghost" type="button" disabled>刷新模型</button>
+          <span class="small muted model-status">全量目录 · 选择后自动保存</span>
+        </div>
         <label class="field">
           <span>服务器地址</span>
           <input type="url" placeholder="http://192.168.1.23:8971" />
