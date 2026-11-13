@@ -319,7 +319,8 @@ function modelPicker(id) {
     select.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.models.length;
     refresh.disabled = state.busy || state.modelSaving || state.modelsLoading;
     status.className = "small model-status " + (state.modelsError ? "error" : "muted");
-    status.textContent = state.modelsLoading ? "正在拉取全部模型…" : state.modelSaving ? "正在保存…" : state.modelsError || `共${state.models.length}个模型 · 选择后自动保存`;
+    status.textContent = state.modelsLoading ? "正在刷新…" : state.modelSaving ? "正在保存…" : state.modelsError;
+    status.hidden = !status.textContent;
   };
   select.addEventListener("change", async () => {
     const previous = state.selectedModel;
@@ -416,8 +417,8 @@ function applyToolState(block) {
 function confirmCardFor(block) {
   const node = el("div", { class: "confirm-card" });
   node.append(
-    el("div", { class: "eyebrow", text: "NEEDS CONFIRMATION" }),
-    el("div", { class: "small", text: "接下来要执行一个会改动校园数据的操作：" }),
+    el("h3", { text: "确认操作" }),
+    el("div", { class: "small", text: "此操作会改动校园数据。" }),
     el("div", { class: "tool-name", text: block.name }),
     el("pre", { text: pretty(block.args) }),
   );
@@ -481,7 +482,9 @@ function chatView() {
   const textarea = el("textarea", {
     id: "composer",
     rows: 1,
-    placeholder: "问我：把本学期课程更新到 D:\\网络学堂……（Enter 发送，Shift+Enter 换行）",
+    placeholder: "输入消息…",
+    "aria-label": "消息",
+    "aria-keyshortcuts": "Enter Shift+Enter",
   });
   const sendButton = el("button", { id: "chat-send", class: "primary", type: "button", text: "发送" });
   const stopButton = el("button", { class: "ghost danger", type: "button", text: "停止", hidden: true });
@@ -505,11 +508,6 @@ function chatView() {
   }
   const dock = el("div", { class: "chat-dock" }, [modelPicker("chat-model"), quick, composer]);
   wrap.append(messages, dock);
-  if (!state.messages.length && !state.sessionId) {
-    messages.append(
-      el("div", { class: "empty", text: "还没有对话。先点「服务」确认登录状态，再开始提问。" }),
-    );
-  }
   for (const block of state.messages) messages.append(blockNode(block));
   const send = async () => {
     const text = textarea.value.trim();
@@ -711,7 +709,7 @@ function sessionsView() {
   const wrap = el("div", { class: "stack" });
   wrap.append(
     el("div", { class: "row between" }, [
-      el("h2", { text: "会话", dataset: { eyebrow: "CONVERSATIONS" } }),
+      el("h2", { text: "会话" }),
       el("button", {
         class: "ghost",
         type: "button",
@@ -834,13 +832,12 @@ function servicesView() {
   const wrap = el("div", { class: "stack" });
   const labels = { learnx: "网络学堂", cloud: "清华云盘", hetang: "荷塘雨课堂", madmodel: "MadModel 模型" };
   const texts = { ready: "已就绪", "login-required": "需要登录", expired: "会话过期", unknown: "未知" };
-  wrap.append(el("h2", { text: "服务状态", dataset: { eyebrow: "CAMPUS SERVICES" } }));
+  wrap.append(el("h2", { text: "服务状态" }));
   const services = state.meta?.services || {};
   for (const [name, info] of Object.entries(services)) {
     const row = el("div", { class: "item" }, [
       el("div", { class: "grow stack", style: "gap:2px" }, [
         el("div", { class: "item-title", text: labels[name] || name }),
-        el("div", { class: "small muted", text: info.code || "" }),
       ]),
       el("span", { class: "state", dataset: { s: info.state }, text: texts[info.state] || info.state }),
     ]);
@@ -871,12 +868,6 @@ function servicesView() {
       );
     wrap.append(row);
   }
-  wrap.append(
-    el("p", {
-      class: "muted small",
-      text: "登录在本机独立浏览器窗口完成，密码与验证码只由你本人输入；应用不读取、不保存密码。",
-    }),
-  );
   wrap.append(keepAliveCard());
   return wrap;
 }
@@ -894,7 +885,7 @@ function keepAliveCard() {
         class: "muted small",
         text: data.enabled
           ? `每 ${minutes} 分钟自检一次${data.restoreExpired ? "，过期时自动尝试恢复" : "，只记录不恢复"}`
-          : "自检已关闭（设置为 0 分钟即关闭）",
+          : "自检已关闭",
       }),
     );
     if (data.lastRunAt)
@@ -981,7 +972,7 @@ function toolsView() {
   const wrap = el("div", { class: "stack" });
   const search = el("input", { type: "search", placeholder: "搜索工具名或描述…" });
   const list = el("div", { class: "list" });
-  wrap.append(el("h2", { text: "工具", dataset: { eyebrow: "TOOL INDEX" } }), search, list);
+  wrap.append(el("h2", { text: "工具" }), search, list);
   const draw = () => {
     clear(list);
     const keyword = search.value.trim().toLowerCase();
@@ -1113,7 +1104,7 @@ function residentCard() {
   const draw = (data) => {
     clear(body);
     if (!data.supported) {
-      body.append(el("div", { class: "small muted", text: `当前平台 ${data.platform} 不支持自动安装，请用 systemd 或同类方式守护 app serve。` }));
+      body.append(el("div", { class: "small muted", text: "当前平台不支持自动安装" }));
       return;
     }
     const modeText = { "scheduled-task": "登录计划任务（推荐）", "startup-folder": "启动文件夹", none: "尚未安装" }[data.mode] || data.mode;
@@ -1128,12 +1119,6 @@ function residentCard() {
     if (data.startup?.entryPath)
       body.append(el("div", { class: "small muted", text: `启动项：${data.startup.installed ? data.startup.entryPath : "未创建"}` }));
     body.append(el("div", { class: "small muted", text: `日志：${data.logFile}` }));
-    body.append(
-      el("p", {
-        class: "small muted",
-        text: "以 SYSTEM 身份运行的系统服务解不开 DPAPI 凭据，会变成永远登录不上的空壳，所以这里用当前用户的登录任务。",
-      }),
-    );
     body.append(pairLinkRow("安装命令（在仓库目录执行）", data.installHint));
   };
   api("/api/service")
@@ -1141,18 +1126,33 @@ function residentCard() {
     .catch((e) => body.append(el("div", { class: "empty", text: e.message })));
   return card;
 }
+function helpPanel(diagnostics) {
+  const usage = el("details", { class: "help-section" }, [
+    el("summary", { text: "使用说明" }),
+    el("div", { class: "stack" }, [
+      el("p", { text: "Enter发送，Shift+Enter换行。切换模型自动保存；刷新列表保留草稿。" }),
+      el("p", { text: "在服务页登录。密码和验证码在弹出的学校登录窗口中输入。" }),
+      el("p", { text: "连接其它设备：生成配对码，在新设备输入服务器地址与配对码。配对码一次有效。" }),
+      el("p", { text: "退出会清除本机连接令牌，再次连接需重新配对。" }),
+    ]),
+  ]);
+  return el("details", { class: "card help-panel" }, [
+    el("summary", { text: "帮助与说明" }), usage, diagnostics,
+  ]);
+}
 function settingsView() {
   const wrap = el("div", { class: "stack" });
-  wrap.append(el("h2", { text: "设置", dataset: { eyebrow: "PREFERENCES" } }));
+  wrap.append(el("h2", { text: "设置" }));
   const meta = state.meta || {};
-  wrap.append(
-    el("div", { class: "card stack" }, [
+  const diagnostics = el("details", { class: "help-section" }, [
+    el("summary", { text: "诊断信息" }),
+    el("div", { class: "stack" }, [
       el("h3", { text: "运行信息" }),
       el("div", { class: "small", text: `版本 ${meta.version || "-"} · 主机 ${meta.hostname || "-"}` }),
       el("div", { class: "small", text: `模型路由 ${meta.model?.route || "-"} · 模型 ${meta.model?.name || "自动"}` }),
       el("div", { class: "small", text: `账号 ${meta.account?.masked || "未绑定"}` }),
     ]),
-  );
+  ]);
   const stepsInput = el("input", { type: "number", min: 1, max: 24 });
   const save = el("button", { class: "primary", type: "button", text: "保存设置", disabled: true });
   const settingsCard = el("div", { class: "card stack" }, [el("h3", { text: "对话偏好" })]);
@@ -1213,30 +1213,18 @@ function settingsView() {
   wrap.append(
     el("div", { class: "card stack" }, [
       el("h3", { text: "接入其它设备" }),
-      el("p", { class: "small muted", text: "在手机或另一台电脑的浏览器里打开本页地址，输入配对码即可共享同一份登录态。" }),
       inviteButton,
       codeNode,
       linkBox,
     ]),
   );
-  wrap.append(
-    el("p", { class: "small muted" }, [
-      el("a", {
-        href: "/preview.html",
-        target: "_blank",
-        rel: "noreferrer",
-        text: "查看设计目录（色板 / 字阶 / 组件状态 / 时间线）→",
-      }),
-    ]),
-  );
-  wrap.append(residentCard());
+  diagnostics.append(residentCard(), el("a", {
+    href: "/preview.html", target: "_blank", rel: "noreferrer", text: "设计目录",
+  }));
+  wrap.append(helpPanel(diagnostics));
   wrap.append(
     el("div", { class: "card stack" }, [
       el("h3", { text: "安全" }),
-      el("p", {
-        class: "small muted",
-        text: "设备令牌只保存在本机浏览器；服务端只存摘要。退出登录会清空本地令牌，需要在电脑上重新配对。",
-      }),
       el("button", {
         class: "ghost danger",
         type: "button",

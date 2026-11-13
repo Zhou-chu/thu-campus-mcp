@@ -22,7 +22,6 @@
     <div id="app" class="app" hidden>
       <header class="topbar">
         <div class="brand">
-          <span class="eyebrow">THU CAMPUS · AGENT</span>
           <div class="brand-row">
             <span class="dot" id="health-dot" aria-hidden="true"></span>
             <h1>清华校园助手</h1>
@@ -51,12 +50,7 @@
 
     <section id="pair" class="pair" hidden>
       <div class="card pair-card">
-        <span class="eyebrow">PAIR THIS DEVICE</span>
-        <h2>连接到你的电脑</h2>
-        <p class="muted">
-          在电脑上运行 <code>node bin/thu-campus.mjs app serve</code>，控制台会打印一次性 6 位配对码；
-          也可以在已连接的设备「设置」页生成新码。配对后用你自己的清华账号完成登录，各设备共享同一份登录态。
-        </p>
+        <h2>连接设备</h2>
         <label class="field">
           <span>服务器地址</span>
           <input id="pair-base" type="url" inputmode="url" placeholder="http://192.168.1.23:8971" autocomplete="off" />
@@ -75,9 +69,11 @@
         </label>
         <p id="pair-error" class="error" role="alert" hidden></p>
         <button id="pair-submit" class="primary" type="button">配对并连接</button>
-        <p class="muted small">
-          配对码 5 分钟内有效、只能用一次。应用不会向任何服务器上传你的密码或 Cookie。
-        </p>
+        <details class="help-section">
+          <summary>获取配对码</summary>
+          <p>在已连接设备的“设置”中生成配对码。</p>
+          <p>首次启动：<code>node bin/thu-campus.mjs app serve</code>，使用控制台显示的配对码。</p>
+        </details>
       </div>
     </section>
 
@@ -85,7 +81,3 @@
     <script type="module" src="/app.js?v=__ASSET_VERSION__"></script>
   </body>
 </html>
-
-
-
-

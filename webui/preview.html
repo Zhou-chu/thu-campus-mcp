@@ -17,7 +17,7 @@
       <span class="eyebrow">DESIGN CATALOG</span>
       <h2>设计目录</h2>
       <p class="small muted">
-        本页只是目录：色板、字阶、组件与状态。规范写在仓库根目录的 <code>DESIGN.md</code>，
+        本页只是目录：色板、字阶、组件与状态。规范写在仓库根目录的 <code>UIdesign.md</code>，
         变量真源是 <code>webui/styles.css</code>。配色跟随系统或设置里保存的选择。
       </p>
 
@@ -97,10 +97,10 @@
         <div class="model-picker">
           <label class="model-field" for="preview-model">
             <span>对话模型</span>
-            <select id="preview-model"><option>从MadModel自动拉取的模型</option></select>
+            <select id="preview-model"><option>DeepSeek-V4.1-Flash</option></select>
           </label>
           <button class="ghost" type="button" disabled>刷新模型</button>
-          <span class="small muted model-status">全量目录 · 选择后自动保存</span>
+          <span class="small muted model-status" role="status" hidden></span>
         </div>
         <label class="field">
           <span>服务器地址</span>
@@ -164,9 +164,8 @@
       </section>
 
       <p class="small muted">
-        返回 <a href="/">应用首页</a>。改动样式后请同步更新本页与 <code>DESIGN.md</code>。
+        返回 <a href="/">应用首页</a>。改动样式后请同步更新本页与 <code>UIdesign.md</code>。
       </p>
     </main>
   </body>
 </html>
-

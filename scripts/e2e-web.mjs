@@ -164,14 +164,17 @@ async function main() {
     timeout: 20000,
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  let expectedModelError = false;
   const consoleErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    const expected = expectedModelError && message.location().url.includes("/api/models") && message.text().includes("502");
+    if (message.type() === "error" && !expected) consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error)));
   const badResponses = [];
   page.on("response", (response) => {
-    if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`);
+    const expected = expectedModelError && new URL(response.url()).pathname === "/api/models" && response.status() === 502;
+    if (response.status() >= 400 && !expected) badResponses.push(`${response.status()} ${response.url()}`);
   });
 
   try {
@@ -179,6 +182,12 @@ async function main() {
     await page.goto(`${base}/`, { waitUntil: "load" });
     record("配对页可见", await page.locator("#pair").isVisible());
     record("主应用隐藏", !(await page.locator("#app").isVisible()));
+    record("配对帮助默认折叠", !(await page.locator("#pair code").isVisible()));
+    await page.locator("#pair summary").click();
+    record("配对码获取方式可展开", await page.locator("#pair code").isVisible());
+    await page.fill("#pair-code", "12");
+    await page.click("#pair-submit");
+    record("必要的配对错误反馈保留", await page.locator("#pair-error").isVisible());
 
     // 2. 注入版本号：页面里不应残留占位符
     const expectedVersion = urlArg
@@ -254,10 +263,16 @@ async function main() {
 
     // 6. 设置页：常驻卡片与设计目录入口
     await page.click('button[data-view="settings"]');
-    await page.waitForSelector('a[href="/preview.html"]');
-    const settingsText = await page.locator("#view").innerText();
-    record("设置页有常驻卡片", settingsText.includes("常驻"));
-    record("设置页链接设计目录", (await page.locator('a[href="/preview.html"]').count()) === 1);
+    const help = page.locator(".help-panel");
+    record("帮助默认折叠", (await help.getAttribute("open")) === null);
+    record("说明与诊断不常驻", !(await page.locator("#view").innerText()).includes("运行信息"));
+    record("开发设计入口默认隐藏", !(await page.locator('a[href="/preview.html"]').isVisible()));
+    await page.locator(".help-panel > summary").click();
+    await page.getByText("使用说明", { exact: true }).click();
+    record("使用说明可主动展开", (await help.innerText()).includes("Enter发送"));
+    await page.getByText("诊断信息", { exact: true }).click();
+    record("诊断内保留常驻管理", (await help.innerText()).includes("常驻"));
+    record("设计目录可主动访问", await page.locator('a[href="/preview.html"]').isVisible());
 
     // 模型全量列表、自动保存、持久化和真实请求参数（不消耗上游额度）
     if (!urlArg) {
@@ -280,6 +295,27 @@ async function main() {
       await page.reload({ waitUntil: 'load' });
       await page.waitForSelector('#chat-model');
       record("刷新页面保留模型选择", (await page.inputValue('#chat-model')) === 'e2e-second');
+      record("空闲模型栏无说明小字", await page.locator(".model-status").isHidden());
+      record("消息输入有独立名称", (await page.getByRole("textbox", { name: "消息", exact: true }).count()) === 1);
+      let releaseRefresh;
+      const refreshGate = new Promise(resolve => { releaseRefresh = resolve; });
+      expectedModelError = true;
+      await page.route("**/api/models?refresh=1", async intercepted => {
+        await refreshGate;
+        await intercepted.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ ok: false, error: { code: "MODEL_DISCOVERY_FAILED", message: "模型目录暂不可用，请重试。" } }) });
+      });
+      await page.fill("#composer", "出错时也保留草稿");
+      await page.getByRole("button", { name: "刷新模型", exact: true }).click();
+      record("必要加载状态可见", await page.locator(".model-status").isVisible() && await page.locator("#chat-model").isDisabled());
+      releaseRefresh();
+      await page.waitForFunction(() => !document.querySelector("#chat-model").disabled);
+      record("模型错误仍清晰可见", (await page.locator(".model-status.error").innerText()).includes("请重试"));
+      record("失败不清空草稿或旧目录", (await page.inputValue("#composer")) === "出错时也保留草稿" && (await page.locator("#chat-model option").count()) === 2);
+      await page.unroute("**/api/models?refresh=1");
+      expectedModelError = false;
+      await page.getByRole("button", { name: "刷新模型", exact: true }).click();
+      await page.waitForFunction(() => !document.querySelector("#chat-model").disabled);
+      record("重试成功收起错误行", await page.locator(".model-status").isHidden());
     }
 
     // 在用户截图同级宽屏下检查真实几何，不仅测CSS字符串。

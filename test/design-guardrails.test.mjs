@@ -8,7 +8,9 @@ const read = (name) => readFile(path.join(root, name), "utf8");
 
 const css = await read("webui/styles.css");
 const html = await read("webui/index.html");
-const design = await read("DESIGN.md");
+const design = await read("UIdesign.md");
+const designEntry = await read("DESIGN.md");
+const app = await read("webui/app.js");
 const preview = await read("webui/preview.html");
 
 test("样式表里没有脱离变量的硬编码颜色", () => {
@@ -36,10 +38,10 @@ test("间距阶与断点是完整的一套", () => {
   assert.match(css, /prefers-reduced-motion: reduce/);
 });
 
-test("DESIGN.md 保持九节结构", () => {
+test("UIdesign.md 保持九节结构", () => {
   const headings = [...design.matchAll(/^## (\d)\. /gm)].map((m) => m[1]);
-  assert.deepEqual(headings, ["1", "2", "3", "4", "5", "6", "7", "8", "9"], "DESIGN.md 章节缺失或乱序");
-  assert.match(design, /Agent Prompt Guide/);
+  assert.deepEqual(headings, ["1", "2", "3", "4", "5", "6", "7", "8", "9"], "UIdesign.md 章节缺失或乱序");
+  assert.match(design, /Agent执行流程/);
 });
 
 test("静态资源版本号来自单一占位符，不硬编码", async () => {
@@ -86,5 +88,27 @@ test("无障碍：消息区是 live region，视图容器不整块播报", () =>
   assert.ok(!/id="view"[^>]*aria-live/.test(html), "整块视图不应是 live region");
 });
 
+test("设计规范唯一入口且Agent必须先读", async () => {
+  assert.match(designEntry, /UIdesign\.md/);
+  assert.doesNotMatch(designEntry, /^## \d+\./m, "兼容入口不另立设计规则");
+  assert.match(await read("AGENTS.md"), /先完整阅读.*UIdesign\.md/);
+  assert.match(design, /awesome-design-md/);
+  assert.match(design, /AI直出UI/);
+  assert.match(design, /覆盖率≥90%/);
+});
 
+test("日常UI不再生成重复眉标和无操作意义说明", () => {
+  for (const text of ["THU CAMPUS · AGENT", "PAIR THIS DEVICE", "选择后自动保存", "先点「服务」确认登录状态", "永远登录不上的空壳"])
+    assert.ok(!(html + app).includes(text), "冗余文案回归：" + text);
+  assert.doesNotMatch(app, /dataset: \{ eyebrow:/);
+  assert.doesNotMatch(css, /h2\[data-eyebrow\]/);
+  assert.match(app, /status\.hidden = !status\.textContent/);
+});
 
+test("简化文案不删除输入名称、配对帮助或写入风险确认", () => {
+  assert.match(app, /"aria-label": "消息"/);
+  assert.match(html, /<summary>获取配对码<\/summary>/);
+  assert.match(app, /此操作会改动校园数据/);
+  for (const text of ["允许执行", "拒绝", "使用说明", "诊断信息"])
+    assert.ok(app.includes(text), "缺少必要交互：" + text);
+});
