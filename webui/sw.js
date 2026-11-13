@@ -1,5 +1,5 @@
-const CACHE = "campus-app-v3";
-const ASSETS = ["/", "/index.html", "/app.js?v=1.3.0", "/styles.css?v=1.3.0", "/manifest.webmanifest", "/icons/icon.svg"];
+const CACHE = "campus-app-v4";
+const ASSETS = ["/", "/index.html", "/app.js?v=__ASSET_VERSION__", "/styles.css?v=__ASSET_VERSION__", "/manifest.webmanifest", "/icons/icon.svg"];
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -43,3 +43,4 @@ self.addEventListener("fetch", (event) => {
       ),
   );
 });
+

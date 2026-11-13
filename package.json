@@ -22,6 +22,7 @@
     "test:clients": "node --test desktop/test/*.test.mjs",
     "app": "node bin/thu-campus.mjs app serve",
     "app:smoke": "node test/app-smoke.mjs",
+    "e2e:web": "node scripts/e2e-web.mjs",
     "verify:clients": "node scripts/verify-clients.mjs",
     "verify:release": "node scripts/verify-clients.mjs --strict",
     "check": "npm run typecheck && npm run build && npm test && npm run licenses:check && npm run audit:source",
@@ -40,5 +41,6 @@
     "proper-lockfile": "4.1.2"
   }
 }
+
 
 

@@ -589,3 +589,50 @@ test("允许后工具才真正执行", async (t) => {
   assert.ok(events.some((e) => e.event === "tool" && e.data.phase === "start"));
 });
 
+
+test("静态 HTML 的版本号来自 version 参数，而不是 config", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "campus-app-ver-"));
+  const { writeFile, mkdir } = await import("node:fs/promises");
+  await mkdir(path.join(dir, "webui"), { recursive: true });
+  await writeFile(
+    path.join(dir, "webui", "index.html"),
+    '<!doctype html><link rel="stylesheet" href="/styles.css?v=__ASSET_VERSION__" />',
+  );
+  await writeFile(path.join(dir, "webui", "styles.css"), "body{color:#111}");
+  await mkdir(path.join(dir, "webui", "icons"), { recursive: true });
+  await writeFile(path.join(dir, "webui", "icons", "icon.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const config = {
+    root: process.cwd(),
+    host: "127.0.0.1",
+    port: 0,
+    stateDir: dir,
+    token: "ver-token",
+    modelRoute: "madmodel",
+    maxSteps: 8,
+    hostname: "ver-host",
+  };
+  const app = createAppServer({
+    config,
+    host: fakeHost(),
+    route: scriptedRoute(),
+    devices: new DeviceStore(dir, { encrypt: async (b) => b }),
+    pairing: new PairingCodes(),
+    sessions: new SessionStore(dir),
+    version: "7.7.7",
+    webuiDir: path.join(dir, "webui"),
+  });
+  const url = await app.listen();
+  t.after(async () => {
+    await app.close?.();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const page = await fetch(url + "/");
+  const html = await page.text();
+  assert.equal(page.status, 200);
+  assert.match(html, /\?v=7\.7\.7/, "应替换成 version 参数");
+  assert.ok(!html.includes("__ASSET_VERSION__"), "不应残留占位符");
+  assert.equal(page.headers.get("x-frame-options"), "DENY");
+  const icon = await fetch(url + "/favicon.ico");
+  assert.equal(icon.status, 200, "favicon 不应 404");
+});
+

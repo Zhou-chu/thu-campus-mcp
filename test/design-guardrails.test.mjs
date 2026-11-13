@@ -42,13 +42,17 @@ test("DESIGN.md 保持九节结构", () => {
   assert.match(design, /Agent Prompt Guide/);
 });
 
-test("入口页的静态资源都带版本号，避免升级后吃旧缓存", () => {
+test("静态资源版本号来自单一占位符，不硬编码", async () => {
+  const sw = await read("webui/sw.js");
   for (const asset of ["/theme.js", "/styles.css", "/app.js"])
     assert.ok(
-      new RegExp(`${asset.replace(/\./g, "\\.")}\\?v=`).test(html),
-      `${asset} 缺少 ?v= 版本号`,
+      new RegExp(`${asset.replace(/\./g, "\\.")}\\?v=__ASSET_VERSION__`).test(html),
+      `${asset} 应使用 ?v=__ASSET_VERSION__`,
     );
-  assert.match(html, /<meta name="theme-color"[^>]*--paper|content="#f4f3f0"/, "主题色应跟纸色一致");
+  assert.match(sw, /__ASSET_VERSION__/, "service worker 的资源列表也要走占位符");
+  for (const [name, content] of [["index.html", html], ["preview.html", preview], ["sw.js", sw]])
+    assert.ok(!/\?v=\d+\.\d+\.\d+/.test(content), `${name} 里不应再写死版本号`);
+  assert.match(html, /content="#f4f3f0"/, "主题色应跟纸色一致");
 });
 
 test("设计目录页与主应用同源、无内联脚本", () => {
@@ -68,8 +72,19 @@ test("CSP 收紧到 style-src self 时，页面里不能有内联样式", () => 
   }
 });
 
+test("防点击劫持只走响应头，不写在 meta 里", async () => {
+  for (const [name, content] of [["index.html", html], ["preview.html", preview]])
+    assert.ok(!content.includes("frame-ancestors"), `${name} 的 meta 里不应含 frame-ancestors`);
+  const server = await read("lib/app/server.mjs");
+  assert.match(server, /"X-Frame-Options": "DENY"/);
+  assert.match(server, /"Content-Security-Policy": "frame-ancestors 'none'"/);
+});
+
 test("无障碍：消息区是 live region，视图容器不整块播报", () => {
   assert.match(html, /class="skip"/, "缺少跳过导航链接");
   assert.match(html, /<main id="view" class="view" tabindex="-1">/);
   assert.ok(!/id="view"[^>]*aria-live/.test(html), "整块视图不应是 live region");
 });
+
+
+
