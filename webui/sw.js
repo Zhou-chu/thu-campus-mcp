@@ -25,7 +25,8 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/"))
     return;
   event.respondWith(
-    fetch(request)
+    // 导航请求绕开 HTTP 缓存，避免升级后仍拿到旧 HTML（旧 HTML 会引用旧资源版本）。
+    fetch(request, request.mode === "navigate" ? { cache: "no-store" } : undefined)
       .then((response) => {
         if (response.ok && response.type === "basic")
           void caches.open(CACHE).then((cache) => cache.put(request, response.clone()));
@@ -43,4 +44,5 @@ self.addEventListener("fetch", (event) => {
       ),
   );
 });
+
 

@@ -662,3 +662,31 @@ test("会话可重命名，空标题与不存在的会话被拒", async (t) => {
   assert.equal(long.status, 400, "超长标题先于存在性校验被拒");
 });
 
+
+test("对话请求始终带上具体模型名，不回落到空值", async (t) => {
+  let seenModel = "";
+  const base = scriptedRoute();
+  const route = {
+    ...base,
+    async models() {
+      return [{ id: "first-model", label: "首选模型" }];
+    },
+    async chat(body) {
+      seenModel = body.model;
+      return sseResponse([
+        chunk({ choices: [{ delta: { content: "收到" } }] }),
+        "data: [DONE]\n\n",
+      ]);
+    },
+  };
+  const { url, pairing } = await boot(t, { route });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const response = await fetch(url + "/api/chat", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text: "你好" }),
+  });
+  await response.text();
+  assert.equal(seenModel, "first-model", "未指定模型时应取模型列表第一项");
+});

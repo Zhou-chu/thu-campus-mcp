@@ -133,6 +133,14 @@ async function main() {
   const sessionStore = new SessionStore(stateDir);
   for (const title of ["把本学期课程更新到 D:\\网络学堂", "列出尚未提交的作业", "雨课堂签到的自动提醒"])
     await sessionStore.create({ title });
+  const history = await sessionStore.create({ title: "历史会话回归" });
+  await sessionStore.append(history.id, [
+    { role: "user", content: "历史消息测试" },
+    {
+      role: "assistant",
+      content: "| 截止时间 | 课程 |\n| --- | --- |\n| 11-16 | 电力电子技术基础 |",
+    },
+  ]);
   app = createAppServer({
     config,
     host: fakeHost(),
@@ -210,7 +218,7 @@ async function main() {
     await page.click('button[data-view="sessions"]');
     await page.waitForSelector(".session-row");
     step("会话行已渲染");
-    record("会话列表三条", (await page.locator(".session-row").count()) === 3);
+    record("会话列表四条", (await page.locator(".session-row").count()) === 4);
     step("准备填搜索框");
     await page.fill('input[type="search"]', "雨课堂", { timeout: 8000 });
     step("搜索已填");
@@ -218,7 +226,7 @@ async function main() {
     const searchValue = await page.inputValue('input[type="search"]');
     record("搜索按标题过滤", filteredCount === 1, `行数=${filteredCount} 输入=${searchValue}`);
     await page.fill('input[type="search"]', "");
-    record("清空搜索恢复全部", (await page.locator(".session-row").count()) === 3);
+    record("清空搜索恢复全部", (await page.locator(".session-row").count()) === 4);
     step("准备点重命名");
     const firstRow = page.locator(".session-row").first();
     await firstRow.getByRole("button", { name: "重命名" }).click({ timeout: 8000 });
@@ -228,6 +236,19 @@ async function main() {
     await titleInput.press("Enter");
     await page.waitForFunction(() => document.body.innerText.includes("端到端改名"), null, { timeout: 8000 });
     record("重命名即时生效", true);
+
+    // 5.6 历史会话：消息与 Markdown 表格都要真的渲染
+    await page.click('button[data-view="sessions"]');
+    await page.waitForSelector(".session-row");
+    await page.fill('input[type="search"]', "历史会话回归");
+    await page.locator(".session-row .item").first().click();
+    await page.waitForSelector("#messages .bubble");
+    record("历史消息已渲染", (await page.locator("#messages .bubble").count()) >= 2);
+    record("Markdown 表格已渲染", (await page.locator("#messages table.rich-table").count()) === 1);
+    record(
+      "表格内容正确",
+      (await page.locator("#messages table.rich-table td").first().innerText()).includes("11-16"),
+    );
 
     // 6. 设置页：常驻卡片与设计目录入口
     await page.click('button[data-view="settings"]');
@@ -288,6 +309,8 @@ main().catch((error) => {
   }
   process.exit(1);
 });
+
+
 
 
 

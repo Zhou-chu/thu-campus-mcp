@@ -56,20 +56,64 @@ function renderRich(text) {
       return;
     }
     const lines = block.split("\n");
-    lines.forEach((line, lineIndex) => {
-      if (lineIndex > 0) fragment.append(document.createTextNode("\n"));
-      const parts = line.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g);
-      for (const part of parts) {
-        if (!part) continue;
-        if (part.startsWith("`") && part.endsWith("`") && part.length > 2)
-          fragment.append(el("code", { text: part.slice(1, -1) }));
-        else if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
-          fragment.append(el("strong", { text: part.slice(2, -2) }));
-        else fragment.append(document.createTextNode(part));
+    let i = 0;
+    while (i < lines.length) {
+      if (i > 0) fragment.append(document.createTextNode("\n"));
+      const line = lines[i];
+      // Markdown 表格：当前行以 | 开头，且下一行是 |---| 分隔行
+      if (/^\s*\|/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+        const header = splitRow(line);
+        const rows = [];
+        let j = i + 2;
+        while (j < lines.length && /^\s*\|/.test(lines[j])) {
+          rows.push(splitRow(lines[j]));
+          j += 1;
+        }
+        fragment.append(tableNode(header, rows));
+        i = j;
+        continue;
       }
-    });
+      appendInline(fragment, line);
+      i += 1;
+    }
   });
   return fragment;
+}
+function splitRow(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+function appendInline(fragment, line) {
+  const parts = line.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g);
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2)
+      fragment.append(el("code", { text: part.slice(1, -1) }));
+    else if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
+      fragment.append(el("strong", { text: part.slice(2, -2) }));
+    else fragment.append(document.createTextNode(part));
+  }
+}
+function tableNode(header, rows) {
+  const table = el("table", { class: "rich-table" });
+  const headRow = el("tr");
+  for (const cell of header) headRow.append(el("th", { text: cell }));
+  const thead = el("thead");
+  thead.append(headRow);
+  const tbody = el("tbody");
+  for (const row of rows) {
+    const tr = el("tr");
+    for (const cell of row) tr.append(el("td", { text: cell }));
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  const wrap = el("div", { class: "rich-table-wrap" });
+  wrap.append(table);
+  return wrap;
 }
 function endpoint(path) {
   return (state.base || "").replace(/\/+$/, "") + path;
@@ -239,7 +283,11 @@ function blocksFromSession(session) {
       } catch {
         parsed = { raw: message.content };
       }
-      if (last) last.result = parsed;
+      if (last) {
+        last.result = parsed;
+        // 历史里的失败调用要如实显示，不能一律标成「完成」。
+        if (parsed?.ok === false) last.state = "failed";
+      }
     }
   }
   return blocks;
@@ -384,7 +432,7 @@ function chatView() {
       el("div", { class: "empty", text: "还没有对话。先点「服务」确认登录状态，再开始提问。" }),
     );
   }
-  for (const block of state.messages) appendBlock(block);
+  for (const block of state.messages) messages.append(blockNode(block));
   const send = async () => {
     const text = textarea.value.trim();
     if (!text || state.busy) return;
@@ -418,18 +466,23 @@ function autoGrow(textarea) {
   textarea.style.height = "auto";
   textarea.style.height = Math.min(textarea.scrollHeight, 160) + "px";
 }
+/** 只负责把一个块变成节点；不碰文档，历史消息渲染时容器可能还没挂到页面。 */
+function blockNode(block) {
+  if (block.kind === "tool") return toolCardFor(block);
+  if (block.kind === "confirm") return confirmCardFor(block);
+  if (block.kind === "error")
+    return el("div", { class: "bubble err", text: (block.code ? `[${block.code}] ` : "") + block.message });
+  if (block.kind === "notice") {
+    const node = el("div", { class: "bubble notice", text: block.message });
+    block.node = node;
+    return node;
+  }
+  return bubbleFor(block);
+}
 function appendBlock(block) {
   const container = $("#messages");
   if (!container) return null;
-  let node;
-  if (block.kind === "tool") node = toolCardFor(block);
-  else if (block.kind === "confirm") node = confirmCardFor(block);
-  else if (block.kind === "error") {
-    node = el("div", { class: "bubble err", text: (block.code ? `[${block.code}] ` : "") + block.message });
-  } else if (block.kind === "notice") {
-    node = el("div", { class: "bubble notice", text: block.message });
-    block.node = node;
-  } else node = bubbleFor(block);
+  const node = blockNode(block);
   container.append(node);
   return node;
 }
@@ -1192,6 +1245,11 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
+
+
+
+
 
 
 

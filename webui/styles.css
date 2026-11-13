@@ -925,3 +925,34 @@ h2[data-eyebrow]::before {
   flex: 1;
   min-width: 0;
 }
+
+/* 对话里的 Markdown 表格：横向可滚，风格与正文一致 */
+.rich-table-wrap {
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.rich-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.rich-table th,
+.rich-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.rich-table th {
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line-strong);
+}
+.rich-table tbody tr:last-child td {
+  border-bottom: 0;
+}
