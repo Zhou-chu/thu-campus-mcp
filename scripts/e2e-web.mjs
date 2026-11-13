@@ -216,9 +216,9 @@ async function main() {
 
     // 4. 服务页：四行服务 + 编号
     await page.click('button[data-view="services"]');
-    await page.waitForSelector(".item");
-    record("服务行数为 4", (await page.locator(".item").count()) === 4);
-    record("服务编号存在", (await page.locator(".item").first().innerText()).includes("网络学堂"));
+    await page.waitForSelector(".auth-service");
+    record("服务行数为 4", (await page.locator(".auth-service").count()) === 4);
+    record("服务名称与核验入口存在", (await page.locator('.auth-service[data-service="learnx"]').innerText()).includes("网络学堂") && await page.getByRole("button", { name: "核验登录状态", exact: true }).isVisible());
 
     // 5. 工具页：编号索引与写入标记
     await page.click('button[data-view="tools"]');
@@ -366,7 +366,10 @@ async function main() {
       }
     }
     await page.setViewportSize({ width: 390, height: 640 });
-    record("窄屏矮窗口仍可输入和阅读", await page.evaluate(() => document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight && document.querySelector("#messages").getBoundingClientRect().height > 150));
+    await page.waitForFunction(() => document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight && document.querySelector("#messages").getBoundingClientRect().height > 150, null, { timeout: 5000 }).catch(() => {});
+    const shortGeometry = await page.evaluate(() => ({ composerBottom: document.querySelector(".composer").getBoundingClientRect().bottom, messagesHeight: document.querySelector("#messages").getBoundingClientRect().height, viewportHeight: innerHeight }));
+    if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, "readability-short.png") });
+    record("窄屏矮窗口仍可输入和阅读", shortGeometry.composerBottom <= shortGeometry.viewportHeight && shortGeometry.messagesHeight > 150, JSON.stringify(shortGeometry));
     await page.click("#theme-dark");
     record("深色带内容字号不缩水", await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".bubble.assistant")).fontSize) >= 16));
     await page.click("#theme-light");

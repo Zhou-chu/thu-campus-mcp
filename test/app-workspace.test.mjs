@@ -66,10 +66,10 @@ async function turn(host, name, args, { decision = "allow", inspectConfirm = () 
   return { result, messages, events };
 }
 
-test("9个workspace工具模型schema、campus透传与每会话SID绑定", async (t) => {
+test("11个workspace工具模型schema、campus透传与每会话SID绑定", async (t) => {
   const f = await fixture(t);
-  assert.equal(WORKSPACE_TOOLS.length, 9); assert.equal(new Set(WORKSPACE_TOOLS.map((tool) => tool.name)).size, 9);
-  assert.equal(f.host.describe().length, 10); assert.equal(f.host.toolForModel().length, 10);
+  assert.equal(WORKSPACE_TOOLS.length, 11); assert.equal(new Set(WORKSPACE_TOOLS.map((tool) => tool.name)).size, 11);
+  assert.equal(f.host.describe().length, 12); assert.equal(f.host.toolForModel().length, 12);
   assert.ok(WORKSPACE_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false));
   assert.equal(WORKSPACE_TOOLS.find((tool) => tool.name === "workspace_run").mandatoryApproval, true);
   assert.deepEqual(await f.host.call("campus_read", { value: 1 }, ctx()), { ok: true, data: { campus: true } });
@@ -197,5 +197,5 @@ test("overwrite与import动态mandatory审批在全局审批关闭时仍强制",
 test("Host关闭幂等且sandbox关闭失败也关闭campus；工厂只构造不调用真实Docker", async (t) => {
   const f = await fixture(t); await f.host.close(); await f.host.close(); assert.equal(f.records.closed, 1); assert.equal(f.records.campusClosed, 1);
   const broken = await fixture(t, { close: async () => { throw error("CLOSE_FAILED"); } }); await assert.rejects(broken.host.close(), (e) => e.code === "CLOSE_FAILED"); assert.equal(broken.records.campusClosed, 1);
-  const built = createWorkspaceHost({ host: f.campus, stateDir: path.join(f.dir, "factory"), pythonImage: "test-python", nodeImage: "test-node" }); assert.ok(built instanceof WorkspaceHost); assert.equal(built.workspaceFiles.baseDir, path.join(f.dir, "factory", "workspaces"));
+  const built = createWorkspaceHost({ host: f.campus, stateDir: path.join(f.dir, "factory"), pythonImage: "test-python", nodeImage: "test-node", storageMode: "local" }); assert.ok(built instanceof WorkspaceHost); assert.equal(built.workspaceFiles.baseDir, path.join(f.dir, "factory", "workspaces"));
 });

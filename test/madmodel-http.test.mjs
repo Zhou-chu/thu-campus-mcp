@@ -24,7 +24,8 @@ const request = {
   messages: [{ role: "user", content: "Hi" }],
 };
 const manager = {
-  status: async () => ({ configured: true, expired: false }),
+  // 仅测试HTTP健康成功分支的明确受保护API证据fixture，不代表真实登录。
+  status: async () => ({ configured: true, expired: false, verified: true, source: "protected-api:madmodel-auth-login", checkedAt: "2026-01-01T00:00:00.000Z" }),
   check: async () => {},
   ensure: async () => ({ token: "upstream-token" }),
   logout: async () => {},

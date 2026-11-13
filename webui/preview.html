@@ -131,6 +131,13 @@
       </section>
 
       <section class="card">
+        <h3>运行状态与认证真值（设计样本）</h3>
+        <div class="state-row"><span class="state">服务运行中</span><span class="state" data-s="ready">已登录</span><span class="state" data-s="login-required">未登录</span><span class="state" data-s="expired">登录已过期</span><span class="state">未核验</span><span class="state">无法核验</span><span class="state">模拟</span></div>
+        <details class="auth-evidence"><summary>核验记录</summary><div class="small">来源：protected-api:fixture-account-info</div><div class="small">状态码：VERIFIED（设计样本）</div></details>
+        <button type="button" class="ghost" disabled>核验登录状态（设计样本）</button>
+      </section>
+
+      <section class="card">
         <h3>思考、工具卡片与时间线</h3>
         <details class="reasoning-block">
           <summary>思考过程</summary>
@@ -146,12 +153,12 @@
         <div class="timeline">
           <div class="timeline-item" data-ok="good">
             <div class="timeline-time">2026/11/13 12:47:03（刚刚） · 定时 · 431ms</div>
-            <div class="small">网络学堂 就绪 · 云盘 就绪 · 雨课堂 就绪</div>
+            <div class="small">网络学堂 已登录 · 云盘 已登录 · 雨课堂 已登录</div>
           </div>
           <div class="timeline-item" data-ok="bad">
             <div class="timeline-time">2026/11/13 11:47:03（1 小时前） · 定时 · 512ms</div>
-            <div class="small">网络学堂 就绪 · 云盘 已过期 · 雨课堂 就绪</div>
-            <div class="small">云盘 恢复成功</div>
+            <div class="small">网络学堂 已登录 · 云盘 登录已过期 · 雨课堂 未核验</div>
+            <div class="small">云盘 恢复请求已完成</div>
           </div>
         </div>
       </section>
@@ -172,6 +179,14 @@
           </div>
         </details>
         <div class="state-row"><span class="state">作业完成</span><span class="state">作业失败</span><span class="state">作业已停止</span><span class="state">作业超时</span><span class="state">作业已中断</span></div>
+      </section>
+
+      <section class="card">
+        <h3>默认Cloud工作区（设计样本）</h3>
+        <div class="storage-location">目标目录：/Agent工作区</div>
+        <div class="state-row"><span class="state">云盘工作区待初始化</span><span class="state">计算完成</span><span class="job-storage-state" data-s="pending">云盘同步中</span><span class="job-storage-state" data-s="failed">云盘同步失败</span><span class="job-storage-state" data-s="synced">云盘已保存</span><span class="job-storage-state" data-s="unconfirmed">仅本地·云盘未确认</span></div>
+        <button type="button" class="ghost" disabled>在对话中初始化（设计样本）</button>
+        <button type="button" class="ghost danger" disabled>重试停止（回收待确认样本）</button>
       </section>
 
       <section class="card">

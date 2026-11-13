@@ -5,6 +5,7 @@ import { AuthStore } from "./auth.js";
 import { loadConfig } from "./config.js";
 import { validateToken } from "./client.js";
 import { makeDrive } from "./factory.js";
+import { cloudStatus } from "./status.js";
 import { serve } from "./server.js";
 import { runJob } from "./jobs.js";
 import { CloudError, publicError } from "./types.js";
@@ -55,9 +56,7 @@ async function main() {
   }
   if (command === "status" || command === "doctor") {
     print({
-      mode: config.mock ? "mock" : "real",
-      authentication: await store.status(),
-      sessionValidity: "not_checked",
+      ...(await cloudStatus(config)),
       node: process.version,
       stateDir: config.stateDir,
       outputDir: config.outputDir,

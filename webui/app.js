@@ -1,5 +1,5 @@
 import { readChatEvents } from "./chat-stream.js";
-import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABELS } from "./workspace.js";
+import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABELS, authPresentation, storagePresentation, jobStoragePresentation } from "./workspace.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -20,6 +20,13 @@ const state = {
   modelsLoading: false,
   modelSaving: false,
   modelsError: "",
+  authChecking: false,
+  authError: "",
+  authLoginBusy: "",
+  authNotices: {},
+  workspaceStorage: null,
+  workspaceStorageLoading: false,
+  workspaceStorageError: "",
   deeplinkCode: "",
 };
 const el = (tag, props = {}, children = []) => {
@@ -213,7 +220,9 @@ async function refreshMeta() {
     state.meta = await api("/api/meta");
     acceptModels(state.meta.models, state.meta.model?.name);
     $("#health-dot").className = "dot ok";
-    $("#account").textContent = state.meta.account?.masked || state.meta.hostname || "";
+    $("#account").textContent = "服务运行中";
+    state.authError = "";
+    await loadWorkspaceStorage();
     return true;
   } catch (e) {
     if (["AUTH_REQUIRED", "HTTP_401"].includes(e.code)) {
@@ -221,9 +230,78 @@ async function refreshMeta() {
       return false;
     }
     $("#health-dot").className = "dot bad";
+    $("#account").textContent = "服务连接失败";
+    state.authError = "状态刷新失败：" + e.message;
+    state.workspaceStorageError = "应用连接失败，无法核验云盘工作区。";
+    updateStoragePanels();
     toast(e.message);
     return false;
   }
+}
+/* ---------------- 云盘默认工作区（只读查询；写入交给对话审批） ---------------- */
+let storageController = null;
+function updateStoragePanels() {
+  for (const panel of document.querySelectorAll(".workspace-storage-view")) panel.draw();
+}
+async function loadWorkspaceStorage() {
+  storageController?.abort();
+  const current = new AbortController();
+  storageController = current;
+  state.workspaceStorageLoading = true;
+  updateStoragePanels();
+  try {
+    const data = await api("/api/workspace/storage", { signal: current.signal });
+    if (!data.storage || typeof data.storage !== "object") throw new Error("工作区状态响应无效，请重试查询。");
+    if (current.signal.aborted) return;
+    state.workspaceStorage = data.storage;
+    state.workspaceStorageError = "";
+  } catch (error) {
+    if (!current.signal.aborted) state.workspaceStorageError = "工作区查询失败：" + error.message;
+  } finally {
+    if (storageController === current) {
+      storageController = null;
+      state.workspaceStorageLoading = false;
+      updateStoragePanels();
+    }
+  }
+}
+function currentStoragePresentation() {
+  return storagePresentation(state.workspaceStorage, { loading: state.workspaceStorageLoading, error: state.workspaceStorageError });
+}
+function workspaceStorageSummary() {
+  const panel = el("div", { class: "workspace-storage-view workspace-storage-summary row between" });
+  panel.draw = () => {
+    const info = currentStoragePresentation();
+    clear(panel).append(el("span", { class: "storage-status", text: info.label }), el("button", {
+      class: "ghost", type: "button", text: "设置工作区", onclick: () => { state.view = "settings"; render(); },
+    }));
+  };
+  panel.draw();
+  return panel;
+}
+function workspaceStorageCard() {
+  const panel = el("section", { class: "card stack workspace-storage-view workspace-storage-card" });
+  panel.draw = () => {
+    const info = currentStoragePresentation();
+    clear(panel).append(el("div", { class: "auth-header" }, [el("h3", { text: "默认工作区" }), el("span", { class: "state storage-status", dataset: { s: info.state }, text: info.label })]));
+    if (info.scope) panel.append(el("div", { class: "storage-location", text: (info.state === "ready" ? "目录：" : "目标目录：") + info.scope.rootPath }));
+    if (info.message) panel.append(el("div", { class: info.state === "ready" ? "small" : "error", role: info.state === "ready" ? "status" : "alert", text: info.message }));
+    const actions = el("div", { class: "row", style: "flex-wrap:wrap" }, [el("button", { class: "ghost", type: "button", text: "刷新工作区状态", disabled: state.workspaceStorageLoading, onclick: loadWorkspaceStorage })]);
+    if (info.canInitialize) actions.append(el("button", {
+      class: "primary", type: "button", text: "在对话中初始化",
+      onclick: () => useInChat(`请使用workspace_initialize（无需参数）初始化默认云盘工作区。只读预览范围：${pretty(info.scope)}。以服务端重新核验的精确范围为准，展示确认卡后等待我授权。`),
+    }));
+    if (info.state === "login-required") actions.append(el("button", { class: "ghost", type: "button", text: "前往登录", onclick: () => { state.view = "services"; render(); } }));
+    panel.append(actions);
+    const record = el("details", { class: "auth-evidence storage-scope" }, [el("summary", { text: "范围与核验" })]);
+    if (info.scope) record.append(el("pre", { text: pretty(info.scope) }));
+    if (info.checkedAt) record.append(el("div", { class: "small", text: "隐私核验：" + new Date(info.checkedAt).toLocaleString() }));
+    if (info.code) record.append(el("div", { class: "small", text: "状态码：" + info.code }));
+    if (!info.scope && !info.checkedAt && !info.code) record.append(el("div", { class: "small", text: "尚无可确认的云盘范围。" }));
+    panel.append(record);
+  };
+  panel.draw();
+  return panel;
 }
 /* ---------------- 模型目录与选择 ---------------- */
 function acceptModels(models, current) {
@@ -376,10 +454,10 @@ function rememberJob(job) {
     if (block.job?.statusUrl === job.statusUrl) { block.job = job; applyToolState(block); }
   }
 }
-function attachJob(block) {
+function attachJob(block, fresh = false) {
   const parsed = workspaceJob(block.result);
   if (parsed) {
-    block.job = parsed.state !== "running" ? parsed : workspaceJobs.get(parsed.statusUrl) || parsed;
+    block.job = fresh ? parsed : workspaceJobs.get(parsed.statusUrl) || parsed;
     workspaceJobs.set(parsed.statusUrl, block.job);
   }
 }
@@ -391,16 +469,35 @@ function useInChat(text) {
   autoGrow(input);
   input.focus();
 }
+function storageForBlock(block) {
+  const result = block.result?.ok === true ? block.result.data : block.result;
+  return jobStoragePresentation(block.job || result);
+}
+function syncRecoveryButton(subject) {
+  return el("button", {
+    class: "ghost", type: "button", text: "在对话中恢复同步",
+    onclick: () => useInChat(`请使用workspace_sync（无需参数）检查${subject}的云盘同步并恢复。保留已有本地结果，不要重新运行计算；任何云盘写入前先展示目标范围并等待确认。`),
+  });
+}
 function drawWorkspaceJob(block) {
   const job = block.job;
   const panel = clear(block.jobNode);
-  panel.hidden = !job;
-  if (!job) return;
+  const sync = storageForBlock(block);
+  panel.hidden = !job && !sync.visible;
+  if (!job) {
+    if (sync.visible) {
+      if (sync.message || sync.code) panel.append(el("div", { class: "error job-sync-message", role: "alert", text: sync.message || sync.code }));
+      if (["failed", "unconfirmed"].includes(sync.state)) panel.append(syncRecoveryButton(block.name || "当前工作区"));
+    }
+    return;
+  }
   const info = [job.runtime, job.scriptPath].filter(Boolean).join(" · ");
   if (info) panel.append(el("div", { class: "job-meta", text: info }));
+  if (!sync.visible) panel.append(el("div", { class: "small muted", text: sync.label }));
+  if (sync.message) panel.append(el("div", { class: sync.state === "failed" ? "error job-sync-message" : "small job-sync-message", role: sync.state === "failed" ? "alert" : "status", text: sync.message }));
   const actions = el("div", { class: "job-actions" });
-  if (job.state === "running") actions.append(el("button", {
-    class: "ghost danger", type: "button", text: job.stopping ? "正在停止…" : "停止作业", disabled: job.stopping,
+  if (job.state === "running" || job.cleanupPending === true) actions.append(el("button", {
+    class: "ghost danger", type: "button", text: job.stopping ? "正在停止…" : job.cleanupPending ? "重试停止" : "停止作业", disabled: job.stopping,
     onclick: async () => {
       rememberJob({ ...job, stopping: true });
       jobPoller.sync();
@@ -430,6 +527,7 @@ function drawWorkspaceJob(block) {
     class: "ghost", type: "button", text: "在对话中处理",
     onclick: () => useInChat(`请检查作业${job.jobId}的状态与日志，说明失败原因并给出恢复方案；再次执行前先确认。`),
   }));
+  if (["failed", "unconfirmed"].includes(sync.state)) actions.append(syncRecoveryButton(`作业${job.jobId}`));
   if (actions.childNodes.length) panel.append(actions);
   const logs = el("details", { class: "job-logs", open: !!block.logsOpen });
   logs.addEventListener("toggle", () => { block.logsOpen = logs.open; });
@@ -443,7 +541,8 @@ function toolCardFor(block) {
   const summary = el("summary", {});
   const name = el("span", { class: "tool-name", text: block.name || "工具" });
   const stateText = el("span", { class: "tool-state" });
-  summary.append(name, stateText);
+  const syncText = el("span", { class: "job-storage-state", hidden: true });
+  summary.append(name, el("span", { class: "job-summary-states" }, [stateText, syncText]));
   const body = el("div", { class: "stack" });
   const args = el("pre", { text: pretty(block.args) });
   const result = el("pre", {});
@@ -456,6 +555,7 @@ function toolCardFor(block) {
   block.node = details;
   block.summary = summary;
   block.stateText = stateText;
+  block.syncText = syncText;
   block.resultNode = result;
   block.resultLabel = resultLabel;
   block.jobNode = jobNode;
@@ -468,11 +568,15 @@ function applyToolState(block) {
   const job = block.job;
   block.node.dataset.state = job ? job.state === "running" ? "running" : job.state === "succeeded" ? "done" : "failed" : block.state || "done";
   clear(block.stateText);
-  if (job) block.stateText.textContent = JOB_LABELS[job.state];
+  const sync = storageForBlock(block);
+  block.syncText.hidden = !sync.visible;
+  block.syncText.textContent = sync.label;
+  block.syncText.dataset.s = sync.state;
+  if (job) block.stateText.textContent = job.state === "succeeded" && sync.visible ? "计算完成" : JOB_LABELS[job.state];
   else if (block.state === "running") {
     block.stateText.append(el("span", { class: "spinner" }), document.createTextNode("执行中"));
   } else if (block.state === "failed") block.stateText.textContent = "失败";
-  else block.stateText.textContent = "完成";
+  else block.stateText.textContent = sync.state === "unconfirmed" ? "本地操作完成" : "完成";
   block.resultNode.hidden = block.resultLabel.hidden = !!job;
   drawWorkspaceJob(block);
   if (block.result !== undefined && block.resultNode)
@@ -574,7 +678,7 @@ function chatView() {
       }),
     );
   }
-  const dock = el("div", { class: "chat-dock" }, [modelPicker("chat-model"), quick, composer]);
+  const dock = el("div", { class: "chat-dock" }, [workspaceStorageSummary(), modelPicker("chat-model"), quick, composer]);
   wrap.append(messages, dock);
   for (const block of state.messages) messages.append(blockNode(block));
   const send = async () => {
@@ -721,9 +825,10 @@ async function sendTurn(text) {
             card.state = payload.ok ? "done" : "failed";
             card.result = payload.ok ? payload.result : undefined;
             card.error = payload.ok ? undefined : payload.error;
-            attachJob(card);
+            attachJob(card, true);
             applyToolState(card);
             jobPoller.sync();
+            if (["workspace_initialize", "workspace_sync"].includes(card.name)) void loadWorkspaceStorage();
           }
         }
         scrollIfNearBottom();
@@ -878,50 +983,68 @@ function sessionRow(session) {
   row.append(open, rename, remove);
   return row;
 }
+function updateAuthPanels() {
+  for (const panel of document.querySelectorAll(".auth-panel")) panel.draw();
+}
+async function verifyAuthentication() {
+  if (state.authChecking) return;
+  state.authChecking = true;
+  updateAuthPanels();
+  try {
+    const data = await api("/api/auth/status");
+    if (!data.services || typeof data.services !== "object") throw new Error("认证状态响应无效，请重试核验。");
+    state.meta = { ...state.meta, services: data.services };
+    state.authError = "";
+    state.authNotices = {};
+    await loadWorkspaceStorage();
+  } catch (error) { state.authError = "核验失败：" + error.message; }
+  finally { state.authChecking = false; updateAuthPanels(); }
+}
+async function openLogin(name) {
+  if (state.authLoginBusy) return;
+  state.authLoginBusy = name;
+  delete state.authNotices[name];
+  updateAuthPanels();
+  try {
+    await api("/api/auth/login", { method: "POST", body: { service: name } });
+    state.meta = { ...state.meta, services: { ...state.meta?.services, [name]: { ...state.meta?.services?.[name], state: "unverified", verified: false } } };
+    state.authNotices[name] = { text: "登录窗口已打开，完成后请点击“核验登录状态”。" };
+    if (name === "cloud") { state.workspaceStorageError = "云盘登录窗口已打开，请重新核验工作区。"; updateStoragePanels(); }
+  } catch (error) { state.authNotices[name] = { error: true, text: "登录窗口未打开：" + error.message }; }
+  finally { state.authLoginBusy = ""; updateAuthPanels(); }
+}
 function servicesView() {
   const wrap = el("div", { class: "stack" });
-  const labels = { learnx: "网络学堂", cloud: "清华云盘", hetang: "荷塘雨课堂", madmodel: "MadModel 模型" };
-  const texts = { ready: "已就绪", "login-required": "需要登录", expired: "会话过期", unknown: "未知" };
-  wrap.append(el("h2", { text: "服务状态" }));
-  const services = state.meta?.services || {};
-  for (const [name, info] of Object.entries(services)) {
-    const row = el("div", { class: "item" }, [
-      el("div", { class: "grow stack", style: "gap:2px" }, [
-        el("div", { class: "item-title", text: labels[name] || name }),
-      ]),
-      el("span", { class: "state", dataset: { s: info.state }, text: texts[info.state] || info.state }),
-    ]);
-    if (["learnx", "cloud", "hetang", "madmodel"].includes(name))
-      row.append(
-        el("button", {
-          class: "ghost",
-          type: "button",
-          text: "登录",
-          onclick: async (event) => {
-            const button = event.currentTarget;
-            button.disabled = true;
-            button.textContent = "启动中…";
-            try {
-              const data = await api("/api/auth/login", { method: "POST", body: { service: name } });
-              toast("已打开独立浏览器窗口，请在本机完成学校登录。");
-              await pollJob(data.jobId);
-              await refreshMeta();
-              render();
-            } catch (e) {
-              toast(e.message);
-            } finally {
-              button.disabled = false;
-              button.textContent = "登录";
-            }
-          },
-        }),
-      );
-    wrap.append(row);
-  }
-  wrap.append(keepAliveCard());
+  const panel = el("div", { class: "stack auth-panel" });
+  const labels = { learnx: "网络学堂", cloud: "清华云盘", hetang: "荷塘雨课堂", madmodel: "MadModel模型" };
+  panel.draw = () => {
+    clear(panel);
+    panel.append(el("div", { class: "auth-header" }, [
+      el("h2", { text: "服务状态" }),
+      el("button", { class: "ghost", type: "button", text: state.authChecking ? "核验中…" : "核验登录状态", disabled: state.authChecking, onclick: verifyAuthentication }),
+    ]));
+    if (state.authError) panel.append(el("div", { class: "error", role: "alert", text: state.authError }));
+    for (const [name, label] of Object.entries(labels)) {
+      const info = authPresentation(state.meta?.services?.[name], { checking: state.authChecking, stale: !!state.authError });
+      const row = el("section", { class: "auth-service", dataset: { service: name } }, [
+        el("div", { class: "auth-service-main" }, [el("span", { class: "item-title", text: label }), el("span", { class: "state", dataset: { s: info.state }, text: info.label })]),
+        el("button", { class: "ghost", type: "button", text: state.authLoginBusy === name ? "打开中…" : "登录", disabled: !!state.authLoginBusy || state.authChecking, onclick: () => openLogin(name) }),
+      ]);
+      const notice = state.authNotices[name];
+      if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : "small"), role: notice.error ? "alert" : "status", text: notice.text }));
+      const record = el("details", { class: "auth-evidence" }, [el("summary", { text: "核验记录" })]);
+      if (info.checkedAt) record.append(el("div", { class: "small", text: "核验时间：" + new Date(info.checkedAt).toLocaleString() }));
+      if (info.source) record.append(el("div", { class: "small", text: "来源：" + info.source }));
+      if (info.code) record.append(el("div", { class: "small", text: "状态码：" + info.code }));
+      if (!info.checkedAt && !info.source && !info.code) record.append(el("div", { class: "small", text: "暂无受保护接口核验记录。" }));
+      row.append(record);
+      panel.append(row);
+    }
+  };
+  panel.draw();
+  wrap.append(panel, keepAliveCard());
   return wrap;
 }
-const STATE_TEXT = { ready: "就绪", "login-required": "需登录", expired: "已过期", unknown: "未知" };
 const SERVICE_LABEL = { learnx: "网络学堂", cloud: "云盘", hetang: "雨课堂", madmodel: "MadModel" };
 function keepAliveCard() {
   const card = el("div", { class: "card stack" }, [el("h3", { text: "会话保活自检" })]);
@@ -981,10 +1104,11 @@ function keepAliveCard() {
 }
 function timelineItem(entry) {
   const states = Object.entries(entry.services || {})
-    .map(([name, state]) => `${SERVICE_LABEL[name] || name} ${STATE_TEXT[state] || state}`)
+    .map(([name, value]) => `${SERVICE_LABEL[name] || name} ${authPresentation(entry.serviceEvidence?.[name] || value).label}`)
     .join(" · ");
   const trigger = { startup: "启动", timer: "定时", api: "手动" }[entry.trigger] || entry.trigger;
-  const item = el("div", { class: "timeline-item", dataset: { ok: entry.ok === false ? "bad" : "good" } }, [
+  const verified = Object.keys(entry.services || {}).length > 0 && Object.keys(entry.services).every(name => authPresentation(entry.serviceEvidence?.[name]).verified);
+  const item = el("div", { class: "timeline-item", dataset: { ok: entry.ok !== false && verified ? "good" : "bad" } }, [
     el("div", {
       class: "timeline-time",
       text: `${new Date(entry.at).toLocaleString()}（${sinceText(entry.at)}） · ${trigger} · ${entry.durationMs || 0}ms`,
@@ -999,24 +1123,10 @@ function timelineItem(entry) {
         text:
           action.action === "skipped"
             ? `${SERVICE_LABEL[action.service] || action.service} 过期但未恢复`
-            : `${SERVICE_LABEL[action.service] || action.service} 恢复${action.ok ? "成功" : `失败（${action.code || "未知原因"}）`}`,
+            : `${SERVICE_LABEL[action.service] || action.service} ${action.ok ? "恢复请求已完成" : `恢复尝试失败（${action.code || "未知原因"}）`}`,
       }),
     );
   return item;
-}
-async function pollJob(jobId) {
-  if (!jobId) return;
-  for (let i = 0; i < 90; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    try {
-      const data = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
-      if (data.found && /complete|done|success/i.test(JSON.stringify(data.job?.state || data.job?.status || "")))
-        return data.job;
-    } catch {
-      return null;
-    }
-  }
-  return null;
 }
 function toolsView() {
   const wrap = el("div", { class: "stack" });
@@ -1186,7 +1296,8 @@ function helpPanel(diagnostics) {
     el("summary", { text: "使用说明" }),
     el("div", { class: "stack" }, [
       el("p", { text: "Enter发送，Shift+Enter换行。切换模型自动保存；刷新列表保留草稿。" }),
-      el("p", { text: "在服务页登录。密码和验证码在弹出的学校登录窗口中输入。" }),
+      el("p", { text: "在服务页登录。密码和验证码在弹出的学校登录窗口中输入，完成后主动核验登录状态。" }),
+      el("p", { text: "默认工作区位于云盘私有目录。计算状态与云盘同步分别显示；仅本地缓存或同步未确认，不代表云盘已保存。初始化和重试同步在对话中确认。" }),
       el("p", { text: "连接其它设备：生成配对码，在新设备输入服务器地址与配对码。配对码一次有效。" }),
       el("p", { text: "退出会清除本机连接令牌，再次连接需重新配对。" }),
     ]),
@@ -1209,7 +1320,7 @@ function settingsView() {
     ]),
   ]);
   const settingsCard = el("div", { class: "card stack" }, [modelPicker("settings-model")]);
-  wrap.append(settingsCard);
+  wrap.append(workspaceStorageCard(), settingsCard);
   const codeNode = el("div", { class: "small muted", text: "" });
   const linkBox = el("div", { class: "stack", style: "gap:8px" });
   const inviteButton = el("button", {

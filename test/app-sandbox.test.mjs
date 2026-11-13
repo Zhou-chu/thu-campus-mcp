@@ -293,7 +293,8 @@ test("restart recovers exact persisted running job as interrupted, not succeeded
   c.docker.containers.set(record.containerName, { Id: record.containerId, Name: `/${record.containerName}`, Config: { Image: record.imageId, Labels: { [LABEL]: "1", [`${LABEL}.scope`]: record.scope, [`${LABEL}.owner`]: record.owner, [`${LABEL}.session`]: A, [`${LABEL}.job`]: job.jobId } }, State: { Running: true, ExitCode: 0 }, stdout: "before restart", stderr: "" });
   await mkdir(path.join(c.stateDir, "ignored")); await writeFile(path.join(c.stateDir, A, "ignore.tmp"), "ignored");
   const runner = new SandboxRunner({ files: c.files, stateDir: c.stateDir, command: c.docker.command });
-  const recovered = await runner.get(A, job.jobId); assert.equal(recovered.state, "interrupted"); assert.equal(recovered.stdout, "before restart"); assert.equal(c.docker.containers.size, 0);
+  const notifications = []; runner.onComplete(event => notifications.push(event));
+  const recovered = await runner.get(A, job.jobId); assert.equal(recovered.state, "interrupted"); assert.equal(recovered.stdout, "before restart"); assert.equal(c.docker.containers.size, 0); await tick(); assert.deepEqual(notifications, []);
   await runner.close();
 });
 test("terminal persistence is read without Docker mutations and corrupt ledgers fail closed", async (t) => {
@@ -315,4 +316,43 @@ test("state directory inside mounted session and unsafe roots are rejected", asy
   const noBase = { root: c.files.root.bind(c.files), resolve: c.files.resolve.bind(c.files), readBytes: c.files.readBytes.bind(c.files), writeBytes: c.files.writeBytes.bind(c.files) };
   const derived = new SandboxRunner({ files: noBase, command: c.docker.command }); assert.equal((await derived.prepare(A, input)).imageId, IMAGE); await derived.close();
   const withDefault = new SandboxRunner({ files: c.files, command: c.docker.command }); assert.equal((await withDefault.status()).available, true); await withDefault.close();
+});
+
+test("completion listeners observe confirmed cleanup once and cannot change compute success", async (t) => {
+  const c = await fixture(t), events = [];
+  assert.throws(() => c.runner.onComplete(null), e => e.code === "INVALID_ARGUMENTS");
+  c.runner.onComplete(() => { throw new Error("observer failed"); });
+  c.runner.onComplete(async () => { throw new Error("async observer failed"); });
+  const remove = c.runner.onComplete(value => events.push(value));
+  const { job } = await start(c); c.docker.finish(job); await terminal(c, job); await until(() => events.length === 1);
+  assert.equal(events[0].sessionId, A); assert.equal(events[0].job.state, "succeeded"); assert.equal(events[0].job.cleanupPending, false);
+  assert.equal(c.runner.hasActiveJobs(A), false); await c.runner.get(A, job.jobId); assert.equal(events.length, 1);
+  remove(); const { job: next } = await start(c); await c.runner.stop(A, next.jobId); await tick(); assert.equal(events.length, 1);
+});
+test("cleanup pending is observable and does not trigger upload until exact stop succeeds", async (t) => {
+  const c = await fixture(t), events = []; c.runner.onComplete(value => events.push(value));
+  const { job } = await start(c); c.docker.removeFailure = true;
+  const pending = await c.runner.stop(A, job.jobId);
+  assert.equal(pending.state, "interrupted"); assert.equal(pending.cleanupPending, true); assert.equal(events.length, 0); assert.equal(c.runner.hasActiveJobs(A), true);
+  c.docker.removeFailure = false; const stopped = await c.runner.stop(A, job.jobId);
+  assert.equal(stopped.cleanupPending, false); assert.equal(events.length, 1); assert.equal(c.runner.hasActiveJobs(A), false);
+});
+test("cloud offline does not block local-ledger GET, stop or restart recovery", async (t) => {
+  const c = await fixture(t), { job } = await start(c);
+  c.files.cleanupRoot = async sid => [path.join(c.files.baseDir, sid)];
+  c.files.root = async () => { throw Object.assign(new Error("cloud offline"), { code: "CLOUD_UNAVAILABLE" }); };
+  assert.equal((await c.runner.get(A, job.jobId)).state, "running");
+  assert.equal((await c.runner.stop(A, job.jobId)).state, "cancelled");
+  const restored = new SandboxRunner({ files: c.files, stateDir: c.stateDir, command: c.docker.command });
+  await restored.initialize(); assert.equal((await restored.get(A, job.jobId)).state, "cancelled"); await restored.close();
+  await rejects(() => c.runner.get("invalid", job.jobId), "INVALID_SESSION");
+  c.files.cleanupRoot = async () => []; await rejects(() => c.runner.get(A, job.jobId), "SANDBOX_STATE");
+});
+test("runtime preparation restores cloud inputs and writes frozen source only to local cache", async (t) => {
+  const c = await fixture(t), calls = [];
+  c.files.prepareRuntime = async sid => { assert.equal(sid, A); calls.push("hydrate"); return { mode: "cloud", state: "unconfirmed", keptDirty: ["input.csv"] }; };
+  c.files.writeRuntimeBytes = async (sid, args) => { assert.match(args.path, /^\.sandbox-script-/); calls.push("runtime-local"); return c.files.writeBytes(sid, args); };
+  const { prepared, job } = await start(c); assert.deepEqual(calls, ["hydrate", "runtime-local"]);
+  assert.equal(prepared.approvalArgs.inputStorage.state, "unconfirmed"); assert.deepEqual(prepared.approvalArgs.inputStorage.keptDirty, ["input.csv"]); assert.equal(Object.isFrozen(prepared.approvalArgs.inputStorage), true);
+  await c.runner.stop(A, job.jobId);
 });

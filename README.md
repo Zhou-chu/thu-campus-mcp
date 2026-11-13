@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml)
 
-在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂、MadModel**。配置一个 `thu-campus` MCP，即可使用 47 个校园工具、4 个浏览器工具和 2 个 MadModel 工具，共 **53 个工具**（原工具名称保留）。
+在 Claude Code、Codex、Antigravity 或 DeepSeek Harness 中，用自然语言操作**网络学堂、清华云盘、荷塘雨课堂、MadModel**。配置一个 `thu-campus` MCP，即可使用52个校园工具（含5个受限私有工作区能力）、4个浏览器工具和2个MadModel工具，共**58个工具**（原工具名称保留）。
 
 项目内置独立的 Chromium 运行时管理和持久浏览器工作区。首次完成本机登录后，后续启动复用 Cookie、localStorage 与 IndexedDB；API 会话过期时，统一入口优先尝试从已绑定的浏览器恢复同一账号。**默认不依赖 Edge、Chrome 或额外 Electron 程序。**
 
@@ -10,7 +10,7 @@
 
 ## 独立应用：不接 Harness 也能用
 
-除 MCP 形态外，项目自带一个**本地 Agent 应用运行时**，把同样的 53 个工具、同一个持久浏览器和 MadModel 模型通道包装成独立应用：
+除 MCP 形态外，项目自带一个**本地 Agent 应用运行时**，复用原53项业务工具、同一个持久浏览器和MadModel模型通道，并组合11项会话工作区能力。5项云盘内部存储接口不直接暴露给模型，应用模型目录共64项：
 
 ```powershell
 node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
@@ -34,7 +34,7 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 **模型自主闭环**：对话默认走 MadModel（清华统一认证直连，`app serve` 内置模型路由），不需要外部模型 API Key；`THU_CAMPUS_APP_MODEL_ROUTE=openai` 时才改接任意 OpenAI 兼容端点。
 
-**实际任务执行**：独立Agent增加会话工作区工具，可经确认导入本地附件、读文本/解包ZIP、写代码、在真正隔离的Python/Node容器中运行，核对实际PDF/图表/代码并打包下载。代码仅容器执行，禁网、非root、只挂单会话目录；Docker或本地镜像未就绪时明确不可运行，绝不回退宿主机。镜像由应用所有者提前准备，Python环境用uv管理、无Conda。后台提交、退出成功、产物生成与校园提交分别验收，提交仍需独立确认。准备方式与限制见[Agent工作区与隔离执行](<docs/agent-workspace.md>)。
+**实际任务执行**：默认以清华云盘个人默认资料库下的全私有`/Agent工作区`作为持久硬盘，先核验真实账号与完整分享权限、确认精确范围再创建；本地只作隔离缓存，无法证明私有时阻止，不选共享库替代。可经确认导入附件、读文本/解包ZIP、写代码、在真正隔离的Python/Node容器中运行，核对实际PDF/图表/代码并打包下载。计算完成与云盘同步分别显示；同步失败保留本地结果并明确未保存，不能假成功。代码仅容器执行，禁网、非root、只挂单会话目录；Docker或本地镜像未就绪时明确不可运行，绝不回退宿主机。镜像由应用所有者提前准备，Python环境用uv管理、无Conda。后台提交、退出成功、产物生成与校园提交分别验收，提交仍需独立确认。准备方式与限制见[Agent工作区与隔离执行](<docs/agent-workspace.md>)。
 
 发布前请照 [发布清单](docs/release-checklist.md) 走一遍，其中「未完成」的两项是真机验收。
 

@@ -31,8 +31,8 @@ test("one MCP entry forwards all47 tools, browser lifecycle and rain prompt", as
       }),
     );
     const tools = (await client.listTools()).tools;
-    assert.equal(tools.length, 53);
-    assert.equal(new Set(tools.map((t) => t.name)).size, 53);
+    assert.equal(tools.length, 58);
+    assert.equal(new Set(tools.map((t) => t.name)).size, 58);
     assert(tools.some((t) => t.name === "madmodel_status"));
     assert(tools.some((t) => t.name === "madmodel_models"));
     const courses = await client.callTool({
@@ -111,4 +111,10 @@ test("recovery retries one read only and never replays writes or unknown outcome
     },
   );
   assert.equal(calls, 1);
+  for (const name of ["learn_status", "cloud_status", "rain_status", "madmodel_status", "cloud_workspace_status"]) {
+    let probes = 0;
+    const original = { isError: true, structuredContent: { code: "AUTH_REQUIRED" } };
+    assert.equal(await invokeWithRecovery({ name, annotations: { readOnlyHint: true } }, async () => { probes++; return original; }, async () => { throw new Error("status must not login"); }), original);
+    assert.equal(probes, 1);
+  }
 });

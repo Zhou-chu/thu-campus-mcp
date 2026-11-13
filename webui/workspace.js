@@ -41,10 +41,56 @@ export function workspaceJob(result) {
   return { ...job, sessionId: match[1], statusUrl: job.statusUrl };
 }
 
+const AUTH_LABELS = Object.freeze({ ready: "已登录", "login-required": "未登录", expired: "登录已过期", unverified: "未核验", unknown: "无法核验", mock: "模拟" });
+/** Presentation trusts normalized verification evidence, never local configuration or browser state. */
+export function authPresentation(info, { checking = false, stale = false } = {}) {
+  const value = typeof info === "string" ? { state: info } : info || {};
+  let state = Object.hasOwn(AUTH_LABELS, value.state) ? value.state : "unverified";
+  if (value.mode === "mock" || value.mock === true) state = "mock";
+  const protectedSource = typeof value.source === "string" && /^protected-api:[a-z0-9_-]{1,80}$/.test(value.source);
+  const checked = typeof value.checkedAt === "string" && Number.isFinite(Date.parse(value.checkedAt));
+  if (state === "ready" && (value.verified !== true || !protectedSource || !checked)) state = "unverified";
+  if (stale) state = "unknown";
+  const evidence = {};
+  for (const key of ["source", "code"]) if (typeof value[key] === "string" && value[key]) evidence[key] = value[key];
+  if (typeof value.checkedAt === "string" && Number.isFinite(Date.parse(value.checkedAt))) evidence.checkedAt = value.checkedAt;
+  return { state: checking ? "checking" : state, label: checking ? "核验中…" : AUTH_LABELS[state], verified: !checking && state === "ready", ...evidence };
+}
+
+const STORAGE_LABELS = Object.freeze({ ready: "云盘工作区可用", uninitialized: "云盘工作区待初始化", "login-required": "云盘未登录", unverified: "云盘工作区未核验", unavailable: "云盘工作区不可用" });
+export function storagePresentation(value, { loading = false, error = "" } = {}) {
+  const privacyVerified = value?.privacy?.verified === true && typeof value.privacy.checkedAt === "string" && Number.isFinite(Date.parse(value.privacy.checkedAt));
+  const scope = value?.scope;
+  const validScope = scope && [scope.accountId, scope.repoId].every(item => typeof item === "string" && item.length > 0) && scope.rootPath === "/Agent工作区";
+  let state = value?.mode === "cloud" && Object.hasOwn(STORAGE_LABELS, value?.state) ? value.state : "unavailable";
+  if (["ready", "uninitialized"].includes(state) && (!privacyVerified || !validScope)) state = "unverified";
+  if (error) state = "unavailable";
+  return {
+    state: loading ? "loading" : state,
+    label: loading ? "正在查询云盘工作区…" : STORAGE_LABELS[state],
+    canInitialize: !loading && !error && state === "uninitialized" && !!validScope && privacyVerified,
+    scope: validScope ? { accountId: scope.accountId, repoId: scope.repoId, rootPath: scope.rootPath } : null,
+    privacyVerified,
+    message: error || (typeof value?.message === "string" ? value.message : ""),
+    code: typeof value?.code === "string" ? value.code : "",
+    checkedAt: privacyVerified ? value.privacy.checkedAt : "",
+  };
+}
+export function jobStoragePresentation(job) {
+  const value = job?.storage;
+  if (value?.mode !== "cloud") return { state: "unverified", label: "云盘状态未核验", pending: false, message: "", visible: false };
+  const labels = { pending: "云盘同步中", synced: "云盘已保存", failed: "云盘同步失败", unconfirmed: "仅本地·云盘未确认" };
+  const state = Object.hasOwn(labels, value.state) ? value.state : "unverified";
+  return { state, label: labels[state] || "云盘状态未核验", pending: state === "pending", message: typeof value.message === "string" ? value.message : "", code: typeof value.code === "string" ? value.code : "", visible: true };
+}
+export function workspaceJobIsPending(job) {
+  return job.state === "running" || jobStoragePresentation(job).pending;
+}
+
 /** One serial polling loop, cancellable when its chat is not visible. Errors require explicit retry. */
 export function createJobPoller({ isActive, getJobs, readJob, onUpdate, onError, setTimer = setTimeout, clearTimer = clearTimeout, interval = 1500 }) {
   let timer = null, controller = null, stopped = false;
-  const pending = () => !stopped && isActive() ? getJobs().filter(job => job.state === "running" && !job.requestError && !job.stopping) : [];
+  const pending = () => !stopped && isActive() ? getJobs().filter(job => workspaceJobIsPending(job) && !job.requestError && !job.stopping) : [];
   const reconcile = () => {
     if (!pending().length) {
       if (timer !== null) clearTimer(timer);

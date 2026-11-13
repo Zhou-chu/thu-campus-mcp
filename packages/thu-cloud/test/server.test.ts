@@ -17,7 +17,7 @@ it("discovers cloud tools without login and returns a safe authentication error"
     await server.connect(a);
     await client.connect(b);
     const tools = (await client.listTools()).tools;
-    expect(tools.length).toBe(15);
+    expect(tools.length).toBe(20);
     expect(
       tools.find((t) => t.name === "cloud_upload_file")?.annotations
         ?.destructiveHint,

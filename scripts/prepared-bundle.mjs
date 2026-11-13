@@ -44,6 +44,7 @@ const requiredEntries = [
   "lib/app/states.mjs",
   "lib/app/runtime-state.mjs",
   "lib/app/workspace.mjs",
+  "lib/app/cloud-workspace.mjs",
   "lib/app/workspace-http.mjs",
   "lib/app/workspace-files.mjs",
   "lib/app/workspace-paths.mjs",

@@ -32,7 +32,7 @@ async function call(client, name, args = {}) {
 let real, mock;
 try {
   real = await connect(false);
-  assert.equal((await real.listTools()).tools.length, 15);
+  assert.equal((await real.listTools()).tools.length, 20);
   assert.equal(
     (await call(real, "cloud_status")).authentication.configured,
     false,
@@ -45,7 +45,7 @@ try {
   await real.close();
   real = undefined;
   mock = await connect(true);
-  assert.equal((await mock.listTools()).tools.length, 15);
+  assert.equal((await mock.listTools()).tools.length, 20);
   assert.equal((await call(mock, "cloud_status")).mode, "mock");
   assert.equal((await call(mock, "cloud_list_libraries")).libraries[0].id, rid);
   assert(
@@ -153,7 +153,7 @@ try {
     bytes,
   );
   console.log(
-    "PASS: 15 tools; unauthenticated real mode; mock binary roundtrip, mutations, idempotency and detached sync.",
+    "PASS: 20 tools; unauthenticated real mode; mock binary roundtrip, mutations, idempotency and detached sync.",
   );
 } finally {
   await real?.close();

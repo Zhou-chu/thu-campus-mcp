@@ -480,6 +480,7 @@ a:focus-visible {
   align-self: center;
 }
 @media (max-width: 600px) {
+  .chat-dock { gap: var(--space-2); }
   .model-field { flex: 1 1 180px; }
   .model-picker { gap: 8px; }
   .model-status { flex-basis: 100%; }
@@ -779,6 +780,15 @@ a:focus-visible {
   font-size: var(--text-meta);
   letter-spacing: 0.04em;
 }
+
+/* 运行状态与认证真值分离，核验证据按需展开。 */
+.auth-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.auth-service { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
+.auth-service .item-title { white-space: normal; }
+.auth-service-main { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.auth-service > :is(.auth-evidence, .auth-notice) { grid-column: 1 / -1; min-width: 0; }
+.auth-evidence > summary { font-size: var(--text-meta); min-height: 44px; align-content: center; cursor: pointer; }
+.auth-evidence .small { overflow-wrap: anywhere; }
 
 /* ---------------- 保活时间线 ---------------- */
 .timeline {
@@ -1080,6 +1090,14 @@ a:focus-visible {
 .job-logs pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-job { padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); }
 .tool-card > summary .tool-state { white-space: nowrap; }
+.job-summary-states { margin-left: auto; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); max-width: 72%; }
+.job-summary-states .tool-state { margin-left: 0; }
+.job-storage-state { color: var(--muted); font-size: var(--text-meta); white-space: nowrap; }
+.job-storage-state[data-s="failed"], .job-storage-state[data-s="unconfirmed"] { color: var(--danger); }
+.job-storage-state[data-s="synced"] { color: var(--ready); }
+.workspace-storage-summary { gap: var(--space-2); font-size: var(--text-meta); flex-wrap: wrap; }
+.workspace-storage-summary button { min-height: 44px; }
+.storage-location, .storage-scope { overflow-wrap: anywhere; }
 
 /* 对话里的 Markdown 表格：横向可滚，风格与正文一致 */
 .rich-table-wrap {

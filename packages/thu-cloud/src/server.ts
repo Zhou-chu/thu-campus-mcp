@@ -2,7 +2,8 @@ import path from "node:path";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { AuthStore } from "./auth.js";
+import { cloudStatus } from "./status.js";
+import { CloudWorkspace } from "./workspace.js";
 import { makeDrive } from "./factory.js";
 import { loadConfig, type Config } from "./config.js";
 import { remotePath, bareName } from "./client.js";
@@ -122,18 +123,58 @@ export async function createServer(config: Config = loadConfig()) {
   }
   tool(
     "cloud_status",
-    "查询本机认证配置；verify=true 时在线验证资料库权限。",
+    "在线核验受保护个人账号；本地配置、mock和库权限不等于登录有效。",
+    { verify: z.boolean().default(true) },
+    (i, { drive }) => cloudStatus(config, { drive, verify: i.verify }),
+  );
+  const accountId = z.string().regex(/^[a-f\d]{32}$/);
+  const session = { accountId, sessionId: z.string().uuid() };
+  const relative = z.string().min(1).max(1024);
+  tool(
+    "cloud_workspace_status",
+    "只读审计个人默认库及Agent专用范围；不初始化、不改分享。",
+    {},
+    (_i, { drive }) => new CloudWorkspace(config, drive).status(),
+  );
+  tool(
+    "cloud_workspace_init",
+    "仅经明确scope审批初始化固定Agent目录；绑定在线accountId与预览默认库，不接管既有目录。",
+    { accountId, expectedRepoId: repoId },
+    (i, { drive }) => new CloudWorkspace(config, drive).init(i),
+    false,
+    true,
+  );
+  tool(
+    "cloud_workspace_list",
+    "列出绑定身份和UUID会话内的相对元数据；不接受任意repo或根目录。",
     {
-      verify: z.boolean().default(false),
+      ...session,
+      path: relative.default("."),
+      recursive: z.boolean().default(false),
     },
-    async (i, { drive, transfer, ops }) => ({
-      mode: config.mock ? "mock" : "real",
-      authentication: await new AuthStore(config.stateDir).status(),
-      sessionValidity: i.verify
-        ? (await drive.libraries(), "verified")
-        : "not_checked",
-      outputDir: config.outputDir,
-    }),
+    (i, { drive }) => new CloudWorkspace(config, drive).list(i),
+  );
+  tool(
+    "cloud_workspace_pull",
+    "下载绑定会话文件到服务器私有缓存；不接受任意本机输出目录。",
+    { ...session, path: relative },
+    (i, { drive }) => new CloudWorkspace(config, drive).pull(i),
+    false,
+    true,
+  );
+  tool(
+    "cloud_workspace_push",
+    "内部调用：有界普通文件推送至固定会话子树；覆盖需匹配expectedRemoteId，未知写不重投，无服务端原子CAS。",
+    {
+      ...session,
+      path: relative,
+      sourcePath: absolute,
+      overwrite: z.boolean().default(false),
+      expectedRemoteId: z.string().min(1).max(256).optional(),
+    },
+    (i, { drive }) => new CloudWorkspace(config, drive).push(i),
+    false,
+    true,
   );
   tool(
     "cloud_list_libraries",

@@ -195,3 +195,35 @@ test("窄范围HTTP路由缺能力/缺会话/未匹配与底层异常使用真�
     assert.equal(result.body.error.message, failure.message || "工作区操作失败。");
   }
 });
+
+test("storage API inherits device auth, is read-only and never invents local fallback", async (t) => {
+  const f = await fixture(t);
+  assert.equal((await fetch(f.base + "/api/workspace/storage")).status, 401);
+  const storage = await f.json("/api/workspace/storage");
+  assert.equal(storage.status, 200); assert.equal(storage.body.storage.mode, "local"); assert.equal(storage.body.storage.state, "ready");
+  assert.equal((await f.json("/api/workspace/storage", { method: "POST", body: "{}" })).status, 405);
+  const unavailable = await direct("/api/workspace/storage");
+  assert.equal(unavailable.body.storage.mode, "cloud"); assert.equal(unavailable.body.storage.state, "unavailable");
+  const flat = { mode: "cloud", state: "unverified", privacy: { verified: false } };
+  assert.deepEqual((await direct("/api/workspace/storage", { host: { storageStatus: async () => flat } })).body.storage, flat);
+  assert.equal((await direct("/api/workspace/storage", { method: "PUT" })).status, 405);
+  assert.deepEqual(f.records.campus, []);
+});
+test("cloud internal tools cannot bypass scoped workspace approval through raw POST", async (t) => {
+  const f = await fixture(t);
+  for (const suffix of ["status", "init", "list", "pull", "push"]) {
+    const result = await f.json("/api/tools/cloud_workspace_" + suffix, { method: "POST", body: JSON.stringify({ approved: true }) });
+    assert.equal(result.status, 403); assert.equal(result.body.error.code, "WORKSPACE_CHAT_REQUIRED");
+  }
+  assert.deepEqual(f.records.campus, []);
+});
+test("job GET and stop use sync-state decorator without uploading", async (t) => {
+  const f = await fixture(t); let decorated = 0;
+  f.host.job = (sid, job) => { assert.equal(sid, f.a.id); decorated++; return { ...job, storage: { mode: "cloud", state: "failed", code: "CLOUD_CONFLICT" } }; };
+  const target = `/api/workspaces/${f.a.id}/jobs/${J}`;
+  assert.equal((await f.json(target)).body.job.storage.code, "CLOUD_CONFLICT");
+  assert.equal((await f.json(target + "/stop", { method: "POST", body: "{}" })).body.job.storage.state, "failed");
+  assert.equal(decorated, 2); assert.deepEqual(f.records.campus, []);
+  const fallback = await direct(target, { host: { workspaceFiles: {}, sandbox: { get: async () => ({ jobId: J, state: "succeeded" }) } } });
+  assert.equal(fallback.body.job.state, "succeeded"); assert.equal(fallback.body.job.storage, undefined);
+});

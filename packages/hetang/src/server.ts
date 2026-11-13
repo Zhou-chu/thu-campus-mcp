@@ -3,7 +3,7 @@ import { readFile, lstat, mkdir } from "node:fs/promises";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { AuthStore } from "./auth.js";
+import { rainStatus } from "./status.js";
 import { makeClient } from "./factory.js";
 import { loadConfig, type Config } from "./config.js";
 import { RainClient } from "./client.js";
@@ -72,7 +72,7 @@ export async function createServer(cfg: Config = loadConfig()) {
       async (input: any) => {
         try {
           const c = await makeClient(cfg);
-          const authenticated = name !== "rain_status" || Boolean(input.verify);
+          const authenticated = name !== "rain_status";
           if (authenticated) await c.checkAuth();
           const result = await fn(input, c);
           if (authenticated) await c.checkAuth();
@@ -114,16 +114,9 @@ export async function createServer(cfg: Config = loadConfig()) {
   }
   tool(
     "rain_status",
-    "查询荷塘雨课堂登录配置。verify=true 在线验证；不接收或返回 Cookie/Token。",
-    { verify: z.boolean().default(false) },
-    async (i, c) => ({
-      mode: cfg.mock ? "mock" : "real",
-      authentication: cfg.mock
-        ? { configured: true, simulation: true }
-        : await new AuthStore(cfg.stateDir).status(),
-      sessionValidity: i.verify ? (await c.user(), "verified") : "not_checked",
-      outputDir: cfg.outputDir,
-    }),
+    "只读验证已有荷塘雨课堂会话；verify=false仅查本地配置。不扫码、不进入课堂、不返回身份或Cookie/Token。",
+    { verify: z.boolean().default(true) },
+    (i, c) => rainStatus(cfg, c, { verify: i.verify }),
   );
   tool(
     "rain_list_courses",

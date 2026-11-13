@@ -176,7 +176,9 @@ test("配对码换到设备令牌，令牌可读 meta 并能被吊销", async (t
   assert.equal(meta.status, 200);
   const payload = await meta.json();
   assert.equal(payload.account.masked, "2023****1234");
-  assert.equal(payload.services.learnx.state, "ready");
+  // fake只提供配置、不提供受保护API核验，不能冒充真实已登录。
+  assert.equal(payload.services.learnx.state, "unverified");
+  assert.equal(payload.services.learnx.verified, false);
   assert.equal(payload.services.cloud.state, "login-required");
   assert.equal(payload.services.hetang.state, "login-required");
   assert.equal(payload.services.madmodel.state, "expired");

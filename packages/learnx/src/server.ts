@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { AuthStore } from './auth.js';
+import { learnStatus } from './status.js';
 import { createClient } from './client.js';
 import { type Config } from './config.js';
 import { kinds, labels, LearnError, publicError, type Content } from './types.js';
@@ -30,9 +30,8 @@ export async function createServer(config: Config) {
       catch (error) { return { isError: true, content: [{ type: 'text', text: JSON.stringify(publicError(error)) }] }; }
     });
   }
-  register('learn_status', '检查本机认证配置与能力；不联网，不输出密码、Cookie 或指纹。', {}, async () => ({
-    mode: config.mock ? 'mock' : 'real', authentication: config.mock ? { configured: true, method: 'mock' } : await new AuthStore(config.stateDir).status(),
-    sessionValidity: 'not_checked', outputDir: config.outputDir,
+  register('learn_status', '只读验证已有网络学堂会话；verify=false仅查本地配置，不自动登录，不返回身份、Cookie或指纹。', { verify: z.boolean().default(true) }, async a => ({
+    ...await learnStatus(config, { verify: a.verify }),
     sections: kinds.map(k => ({ kind: k, name: labels[k], completeness: ['discussion', 'question'].includes(k) ? 'partial-until-site-verified' : 'requires-live-verification' })),
     authCommand: 'node dist/cli.js auth login 或 auth import；在本机终端执行。',
   }));

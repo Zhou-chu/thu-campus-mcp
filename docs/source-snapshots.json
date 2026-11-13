@@ -94,6 +94,10 @@
       "test/browser-auth.test.ts": {
         "sha256": "5217382a7de60d21a323e021e60a65e0aac4ca3b6505b77c3929a7525673b62c",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/server.ts": {
+        "sha256": "15564d90b95762dadb159a324b947bebd61f57014b446697e2586f39cf86e132",
+        "reason": "1.5：受保护网络学堂认证探针，不把配置当登录证据"
       }
     }
   },
@@ -134,24 +138,36 @@
     },
     "integrationChanges": {
       "README.md": {
-        "sha256": "e57a141a4c802cac22f3ae648af34e7a7b83f603bab36150a46e3d7701081d8a",
-        "reason": "Bundle module guide"
+        "sha256": "a0a8b5d80fcceec7a79412181c092ab87001c51630f07e5400cab07fca0312a9",
+        "reason": "Bundle module guide；1.5：个人默认资料库固定私有工作区、限制与MCP能力说明"
       },
       "package.json": {
-        "sha256": "7558dbf60986430c041f598b2fcf1aea4c30436bac2dd76b35c187c5f7306a62",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "49b61154b12d916f54057e101067cd51e3ffdafb49c0858cb24453d575e457a5",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；1.5：将私有工作区原生回归加入包测试"
       },
       "src/browser-auth.ts": {
         "sha256": "05aeb13d34e13f9056af01d697126c5c52cab9bfd37ca57064a101749b15b749",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/cli.ts": {
-        "sha256": "6c2c13552b430176b5bb9b96e3b687ab775a9ce5c2b60e1189abcb144b12b45c",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "5d9b2757864f656a087f6c110fffa2fc72747f321d8fc927b16e5aed92d98a43",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；1.5：注册私有工作区后端实例与状态支持"
       },
       "src/auth.ts": {
         "sha256": "9ef06de5989984cccc18ebd7ee24dcdcf9ea56a8f7ab2febab78b5c45996c12e",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+      },
+      "src/server.ts": {
+        "sha256": "2e012c7f348cd0dff0d60a41cbe4ff2bab753e26d1c4a1b22e4255dfb2eb7dae",
+        "reason": "1.5：注册受保护认证状态及五个受限私有工作区工具"
+      },
+      "test/server.test.ts": {
+        "sha256": "76817f7bcd3e8b5b510f8398d757c09692590c1617b225c3f36d9ae237196a14",
+        "reason": "1.5：更新新增工具目录断言"
+      },
+      "test/smoke.mjs": {
+        "sha256": "e94482305d6a0962d6e0afb12d7c2700fa3259869a2290ce4fd9c1307fdda386",
+        "reason": "1.5：验证20项云盘工具及受限工作区注册"
       }
     }
   },
@@ -240,8 +256,8 @@
         "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/server.ts": {
-        "sha256": "892a322ebe12d157d04ceed5ad944701d96a5d612351ff0c8e28f6e3decbcd98",
-        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+        "sha256": "1a55ece8dfe6680f8f15f83cf1cbbbf0e60f395aa1822e2424c70c715bbfc78c",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage.；1.5：受保护雨课堂认证探针与明确认证证据，不自动登录或进入课堂"
       },
       "src/types.ts": {
         "sha256": "c4675bfe1d5f9b1350f8e20bd1e31204fcd7a15d1a85d5a587ea03e2e5b4c60f",
