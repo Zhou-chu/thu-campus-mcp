@@ -84,7 +84,7 @@ h1,
 h2,
 h3 {
   font-family: var(--serif);
-  font-weight: 500;
+  font-weight: 400;
   margin: 0;
   letter-spacing: 0.01em;
 }
@@ -788,3 +788,123 @@ h2[data-eyebrow]::before {
 
 
 
+
+/* 键盘可达：跳过导航，聚焦前不占版面 */
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 30;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 8px 14px;
+  font-size: 12.5px;
+}
+.skip:focus {
+  left: 8px;
+  top: 8px;
+}
+
+/* ---------------- 设计目录页（preview.html）---------------- *
+ * 该页 CSP 不放开 inline style，所以布局只用类名，不用 style 属性。 */
+.preview-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  overflow: visible;
+  padding: 28px 20px 48px;
+}
+.swatch-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.swatch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.swatch-row > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line);
+}
+.sw-paper {
+  background: var(--paper);
+}
+.sw-panel {
+  background: var(--panel);
+}
+.sw-ink {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.sw-muted {
+  background: var(--muted);
+  border-color: var(--muted);
+}
+.sw-line {
+  background: var(--line-strong);
+  border-color: var(--line-strong);
+}
+.sw-ready {
+  background: var(--ready);
+  border-color: var(--ready);
+}
+.sw-warn {
+  background: var(--warn);
+  border-color: var(--warn);
+}
+.sw-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.spec-display {
+  font-family: var(--serif);
+  font-size: 30px;
+  line-height: 1.2;
+}
+.spec-h2 {
+  font-family: var(--serif);
+  font-size: 24px;
+  line-height: 1.35;
+}
+.spec-item {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+.spec-body {
+  font-size: 14px;
+  line-height: 1.75;
+}
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.state-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.skeleton-demo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.skeleton-wide {
+  width: 60%;
+}
+.skeleton-narrow {
+  width: 42%;
+}

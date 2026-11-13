@@ -345,7 +345,14 @@ const QUICK_ACTIONS = [
 ];
 function chatView() {
   const wrap = el("div", { class: "stack chat" });
-  const messages = el("div", { class: "messages", id: "messages" });
+  const messages = el("div", {
+    class: "messages",
+    id: "messages",
+    role: "log",
+    "aria-live": "polite",
+    "aria-relevant": "additions text",
+    "aria-label": "对话内容",
+  });
   const textarea = el("textarea", {
     id: "composer",
     rows: 1,
@@ -1020,6 +1027,16 @@ function settingsView() {
       linkBox,
     ]),
   );
+  wrap.append(
+    el("p", { class: "small muted" }, [
+      el("a", {
+        href: "/preview.html",
+        target: "_blank",
+        rel: "noreferrer",
+        text: "查看设计目录（色板 / 字阶 / 组件状态 / 时间线）→",
+      }),
+    ]),
+  );
   wrap.append(residentCard());
   wrap.append(
     el("div", { class: "card stack" }, [
@@ -1113,6 +1130,9 @@ async function start() {
 start().catch((e) => {
   showPair("启动失败：" + (e?.message || "未知错误"));
 });
+
+
+
 
 
 

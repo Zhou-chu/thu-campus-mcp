@@ -113,8 +113,12 @@
 
 ## 9. Agent Prompt Guide
 
+设计目录：`webui/preview.html`（色板 / 字阶 / 组件状态 / 时间线一屏对照，设置页有入口）。改样式时同步更新本文件与该页；`test/design-guardrails.test.mjs` 会检查本节结构、变量完整性与资源版本号。
+
+
 快速色板：`纸 #f4f3f0 / 墨 #111110 / 次级 #746f65 / 线 #d9d5ca / 就绪 #2f5d3a / 过期 #8a4b1f / 危险 #7d1f1f`。
 
 生成提示词模板：
 
 > 用本项目的 `webui/styles.css` 变量实现。直角、无阴影、纸墨单色；标题用 `--serif`，正文 `--sans` 14/1.75；区块用 1px `--line` 分割；列表用 CSS counter 编号；按钮 44px 高、墨黑填充或细描边；交互必须有 hover/active/focus-visible/disabled 四态；不要引入新颜色。
+
