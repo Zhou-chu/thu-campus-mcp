@@ -6,6 +6,7 @@ import path from "node:path";
 import { createAppServer } from "../lib/app/server.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
 import { MadModelClient } from "../lib/madmodel/client.mjs";
+import { createModelRoute } from "../lib/app/model.mjs";
 
 async function fixture(t, route) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-models-"));
@@ -103,3 +104,52 @@ test("MadModel目录缓存可被显式刷新，刷新失败保留旧目录", asy
   await assert.rejects(client.models({ refresh: true }));
   assert.equal((await client.models()).data[0].id, "B");
 });
+
+test("MadModel completion保留stream:true并原样返回未消费Response", async () => {
+  const controller = new AbortController();
+  let streamController;
+  const response = new Response(new ReadableStream({ start(c) { streamController = c; } }), { headers: { "content-type": "text/event-stream" } });
+  const body = { model: "stub", messages: [{ role: "user", content: "测试" }], stream: true };
+  const client = new MadModelClient({
+    config: { timeoutMs: 5000 },
+    manager: { ensure: async ({ signal }) => { assert.equal(signal.aborted, false); return { token: "mock-only" }; } },
+    fetcher: async (_url, options) => {
+      assert.deepEqual(JSON.parse(options.body), body);
+      assert.equal(options.signal.aborted, false);
+      return response;
+    },
+  });
+  const returned = await client.completion(body, { signal: controller.signal });
+  assert.equal(returned, response);
+  assert.equal(returned.bodyUsed, false, "客户端不得预读或缓冲流");
+  streamController.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+  streamController.close();
+  assert.equal(await returned.text(), "data: [DONE]\n\n");
+});
+
+for (const modelRoute of ["madmodel", "openai"]) {
+  test(`应用${modelRoute}路由原样透传Response、stream与signal`, async (t) => {
+    const response = reply();
+    const body = { model: "stub", messages: [{ role: "user", content: "测试" }], stream: true };
+    const controller = new AbortController();
+    if (modelRoute === "madmodel") {
+      t.mock.method(MadModelClient.prototype, "completion", async (passed, options) => {
+        assert.deepEqual(passed, body);
+        assert.equal(options.signal, controller.signal);
+        return response;
+      });
+    } else {
+      t.mock.method(globalThis, "fetch", async (url, options) => {
+        assert.equal(url, "https://mock.invalid/v1/chat/completions");
+        assert.deepEqual(JSON.parse(options.body), body);
+        assert.equal(options.signal, controller.signal);
+        return response;
+      });
+    }
+    const route = createModelRoute({ modelRoute, modelBaseUrl: "https://mock.invalid/v1" });
+    const returned = await route.chat(body, { signal: controller.signal });
+    assert.equal(returned, response);
+    assert.equal(returned.bodyUsed, false);
+    await returned.body.cancel();
+  });
+}

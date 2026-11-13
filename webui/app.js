@@ -1,3 +1,5 @@
+import { readChatEvents } from "./chat-stream.js";
+
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
 const state = {
@@ -281,6 +283,8 @@ function acceptModels(models, current) {
 function syncModelPickers() {
   const send = $("#chat-send");
   if (send) send.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel;
+  const stop = $("#chat-stop");
+  if (stop) stop.hidden = !state.busy;
   for (const picker of document.querySelectorAll(".model-picker")) picker.updateModels();
 }
 async function refreshModels() {
@@ -350,6 +354,8 @@ function blocksFromSession(session) {
   for (const message of session.messages || []) {
     if (message.role === "user") blocks.push({ kind: "user", text: message.content || "" });
     else if (message.role === "assistant") {
+      if (typeof message.reasoning === "string" && message.reasoning)
+        blocks.push({ kind: "reasoning", text: message.reasoning, status: message.aborted ? "stopped" : message.interrupted ? "error" : "done" });
       if (message.content) blocks.push({ kind: "assistant", text: message.content, done: true });
       for (const call of message.toolCalls || [])
         blocks.push({ kind: "tool", name: call.name, args: call.arguments, state: "done" });
@@ -382,6 +388,28 @@ function bubbleFor(block) {
 function setBubbleText(block, text) {
   if (!block.rich) return;
   clear(block.rich).append(renderRich(text));
+}
+function reasoningFor(block) {
+  const details = el("details", { class: "reasoning-block", open: !!block.open });
+  const summary = el("summary", { "aria-live": "polite" });
+  const content = el("div", { class: "reasoning-content", "aria-live": "off" });
+  details.append(summary, content);
+  details.addEventListener("toggle", () => { block.open = details.open; });
+  content.dataset.followTail = "true";
+  content.addEventListener("scroll", () => trackTail(content));
+  block.node = details;
+  block.summary = summary;
+  block.contentNode = content;
+  updateReasoning(block);
+  return details;
+}
+function updateReasoning(block) {
+  if (!block.node) return;
+  const labels = { streaming: "思考中…", done: "思考过程", stopped: "思考已停止", error: "思考已中断" };
+  block.summary.textContent = labels[block.status] || labels.done;
+  block.node.dataset.state = block.status || "done";
+  block.contentNode.textContent = block.text || "";
+  scrollIfNearBottom(block.contentNode);
 }
 function toolCardFor(block) {
   const details = el("details", { class: "tool-card", dataset: { state: block.state || "done" } });
@@ -479,6 +507,8 @@ function chatView() {
     "aria-relevant": "additions text",
     "aria-label": "对话内容",
   });
+  messages.dataset.followTail = "true";
+  messages.addEventListener("scroll", () => trackTail(messages));
   const textarea = el("textarea", {
     id: "composer",
     rows: 1,
@@ -487,7 +517,7 @@ function chatView() {
     "aria-keyshortcuts": "Enter Shift+Enter",
   });
   const sendButton = el("button", { id: "chat-send", class: "primary", type: "button", text: "发送" });
-  const stopButton = el("button", { class: "ghost danger", type: "button", text: "停止", hidden: true });
+  const stopButton = el("button", { id: "chat-stop", class: "ghost danger", type: "button", text: "停止", hidden: true });
   const composer = el("div", { class: "composer" }, [textarea, sendButton, stopButton]);
   const quick = el("div", { class: "quick", role: "group", "aria-label": "常用指令" });
   for (const [label, instruction] of QUICK_ACTIONS) {
@@ -514,7 +544,7 @@ function chatView() {
     if (!text || state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel) return;
     textarea.value = "";
     autoGrow(textarea);
-    await sendTurn(text, { messages, sendButton, stopButton, textarea });
+    await sendTurn(text);
   };
   sendButton.addEventListener("click", send);
   textarea.addEventListener("input", () => autoGrow(textarea));
@@ -544,6 +574,7 @@ function autoGrow(textarea) {
 }
 /** 只负责把一个块变成节点；不碰文档，历史消息渲染时容器可能还没挂到页面。 */
 function blockNode(block) {
+  if (block.kind === "reasoning") return reasoningFor(block);
   if (block.kind === "tool") return toolCardFor(block);
   if (block.kind === "confirm") return confirmCardFor(block);
   if (block.kind === "error")
@@ -560,146 +591,125 @@ function appendBlock(block) {
   if (!container) return null;
   const node = blockNode(block);
   container.append(node);
+  scrollIfNearBottom(container);
   return node;
 }
-function scrollIfNearBottom(container) {
-  if (!container) return;
-  const near = container.parentElement?.parentElement;
-  const scroller = near ? document.querySelector(".view") : null;
-  if (!scroller) return;
-  const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-  if (distance < 160) scroller.scrollTop = scroller.scrollHeight;
+function trackTail(container) {
+  container.dataset.followTail = String(container.scrollHeight - container.scrollTop - container.clientHeight < 120);
 }
-async function sendTurn(text, ui) {
+function scrollIfNearBottom(container = $("#messages")) {
+  if (container && container.dataset.followTail !== "false") container.scrollTop = container.scrollHeight;
+}
+async function sendTurn(text) {
   state.busy = true;
   syncModelPickers();
-  ui.sendButton.disabled = true;
-  ui.stopButton.hidden = false;
-  const empty = $("#messages .empty");
-  if (empty) empty.remove();
+  const container = $("#messages");
+  if (container) container.dataset.followTail = "true";
   const userBlock = { kind: "user", text };
   state.messages.push(userBlock);
   appendBlock(userBlock);
   let assistant = null;
-  let pending = "";
+  let reasoning = null;
   let frame = 0;
+  let completed = false;
   const flush = () => {
     frame = 0;
-    if (!assistant) return;
-    setBubbleText(assistant, assistant.text);
+    if (assistant) setBubbleText(assistant, assistant.text);
+    if (reasoning) updateReasoning(reasoning);
     scrollIfNearBottom();
   };
+  const schedule = () => { if (!frame) frame = requestAnimationFrame(flush); };
+  const ensureAssistant = () => {
+    if (assistant) return;
+    assistant = { kind: "assistant", text: "" };
+    state.messages.push(assistant);
+    appendBlock(assistant);
+  };
+  const ensureReasoning = () => {
+    if (reasoning) return;
+    reasoning = { kind: "reasoning", text: "", status: "streaming" };
+    const index = assistant ? state.messages.indexOf(assistant) : -1;
+    if (index < 0) state.messages.push(reasoning);
+    else state.messages.splice(index, 0, reasoning);
+    const node = appendBlock(reasoning);
+    if (node && assistant?.node?.parentNode === node.parentNode) assistant.node.before(node);
+  };
+  const finishStep = (status = "done") => {
+    if (frame) cancelAnimationFrame(frame);
+    if (reasoning) reasoning.status = status;
+    if (assistant) assistant.done = true;
+    flush();
+    assistant = null;
+    reasoning = null;
+  };
+  const addStatus = block => { state.messages.push(block); appendBlock(block); };
   state.controller = new AbortController();
   try {
     const headers = { "content-type": "application/json" };
     if (state.token) headers.authorization = "Bearer " + state.token;
     const response = await fetch(endpoint("/api/chat"), {
-      method: "POST",
-      headers,
+      method: "POST", headers,
       body: JSON.stringify({ text, sessionId: state.sessionId || undefined, model: state.selectedModel || undefined }),
       signal: state.controller.signal,
     });
     if (!response.ok || !response.body) {
       const data = await response.json().catch(() => ({}));
-      throw Object.assign(new Error(data?.error?.message || `对话失败（HTTP ${response.status}）`), {
-        code: data?.error?.code,
-      });
+      throw Object.assign(new Error(data?.error?.message || `对话失败（HTTP ${response.status}）`), { code: data?.error?.code });
     }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let index;
-      while ((index = buffer.indexOf("\n\n")) >= 0) {
-        const raw = buffer.slice(0, index);
-        buffer = buffer.slice(index + 2);
-        let event = "message";
-        const data = [];
-        for (const line of raw.split("\n")) {
-          if (line.startsWith("event:")) event = line.slice(6).trim();
-          else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
-        }
-        if (!data.length) continue;
-        let payload;
-        try {
-          payload = JSON.parse(data.join("\n"));
-        } catch {
-          continue;
-        }
-        if (event === "ready") {
-          state.sessionId = payload.sessionId;
-        } else if (event === "token") {
-          if (!assistant) {
-            assistant = { kind: "assistant", text: "" };
-            state.messages.push(assistant);
-            appendBlock(assistant);
-          }
-          pending = "";
-          assistant.text += payload.text || "";
-          if (!frame) frame = requestAnimationFrame(flush);
-        } else if (event === "reasoning") {
-          /* 推理增量不单独渲染，避免干扰阅读 */
-        } else if (event === "message") {
-          if (payload.role === "assistant") {
-            if (frame) cancelAnimationFrame(frame);
-            if (assistant) {
-              assistant.text = payload.content || assistant.text;
-              flush();
-            } else if (payload.content) {
-              const completed = { kind: "assistant", text: payload.content, done: true };
-              state.messages.push(completed);
-              appendBlock(completed);
-            }
-            // 每个模型步骤独立成段；快速完成时也必须提交最后一帧。
-            assistant = null;
-          }
-        } else if (event === "tool") {
-          if (payload.phase === "start") {
-            const card = { kind: "tool", name: payload.name, args: payload.args, state: "running" };
-            state.messages.push(card);
-            appendBlock(card);
-          } else {
-            const card = [...state.messages].reverse().find((b) => b.kind === "tool" && b.name === payload.name && b.state === "running");
-            if (card) {
-              card.state = payload.ok ? "done" : "failed";
-              card.result = payload.ok ? payload.result : undefined;
-              card.error = payload.ok ? undefined : payload.error;
-              applyToolState(card);
-            }
-          }
-          scrollIfNearBottom();
-        } else if (event === "confirm") {
-          const card = {
-            kind: "confirm",
-            callId: payload.callId,
-            name: payload.name,
-            args: payload.args,
-          };
+    for await (const { event, payload } of readChatEvents(response.body)) {
+      if (event === "ready") state.sessionId = payload.sessionId;
+      else if (event === "token" && typeof payload.text === "string") {
+        ensureAssistant();
+        assistant.text += payload.text;
+        if (reasoning) reasoning.status = "done";
+        schedule();
+      } else if (event === "reasoning" && typeof payload.text === "string" && payload.text) {
+        ensureReasoning();
+        reasoning.text += payload.text;
+        reasoning.status = "streaming";
+        schedule();
+      } else if (event === "message" && payload.role === "assistant") {
+        if (payload.reasoning) { ensureReasoning(); reasoning.text = payload.reasoning; }
+        if (payload.content) { ensureAssistant(); assistant.text = payload.content; }
+        finishStep(payload.aborted ? "stopped" : payload.interrupted ? "error" : "done");
+      } else if (event === "tool") {
+        if (payload.phase === "start") {
+          const card = { kind: "tool", name: payload.name, args: payload.args, state: "running" };
           state.messages.push(card);
           appendBlock(card);
-          scrollIfNearBottom();
-        } else if (event === "notice") {
-          appendBlock({ kind: "notice", message: payload.message || payload.code });
-        } else if (event === "error") {
-          appendBlock({ kind: "error", code: payload.code, message: payload.message || "本轮失败。" });
-        } else if (event === "done") {
-          state.sessionId = payload.sessionId || state.sessionId;
-          assistant = null;
+        } else {
+          const card = [...state.messages].reverse().find(b => b.kind === "tool" && b.name === payload.name && b.state === "running");
+          if (card) {
+            card.state = payload.ok ? "done" : "failed";
+            card.result = payload.ok ? payload.result : undefined;
+            card.error = payload.ok ? undefined : payload.error;
+            applyToolState(card);
+          }
         }
+        scrollIfNearBottom();
+      } else if (event === "confirm") {
+        const card = { kind: "confirm", callId: payload.callId, name: payload.name, args: payload.args };
+        state.messages.push(card);
+        appendBlock(card);
+      } else if (event === "notice") addStatus({ kind: "notice", message: payload.message || payload.code });
+      else if (event === "error") {
+        finishStep("error");
+        addStatus({ kind: "error", code: payload.code, message: payload.message || "本轮失败。" });
+      } else if (event === "done") {
+        state.sessionId = payload.sessionId || state.sessionId;
+        finishStep(payload.aborted ? "stopped" : "done");
+        completed = true;
       }
     }
-    if (frame) cancelAnimationFrame(frame);
+    if (!completed) throw Object.assign(new Error("连接中断，已保留收到的内容，请重试。"), { code: "STREAM_INTERRUPTED" });
   } catch (e) {
-    if (e.name !== "AbortError")
-      appendBlock({ kind: "error", code: e.code, message: e.message || "对话中断。" });
+    finishStep(e.name === "AbortError" ? "stopped" : "error");
+    if (e.name !== "AbortError") addStatus({ kind: "error", code: e.code, message: e.message || "对话中断。" });
   } finally {
+    finishStep();
     state.busy = false;
     state.controller = null;
     syncModelPickers();
-    ui.stopButton.hidden = true;
     scrollIfNearBottom();
     void loadSessions();
   }
@@ -1228,7 +1238,7 @@ function render() {
   view.append((views[state.view] || chatView)());
   syncModelPickers();
   if (state.view === "chat") {
-    const scroller = $("#view");
+    const scroller = $("#messages");
     scroller.scrollTop = scroller.scrollHeight;
   }
 }
