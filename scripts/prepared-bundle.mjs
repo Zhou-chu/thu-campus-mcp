@@ -15,6 +15,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { root, services } from "../lib/services.mjs";
 import { runtimeInfo, launchEphemeral } from "@thu-campus/browser";
 import { request } from "playwright-core";
+import { createWindowsZip } from "./windows-zip.mjs";
 if (process.platform !== "win32")
   throw new Error("Prepared release currently targets Windows x64.");
 const runtime = await runtimeInfo();
@@ -195,8 +196,13 @@ async function audit(dir) {
 await audit(stage);
 if (forbidden.length)
   throw new Error("Private state detected in prepared release.");
-const destination = path.join(release, "thu-campus-mcp-windows-x64.zip");
-execFileSync("tar.exe", ["-a", "-cf", destination, "-C", stage, "."]);
+const destination = path.join(release, process.argv.includes("--windows-compatible") ? "thu-campus-mcp-windows-x64-compatible.zip" : "thu-campus-mcp-windows-x64.zip");
+const nativeArchive = path.join(release, `windows-zip-${randomUUID()}.zip`);
+createWindowsZip({ sourcePath: stage, destinationPath: nativeArchive });
+await copyFile(nativeArchive, destination);
+// Only remove this build's own generated temporary archive after publication.
+if (path.dirname(nativeArchive) !== release) throw new Error("Unexpected temporary ZIP location.");
+await unlink(nativeArchive);
 const sha256 = createHash("sha256")
   .update(await readFile(destination))
   .digest("hex");

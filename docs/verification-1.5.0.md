@@ -58,6 +58,14 @@ node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverag
 - 实测：272函数，265合格、7函数超软阈值、0硬上限违规，**97.43分**。不把软阈违规隐藏为零smell。
 - 复现：`npm run audit:smells`或`node scripts/audit-code-smells.mjs --json`，输出完整范围、公式、指标与行号。
 
+## Windows系统解压兼容修正
+
+用户随后报告资源管理器将旧便携包判为无效。复核证实：tar可读，但Windows压缩文件夹枚举为0项；此前的tar移位验证不能替代系统解压验收。
+
+打包改用[Windows原生ZIP接口](<../scripts/windows-zip.ps1>)，发布前必须通过系统压缩文件夹枚举，不再用tar写最终ZIP。[专属回归](<../test/windows-zip.test.mjs>)4/4通过、skip0，包含系统Shell实际解压中文文件；[JavaScript包装层](<../scripts/windows-zip.mjs>)原生V8行/分支/函数覆盖率均100%。未改业务逻辑、登录资料或云盘内容。
+
+本次使用`npm run bundle:prepared -- --windows-compatible`生成独立兼容包，保留用户已打开的旧包；普通发布命令仍保持原文件名。已有本机服务时直接打开网页，不重复启动桌面后台。
+
 ## 保留的边界
 
 Seafile没有原子CAS；expectedRemoteId只是写前检查。主脚本冻结，模块/数据仍是可变输入。容器不等于防内核漏洞。缓存下载、历史和日志属于已配对设备的本机授权历史，不是SSO多租户隔离或最新云端证据。旧本地数据不自动上传，迁移要显式确认。已有其他MCP客户端须重建连接加载新后端；未强制重启共享连接或手机测试。
