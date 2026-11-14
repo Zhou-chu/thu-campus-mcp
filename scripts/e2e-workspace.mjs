@@ -233,8 +233,13 @@ async function main() {
     await page.locator(".tool-card").first().locator(":scope > summary").scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(screenshotDir, "workspace-job-dark-390.png") });
     check("窄屏深色仍可达且无横向溢出", await page.evaluate(() => document.documentElement.dataset.theme === "dark" && document.documentElement.scrollWidth <= innerWidth && document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight));
-    await page.locator("#composer").focus(); await page.keyboard.press("Tab");
-    check("键盘可达发送按钮", await page.locator("#chat-send").evaluate(node => node === document.activeElement));
+    await page.locator("#composer").focus();
+    const keyboardOrder = [];
+    for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-send']) {
+      await page.keyboard.press('Tab');
+      keyboardOrder.push(await page.locator(selector).evaluate(node => node === document.activeElement));
+    }
+    check("底栏按添加云盘模型刷新发送顺序键盘可达", keyboardOrder.every(Boolean));
     check("无浏览器脚本异常", errors.length === 0);
     console.log(JSON.stringify({ checks, sizes, screenshotDir, note: "仅受控fixture，无真实校园、计费模型或Docker运行；窄屏为浏览器而非手机实机。" }, null, 2));
   } finally {

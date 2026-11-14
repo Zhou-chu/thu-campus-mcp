@@ -168,7 +168,14 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 640 }); await page.click("#theme-dark"); await cleanup.locator(":scope > summary").scrollIntoViewIfNeeded();
     check("窄屏深色双状态与输入不溢出", await page.evaluate(() => document.documentElement.dataset.theme === "dark" && document.documentElement.scrollWidth <= innerWidth && document.querySelector("#composer").getBoundingClientRect().bottom <= innerHeight));
     await page.screenshot({ path: path.join(screenshotDir, "cloud-dark-390.png") });
-    await page.locator("#composer").focus(); await page.keyboard.press("Tab"); check("键盘可达发送按钮", await page.evaluate(() => document.activeElement.id === "chat-send"));
+    await page.locator("#composer").focus();
+    const keyboardOrder = [];
+    for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-send']) {
+      if (await page.locator(selector).isDisabled()) continue;
+      await page.keyboard.press('Tab');
+      keyboardOrder.push(await page.locator(selector).evaluate(node => node === document.activeElement));
+    }
+    check("底栏键盘按序到达发送并跳过禁用控件", keyboardOrder.every(Boolean) && await page.evaluate(() => document.activeElement.id === 'chat-send'));
     check("全程未绕过Cloud写审批", directWrites === 0); check("无浏览器脚本异常", errors.length === 0);
     console.log(JSON.stringify({ checks, sizes, screenshotDir, note: "仅真实本地HTTP+受控host，无校园写入/计费模型/Docker/手机实机。" }, null, 2));
   } finally {

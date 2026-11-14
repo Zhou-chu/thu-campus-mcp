@@ -44,6 +44,7 @@
   --text-code: 1rem;
   --text-title: 1.25rem;
   --text-heading: 1.75rem;
+  --text-hero: clamp(2rem, 4.5vw, 4.5rem);
   --text-section: 1.125rem;
   --reading-width: 52rem;
   color-scheme: light;
@@ -1170,4 +1171,61 @@ input,select {background:var(--control-fill);}
 }
 @media (prefers-reduced-transparency:reduce),(prefers-contrast:more) {
  .tabbar,.topbar,.settings-surface,.auth-panel,.pair-card,.composer {background:var(--panel);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;}
+}
+
+/* 对话首页：参考图的标题—输入面板—常用操作；有消息后回归阅读布局。 */
+.sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0;}
+.home-icon {width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none;}
+.chat-home {display:flex;flex-direction:column;gap:var(--space-3);}
+.home-eyebrow {font-size:var(--text-body);letter-spacing:.25em;color:var(--muted);padding-left:4px;}
+.home-title {display:flex;flex-wrap:wrap;column-gap:.3em;font-family:var(--serif);font-size:var(--text-hero);font-weight:600;line-height:1.2;letter-spacing:.015em;margin:0;}
+.chat[data-empty="true"] {flex:0 0 auto;gap:var(--space-7);}
+.chat[data-empty="true"] .messages {display:none;}
+.chat[data-empty="false"] .chat-home,.chat[data-empty="false"] .home-shortcuts {display:none;}
+.chat .composer {display:flex;flex-direction:column;gap:0;padding:0;align-items:stretch;position:relative;}
+.chat .composer textarea {min-height:56px;padding:var(--space-4) var(--space-5);border:0;border-radius:var(--radius-panel) var(--radius-panel) 0 0;background:transparent;}
+.chat[data-empty="true"] .composer textarea {min-height:132px;padding:var(--space-5);}
+.chat .composer textarea:focus-visible {border:0;}
+.composer-footer {display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);}
+.composer-actions {display:flex;align-items:center;gap:var(--space-4);min-width:0;}
+.composer-submit {display:flex;gap:var(--space-2);}
+.composer .composer-send,.composer .composer-stop {display:grid;place-items:center;width:52px;min-width:52px;height:52px;padding:0;font-size:var(--text-ui);}
+.composer-submit .home-icon {width:29px;height:29px;stroke-width:1.8;}
+.composer .model-picker {justify-self:end;display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:var(--space-1);width:min(360px,100%);align-items:center;}
+.composer .model-field {display:block;min-width:0;}
+.composer .model-field > span {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+.composer .model-field select {min-height:44px;padding:8px 24px 8px 8px;border:0;background:transparent;font-size:var(--text-body);text-overflow:ellipsis;}
+.composer .model-status {grid-column:1/-1;min-width:0;overflow-wrap:anywhere;}
+.composer .model-refresh {width:44px;height:44px;padding:0;}
+.composer .model-refresh .home-icon {width:19px;height:19px;}
+.composer-popover {position:relative;flex:none;}
+.composer-popover > summary {display:flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:44px;list-style:none;cursor:pointer;border-radius:var(--radius-control);font-size:var(--text-ui);}
+.composer-popover > summary::-webkit-details-marker {display:none;}
+.add-menu > summary {width:44px;}
+.add-menu {padding-right:var(--space-4);border-right:1px solid var(--line-strong);}
+.cloud-picker > summary {border:1px solid var(--line-strong);padding:0 var(--space-3);background:var(--control-fill);white-space:nowrap;}
+.composer-popover > summary:hover {background:var(--selected-fill);}
+.composer-popover > summary:focus-visible {outline:2px solid var(--ink);outline-offset:2px;}
+.composer-popover-body {position:absolute;bottom:calc(100% + 12px);left:0;z-index:20;display:flex;flex-direction:column;gap:var(--space-3);min-width:240px;max-width:min(340px,calc(100vw - 48px));padding:var(--space-4);border:1px solid var(--line-strong);border-radius:var(--radius-control);background:var(--panel);box-shadow:var(--surface-depth);}
+.composer-popover:not([open]) > .composer-popover-body {display:none;}
+.add-action {display:flex;align-items:center;gap:var(--space-3);min-height:44px;padding:var(--space-2);border:0;background:transparent;text-align:left;cursor:pointer;font-size:var(--text-ui);}
+.add-action:hover {background:var(--selected-fill);}
+.home-shortcuts {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;}
+.home-shortcut {display:flex;align-items:center;justify-content:center;gap:var(--space-3);position:relative;min-height:52px;padding:var(--space-2);border:0;background:transparent;color:var(--ink-soft);font-size:var(--text-chat);white-space:nowrap;cursor:pointer;}
+.home-shortcut:not(:last-child)::after {content:"";position:absolute;right:0;top:14px;bottom:14px;width:1px;background:var(--line-strong);}
+.home-shortcut:hover {color:var(--ink);background:var(--selected-fill);}
+@media (max-width:1100px) {.home-shortcuts {grid-template-columns:repeat(3,minmax(0,1fr));row-gap:var(--space-2);} .home-shortcut:nth-child(3)::after {display:none;}}
+@media (max-width:700px) {
+ .chat[data-empty="true"] {gap:var(--space-5);}
+ .chat-home {gap:var(--space-2);}
+ .home-eyebrow {font-size:var(--text-meta);}
+ .home-title {letter-spacing:0;column-gap:.15em;}
+ .composer-footer {grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);padding:var(--space-2) var(--space-3);}
+ .composer-actions {grid-column:1/-1;gap:var(--space-3);}
+ .composer .model-picker {grid-column:1;justify-self:stretch;width:100%;}
+ .composer-submit {grid-column:2;}
+ .chat[data-empty="true"] .composer textarea {min-height:92px;padding:var(--space-4);}
+ .home-shortcut {gap:var(--space-2);font-size:var(--text-body);min-height:44px;padding:var(--space-1);}
+ .home-shortcut .home-icon {width:20px;height:20px;}
+ .cloud-picker .composer-popover-body {left:-60px;}
 }

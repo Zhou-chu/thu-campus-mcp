@@ -3,6 +3,7 @@ import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABEL
 
 import { runAction } from "./ui-feedback.js";
 import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
+import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } from "./chat-home.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -12,6 +13,7 @@ const state = {
   meta: null,
   view: "chat",
   messages: [],
+  chatDraft: "",
   sessionId: null,
   busy: false,
   controller: null,
@@ -273,10 +275,16 @@ function currentStoragePresentation() {
   return storagePresentation(state.workspaceStorage, { loading: state.workspaceStorageLoading, error: state.workspaceStorageError });
 }
 function workspaceStorageSummary() {
-  const panel = el("div", { class: "workspace-storage-view workspace-storage-summary row between" });
+  const body = el("div", { class: "composer-popover-body cloud-status-panel" });
+  const panel = el("details", { class: "workspace-storage-view workspace-storage-summary composer-popover cloud-picker" }, [
+    el("summary", { "aria-label": "校园云盘" }, [homeIcon("cloud"), el("span", { text: "校园云盘" })]), body,
+  ]);
   panel.draw = () => {
     const info = currentStoragePresentation();
-    clear(panel).append(el("span", { class: "storage-status", text: info.label }), el("button", {
+    clear(body).append(el("span", { class: "state storage-status", dataset: { s: info.state }, text: info.label }));
+    if (info.scope) body.append(el("span", { class: "small", text: info.scope.rootPath }));
+    if (info.message) body.append(el("span", { class: info.state === "ready" ? "small muted" : "error", text: info.message }));
+    body.append(el("button", { class: "ghost", type: "button", text: state.workspaceStorageLoading ? "查询中…" : "查询状态", disabled: state.workspaceStorageLoading, "aria-busy": String(state.workspaceStorageLoading), onclick: loadWorkspaceStorage }), el("button", {
       class: "ghost", type: "button", text: "设置工作区", onclick: () => { state.view = "settings"; render(); },
     }));
   };
@@ -324,6 +332,7 @@ function acceptModels(models, current) {
 }
 function syncModelPickers() {
   refreshSidebar();
+  syncChatLayout();
   const send = $("#chat-send");
   if (send) send.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel;
   const stop = $("#chat-stop");
@@ -345,16 +354,16 @@ async function refreshModels() {
     syncModelPickers();
   }
 }
-function modelPicker(id) {
+function modelPicker(id, compact = false) {
   const select = el("select", { id, "aria-label": "对话模型" });
-  const refresh = el("button", { class: "ghost", type: "button", text: "刷新模型", onclick: refreshModels });
+  const refresh = el("button", { class: compact ? "icon-btn model-refresh" : "ghost", type: "button", "aria-label": "刷新模型", title: "刷新模型", onclick: refreshModels });
   const status = el("span", { class: "small muted model-status", role: "status", "aria-live": "polite" });
   const label = el("label", { class: "model-field", htmlFor: id }, [el("span", { text: "对话模型" }), select]);
   const picker = el("div", { class: "model-picker" }, [label, refresh, status]);
   picker.updateModels = () => {
     clear(select);
     for (const model of state.models)
-      select.append(el("option", { value: model.id, text: model.label === model.id ? model.id : `${model.label} · ${model.id}` }));
+      select.append(el("option", { value: model.id, text: compact ? model.label || model.id : model.label === model.id ? model.id : `${model.label} · ${model.id}` }));
     if (!state.models.some((model) => model.id === state.selectedModel)) {
       select.prepend(el("option", {
         value: state.selectedModel,
@@ -366,7 +375,8 @@ function modelPicker(id) {
     select.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.models.length;
     refresh.disabled = state.busy || state.modelSaving || state.modelsLoading;
     refresh.setAttribute("aria-busy", String(state.modelsLoading));
-    refresh.textContent = state.modelsLoading ? "刷新中…" : "刷新模型";
+    if (compact) refresh.replaceChildren(homeIcon("refresh"));
+    else refresh.textContent = state.modelsLoading ? "刷新中…" : "刷新模型";
     status.className = "small model-status " + (state.modelsError ? "error" : "muted");
     status.textContent = state.modelsLoading ? "正在刷新…" : state.modelSaving ? "正在保存…" : state.modelsError;
     status.hidden = !status.textContent;
@@ -480,6 +490,7 @@ function attachJob(block, fresh = false) {
   }
 }
 function useInChat(text) {
+  state.chatDraft = text;
   state.view = "chat";
   render();
   const input = $("#composer");
@@ -650,82 +661,87 @@ function pretty(value) {
     return String(value);
   }
 }
-const QUICK_ACTIONS = [
-  ["未交作业", "列出本学期尚未提交的作业和截止时间，按截止时间排序"],
-  ["更新课程", "把本学期所有课程增量更新到 D:\\\\网络学堂，按公告/作业/文件等专栏分类，并报告不完整的内容"],
-  ["云盘根目录", "列出我清华云盘各资料库的根目录内容"],
-  ["雨课堂课程", "列出我的荷塘雨课堂课程和最近课堂"],
-  ["登录状态", "用状态工具检查网络学堂、清华云盘、荷塘雨课堂和 MadModel 的登录状态，逐条说明"],
-];
+function homeIcon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("home-icon");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", ICON_PATHS[name] || ICON_PATHS.plus);
+  svg.append(path);
+  return svg;
+}
+function syncChatLayout() {
+  const chat = document.querySelector(".chat");
+  if (!chat) return;
+  const empty = String(homeIsEmpty(state.messages, state.busy));
+  if (chat.dataset.empty === empty) return;
+  chat.dataset.empty = empty;
+  const input = $("#composer");
+  if (input) autoGrow(input);
+}
+function activateHomeAction(id, input) {
+  const action = getHomeAction(id);
+  if (!action) return;
+  for (const popover of document.querySelectorAll(".composer-popover[open]")) popover.open = false;
+  if (action.view) { state.view = action.view; render(); return; }
+  const draft = input.value.trim();
+  input.value = draft ? draft + "\n\n" + action.prompt : action.prompt;
+  state.chatDraft = input.value;
+  autoGrow(input);
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+function composerAddMenu(input) {
+  const menu = el("div", { class: "composer-popover-body add-actions" });
+  for (const action of ADD_ACTIONS) menu.append(el("button", {
+    type: "button", class: "add-action", onclick: () => activateHomeAction(action.id, input),
+  }, [homeIcon(action.icon), el("span", { text: action.label })]));
+  return el("details", { class: "composer-popover add-menu" }, [
+    el("summary", { "aria-label": "添加内容", title: "添加内容" }, [homeIcon("plus")]), menu,
+  ]);
+}
 function chatView() {
-  const wrap = el("div", { class: "stack chat" });
-  const messages = el("div", {
-    class: "messages",
-    id: "messages",
-    role: "log",
-    "aria-live": "polite",
-    "aria-relevant": "additions text",
-    "aria-label": "对话内容",
-  });
+  const wrap = el("div", { class: "stack chat", dataset: { empty: String(homeIsEmpty(state.messages, state.busy)) } });
+  const hero = el("div", { class: "chat-home" }, [
+    el("div", { class: "home-eyebrow", text: "校园工作台" }),
+    el("h2", { class: "home-title" }, [el("span", { text: "今天，" }), el("span", { text: "想完成什么？" })]),
+  ]);
+  const messages = el("div", { class: "messages", id: "messages", role: "log", "aria-live": "polite", "aria-relevant": "additions text", "aria-label": "对话内容" });
   messages.dataset.followTail = "true";
   messages.addEventListener("scroll", () => trackTail(messages));
-  const textarea = el("textarea", {
-    id: "composer",
-    rows: 1,
-    placeholder: "输入消息…",
-    "aria-label": "消息",
-    "aria-keyshortcuts": "Enter Shift+Enter",
-  });
-  const sendButton = el("button", { id: "chat-send", class: "primary", type: "button", text: "发送" });
-  const stopButton = el("button", { id: "chat-stop", class: "ghost danger", type: "button", text: "停止", hidden: true });
-  const composer = el("div", { class: "composer" }, [textarea, sendButton, stopButton]);
-  const quick = el("div", { class: "quick", role: "group", "aria-label": "常用指令" });
-  for (const [label, instruction] of QUICK_ACTIONS) {
-    quick.append(
-      el("button", {
-        class: "chip-btn",
-        type: "button",
-        text: label,
-        title: instruction,
-        onclick: () => {
-          textarea.value = instruction;
-          autoGrow(textarea);
-          textarea.focus();
-          textarea.setSelectionRange(instruction.length, instruction.length);
-        },
-      }),
-    );
-  }
-  const dock = el("div", { class: "chat-dock" }, [workspaceStorageSummary(), modelPicker("chat-model"), quick, composer]);
-  wrap.append(messages, dock);
+  const textarea = el("textarea", { id: "composer", rows: 1, value: state.chatDraft, placeholder: "向校园助手提问…", "aria-label": "消息", "aria-keyshortcuts": "Enter Shift+Enter" });
+  const sendButton = el("button", { id: "chat-send", class: "primary composer-send", type: "button", "aria-label": "发送", title: "发送" }, [homeIcon("send")]);
+  const stopButton = el("button", { id: "chat-stop", class: "ghost danger composer-stop", type: "button", "aria-label": "停止", title: "停止", hidden: true }, [homeIcon("stop")]);
+  const actions = el("div", { class: "composer-actions" }, [composerAddMenu(textarea), workspaceStorageSummary()]);
+  const submit = el("div", { class: "composer-submit" }, [sendButton, stopButton]);
+  const footer = el("div", { class: "composer-footer" }, [actions, modelPicker("chat-model", true), submit]);
+  const composer = el("div", { class: "composer" }, [textarea, footer]);
+  const quick = el("div", { class: "home-shortcuts", role: "group", "aria-label": "常用指令" });
+  for (const action of HOME_ACTIONS) quick.append(el("button", {
+    class: "home-shortcut", type: "button", dataset: { action: action.id }, onclick: () => activateHomeAction(action.id, textarea),
+  }, [homeIcon(action.icon), el("span", { text: action.label })]));
+  const dock = el("div", { class: "chat-dock" }, [composer]);
+  wrap.append(hero, messages, dock, quick);
   for (const block of state.messages) messages.append(blockNode(block));
   const send = async () => {
     const text = textarea.value.trim();
     if (!text || state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel) return;
     textarea.value = "";
+    state.chatDraft = "";
     autoGrow(textarea);
     await sendTurn(text);
   };
   sendButton.addEventListener("click", send);
-  textarea.addEventListener("input", () => autoGrow(textarea));
+  textarea.addEventListener("input", () => { state.chatDraft = textarea.value; autoGrow(textarea); });
   textarea.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void send();
-    }
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); }
   });
   stopButton.addEventListener("click", async () => {
     if (!state.sessionId) return;
-    try {
-      await api(`/api/chat/${state.sessionId}/abort`, { method: "POST" });
-    } catch (e) {
-      toast(e.message);
-    }
+    try { await api("/api/chat/" + state.sessionId + "/abort", { method: "POST" }); } catch (e) { toast(e.message); }
   });
-  if (state.busy) {
-    sendButton.disabled = true;
-    stopButton.hidden = false;
-  }
+  if (state.busy) { sendButton.disabled = true; stopButton.hidden = false; }
   return wrap;
 }
 function autoGrow(textarea) {
@@ -1398,6 +1414,7 @@ function startNewConversation() {
   sessionNavigation++;
   state.sessionId = null;
   state.messages = [];
+  state.chatDraft = "";
   state.view = "chat";
   render();
   $("#composer")?.focus();
@@ -1471,6 +1488,13 @@ function render() {
 }
 async function start() {
   initSidebar();
+  document.addEventListener("click", event => {
+    for (const popover of document.querySelectorAll(".composer-popover[open]")) if (!popover.contains(event.target)) popover.open = false;
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    for (const popover of document.querySelectorAll(".composer-popover[open]")) { popover.open = false; popover.querySelector("summary").focus(); }
+  });
   bootToken();
   document.addEventListener("visibilitychange", () => jobPoller.sync());
   window.addEventListener("pagehide", () => jobPoller.stop());

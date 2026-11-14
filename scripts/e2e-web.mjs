@@ -223,6 +223,30 @@ async function main() {
     await page.locator('#rail-new-chat').click();
     record("左栏新对话清空当前视图并聚焦输入", await page.locator('#messages .bubble').count() === 0 && await page.locator('#composer').evaluate(node => document.activeElement === node));
 
+    const homeGeometry = await page.evaluate(() => {
+      const box = s => document.querySelector(s).getBoundingClientRect();
+      return { title: box('.home-title').top, input: box('.composer').top, quick: box('.home-shortcuts').top, font: parseFloat(getComputedStyle(document.querySelector('.home-title')).fontSize) };
+    });
+    record("首页按标题输入与快捷操作分三段", homeGeometry.title < homeGeometry.input && homeGeometry.input < homeGeometry.quick && homeGeometry.font >= 32);
+    record("模型云盘发送整合进输入面板", await page.locator('.composer-footer #chat-model').count() === 1 && await page.locator('.composer-footer .cloud-picker').count() === 1 && await page.locator('.composer-footer #chat-send').count() === 1);
+    let shortcutPosts = 0;
+    const countShortcutPosts = request => { if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/chat') shortcutPosts++; };
+    page.on('request', countShortcutPosts);
+    await page.locator('[data-action="assignments"]').click();
+    const homeDraft = await page.inputValue('#composer');
+    record("快捷操作只填草稿不偷偷发送", homeDraft.includes('尚未提交') && shortcutPosts === 0);
+    page.off('request', countShortcutPosts);
+    await page.locator('[data-action="auth"]').click();
+    await page.locator('.tab[data-view="chat"]').click();
+    record("登录入口真实导航且保留未发送草稿", await page.inputValue('#composer') === homeDraft);
+    await page.locator('.add-menu > summary').click();
+    await page.keyboard.press('Escape');
+    record("添加菜单可展开且Esc恢复焦点", await page.locator('.add-menu').evaluate(node => !node.open && document.activeElement === node.querySelector('summary')));
+    await page.locator('.cloud-picker > summary').click();
+    record("云盘芯片展开真实状态与恢复入口", await page.locator('.cloud-picker .storage-status').isVisible() && await page.locator('.cloud-picker').getByRole('button', { name: '设置工作区', exact: true }).isVisible());
+    await page.keyboard.press('Escape');
+    await page.fill('#composer', '');
+
     const delayedSessionId = await page.locator('.recent-session').first().getAttribute('data-session-id');
     let releaseSidebar;
     const sidebarGate = new Promise(resolve => { releaseSidebar = resolve; });
@@ -433,7 +457,7 @@ async function main() {
 
     // 9. 无障碍：消息区是 live region，视图不是
     await page.click('button[data-view="chat"]');
-    await page.waitForSelector("#messages");
+    await page.waitForSelector("#composer");
     record(
       "消息区是 live region",
       (await page.locator("#messages").getAttribute("aria-live")) === "polite",
