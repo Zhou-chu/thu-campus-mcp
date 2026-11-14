@@ -7,8 +7,8 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"
     />
-    <meta name="theme-color" content="#f4f3f0" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0f0f0e" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eceeed" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#202426" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="清华校园独立助手：网络学堂、清华云盘、荷塘雨课堂" />
     <title>清华校园助手</title>
@@ -37,12 +37,19 @@
       <main id="view" class="view" tabindex="-1"></main>
 
       <nav class="tabbar" aria-label="主导航">
-        <div class="rail-brand"><img src="/icons/icon.svg" alt="" width="30" height="30"/><h1>清华校园助手</h1></div>
+        <div class="rail-brand"><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M3 31V11h8v20M25 31V11h8v20M13 31V15a5 5 0 0 1 10 0v16M1 31h34M10 9l8-6 8 6M18 3V1M7 11V8M29 11V8"/></svg><h1>清华校园助手</h1></div>
+        <button id="rail-new-chat" class="rail-create" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg><span>新对话</span></button>
+        <div class="rail-main">
         <button class="tab" data-view="chat" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v12H9l-4 4V4Z M9 8h6M9 12h4"/></svg><span>对话</span></button>
         <button class="tab" data-view="sessions" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6V3Z M9 8h6M9 12h6M9 16h4"/></svg><span>会话</span></button>
         <button class="tab" data-view="services" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4Z M14 4h6v6h-6V4Z M4 14h6v6H4v-6Z M14 14h6v6h-6v-6Z"/></svg><span>服务</span></button>
         <button class="tab" data-view="tools" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l7-7M12 4a6 6 0 0 0 8 8l-6 6-8-8 6-6Z"/></svg><span>工具</span></button>
+        </div>
+        <section id="rail-recents" class="rail-recents" aria-labelledby="recent-heading" hidden><h2 id="recent-heading">最近会话</h2><div id="recent-list" class="recent-list"></div><p id="recent-error" class="error inline-error" role="alert" hidden></p><button id="recent-retry" class="ghost" type="button" hidden>重试会话</button></section>
+        <div class="rail-footer">
+        <button id="rail-storage" class="rail-storage workspace-storage-view" type="button" aria-label="查看云盘工作区状态"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.7-7.9 6 6 0 0 1 11.5-1.5A4.8 4.8 0 1 1 18 18H7Z"/></svg><span class="rail-storage-label" role="status"></span></button>
         <button class="tab" data-view="settings" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg><span>设置</span></button>
+        </div>
       </nav>
     </div>
 

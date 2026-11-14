@@ -213,6 +213,28 @@ async function main() {
     await page.waitForSelector("#app .tab", { state: "visible", timeout: 10000 });
     record("主应用可见", await page.locator("#app").isVisible());
     record("五个导航标签", (await page.locator(".tabbar .tab").count()) === 5);
+    await page.waitForFunction(() => document.querySelectorAll('.recent-session').length === 3);
+    record("左栏展示三条真实最近会话", await page.locator('.recent-session').count() === 3);
+    const material = await page.evaluate(() => ({ background: getComputedStyle(document.body).backgroundImage, radius: getComputedStyle(document.querySelector('#rail-new-chat')).borderRadius }));
+    record("扩散画布与统一圆角实际生效", material.background.includes('radial-gradient') && material.background.includes('linear-gradient') && material.radius === '12px');
+    await page.locator('.recent-session').first().click();
+    await page.waitForSelector('.recent-session[aria-current="true"]');
+    record("最近会话可打开历史", await page.locator('.recent-session[aria-current="true"]').count() === 1);
+    await page.locator('#rail-new-chat').click();
+    record("左栏新对话清空当前视图并聚焦输入", await page.locator('#messages .bubble').count() === 0 && await page.locator('#composer').evaluate(node => document.activeElement === node));
+
+    const delayedSessionId = await page.locator('.recent-session').first().getAttribute('data-session-id');
+    let releaseSidebar;
+    const sidebarGate = new Promise(resolve => { releaseSidebar = resolve; });
+    const delayedSessionUrl = '**/api/sessions/' + encodeURIComponent(delayedSessionId);
+    await page.route(delayedSessionUrl, async request => { await sidebarGate; await request.continue(); });
+    await page.locator('.recent-session').first().evaluate(node => { window.__pendingSidebarOpen = node; });
+    await page.locator('.recent-session').first().click();
+    await page.click('button[data-view="services"]');
+    releaseSidebar();
+    await page.waitForFunction(() => window.__pendingSidebarOpen.dataset.phase !== 'pending');
+    record("迟到的最近会话响应不抢回已切换页面", await page.locator('#view').getAttribute('data-view') === 'services');
+    await page.unroute(delayedSessionUrl);
 
     // 4. 服务页：四行服务 + 编号
     await page.click('button[data-view="services"]');

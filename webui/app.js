@@ -2,6 +2,7 @@ import { readChatEvents } from "./chat-stream.js";
 import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABELS, authPresentation, storagePresentation, jobStoragePresentation } from "./workspace.js";
 
 import { runAction } from "./ui-feedback.js";
+import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -16,6 +17,7 @@ const state = {
   controller: null,
   tools: [],
   sessions: [],
+  sessionsError: "",
   settings: null,
   models: [],
   selectedModel: "",
@@ -321,6 +323,7 @@ function acceptModels(models, current) {
   state.modelsError = state.models.length ? "" : "未获取到可用模型，请刷新模型列表。";
 }
 function syncModelPickers() {
+  refreshSidebar();
   const send = $("#chat-send");
   if (send) send.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel;
   const stop = $("#chat-stop");
@@ -901,12 +904,8 @@ function sessionsView() {
         class: "ghost",
         type: "button",
         text: "新对话",
-        onclick: () => {
-          state.sessionId = null;
-          state.messages = [];
-          state.view = "chat";
-          render();
-        },
+        disabled: state.busy,
+        onclick: startNewConversation,
       }),
     ]),
   );
@@ -945,17 +944,7 @@ function sessionRow(session) {
       }),
     ]),
   ]);
-  open.addEventListener("click", async () => {
-    try {
-      const data = await api("/api/sessions/" + session.id);
-      state.sessionId = data.session.id;
-      state.messages = blocksFromSession(data.session);
-      state.view = "chat";
-      render();
-    } catch (e) {
-      toast(e.message);
-    }
-  });
+  open.addEventListener("click", event => openSavedSession(session.id, event.currentTarget));
   const startRename = () => {
     clear(row);
     const input = el("input", {
@@ -1397,10 +1386,66 @@ async function loadSessions() {
   try {
     const data = await api("/api/sessions");
     state.sessions = data.sessions || [];
+    state.sessionsError = "";
   } catch {
-    state.sessions = [];
+    state.sessionsError = "会话刷新失败，请重试。";
   }
+  refreshSidebar();
 }
+let sessionNavigation = 0;
+function startNewConversation() {
+  if (state.busy) { toast("请先停止当前对话。"); return; }
+  sessionNavigation++;
+  state.sessionId = null;
+  state.messages = [];
+  state.view = "chat";
+  render();
+  $("#composer")?.focus();
+}
+async function openSavedSession(id, button) {
+  if (state.busy) { toast("请先停止当前对话。"); return; }
+  const ticket = ++sessionNavigation;
+  const displayedView = $("#view").firstElementChild;
+  await runAction(button, async () => {
+    const data = await api("/api/sessions/" + encodeURIComponent(id));
+    if (ticket !== sessionNavigation || state.busy || $("#view").firstElementChild !== displayedView) return;
+    state.sessionId = data.session.id;
+    state.messages = blocksFromSession(data.session);
+    state.view = "chat";
+    render();
+  }, { pending: "正在打开…" });
+}
+function refreshSidebar() {
+  const list = $("#recent-list");
+  if (!list) return;
+  const sessions = recentSessions(state.sessions);
+  $("#rail-new-chat").disabled = state.busy;
+  $("#rail-recents").hidden = !sessions.length && !state.sessionsError;
+  $("#recent-error").hidden = !state.sessionsError;
+  $("#recent-error").textContent = state.sessionsError;
+  $("#recent-retry").hidden = !state.sessionsError;
+  clear(list);
+  for (const session of sessions) list.append(el("button", {
+    class: "recent-session", type: "button", text: session.title, title: session.title,
+    disabled: state.busy, "aria-current": String(state.view === "chat" && state.sessionId === session.id),
+    dataset: { sessionId: session.id },
+    onclick: event => openSavedSession(session.id, event.currentTarget),
+  }));
+}
+function initSidebar() {
+  const storage = $("#rail-storage");
+  storage.draw = () => {
+    const info = currentStoragePresentation();
+    storage.querySelector(".rail-storage-label").textContent = sidebarStorageLabel(info);
+    storage.dataset.s = info.state;
+  };
+  storage.addEventListener("click", () => { state.view = "settings"; render(); });
+  $("#rail-new-chat").addEventListener("click", startNewConversation);
+  $("#recent-retry").addEventListener("click", loadSessions);
+  storage.draw();
+  refreshSidebar();
+}
+
 function render() {
   jobPoller.stop();
   const view = $("#view");
@@ -1425,6 +1470,7 @@ function render() {
   }
 }
 async function start() {
+  initSidebar();
   bootToken();
   document.addEventListener("visibilitychange", () => jobPoller.sync());
   window.addEventListener("pagehide", () => jobPoller.stop());
