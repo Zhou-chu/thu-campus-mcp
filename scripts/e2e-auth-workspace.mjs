@@ -125,6 +125,8 @@ async function main() {
     await storageCard.getByRole("button", { name: "在对话中初始化" }).click();
     check("初始化按钮只填写精确预览草稿，不直接写云盘", (await page.locator("#composer").inputValue()).includes(scope.repoId) && initCalls === 0 && directWrites === 0);
     await page.click("#chat-send"); await page.waitForSelector(".confirm-card");
+    check("初始化审批默认紧凑且风险可见，私有参数可主动核对", await page.locator(".confirm-card .confirm-risk").isVisible() && !await page.locator(".confirm-card .confirm-details").evaluate(node => node.open) && initCalls === 0);
+    await page.locator(".confirm-card .confirm-details > summary").click();
     const confirmation = await page.locator(".confirm-card").innerText();
     check("初始化由服务端冻结完整私有scope后先审批", initCalls === 0 && confirmation.includes(scope.accountId) && confirmation.includes("expectedRepoId") && confirmation.includes(scope.rootPath) && confirmation.includes("sessions/<UUID>/") && confirmation.includes("private"));
     await page.getByRole("button", { name: "允许执行", exact: true }).click(); await page.waitForFunction(() => !document.querySelector("#chat-send")?.disabled);

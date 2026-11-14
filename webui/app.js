@@ -6,6 +6,7 @@ import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
 import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } from "./chat-home.js";
 import { createTurnQueue } from "./turn-queue.js";
 import { createChatWidthUI } from "./chat-width-ui.js";
+import { approvalPresentation, decideApproval } from "./approval.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -633,39 +634,52 @@ function applyToolState(block) {
     block.resultNode.textContent = pretty(block.result);
   else if (block.error && block.resultNode) block.resultNode.textContent = JSON.stringify(block.error, null, 2);
 }
-/** 写入类工具执行前的确认卡片：默认不执行，必须由人点允许。 */
+/** 风险默认可见；冻结参数按需展开，处理后收起并保留本页记录。 */
 function confirmCardFor(block) {
-  const node = el("div", { class: "confirm-card" });
-  node.append(
-    el("h3", { text: "确认操作" }),
-    el("div", { class: "small", text: typeof block.risk === "string" && block.risk.trim() ? block.risk : "此操作会改动校园数据。" }),
-    el("div", { class: "tool-name", text: block.name }),
-    el("pre", { text: pretty(block.args) }),
-  );
+  const node = el("details", { class: "confirm-card" });
+  const status = el("span", { class: "confirm-state", "aria-live": "polite" });
+  const summary = el("summary", {}, [status, el("span", { class: "tool-name", text: block.name || "工具" })]);
+  const body = el("div", { class: "confirm-body" });
+  const payload = el("details", { class: "confirm-details" });
+  payload.append(el("summary", { text: "查看参数与冻结脚本" }), el("pre", { class: "confirm-payload", text: pretty(block.args) }));
+  payload.addEventListener("toggle", () => { block.payloadOpen = payload.open; });
+  node.addEventListener("toggle", () => { block.expanded = node.open; });
+  const errorNode = el("div", { class: "error", role: "alert", hidden: true });
   const actions = el("div", { class: "confirm-actions" });
   const allowBtn = el("button", { class: "primary", type: "button", text: "允许执行" });
   const denyBtn = el("button", { class: "ghost danger", type: "button", text: "拒绝" });
+  const sessionId = state.sessionId;
+  const refresh = (restoreFocus = false) => {
+    const focused = actions.contains(document.activeElement) || (restoreFocus && document.activeElement === document.body);
+    const view = approvalPresentation(block);
+    node.dataset.state = view.state;
+    node.setAttribute("aria-busy", String(view.busy));
+    status.textContent = view.label;
+    node.open = view.open;
+    payload.open = !!block.payloadOpen;
+    allowBtn.disabled = denyBtn.disabled = view.busy || view.decided;
+    actions.hidden = view.decided;
+    errorNode.hidden = !view.error;
+    errorNode.textContent = view.error;
+    if (focused && view.decided && node.isConnected) summary.focus({ preventScroll: true });
+  };
   const decide = async (allow) => {
-    if (block.decided) return;
-    block.decided = true;
-    allowBtn.disabled = true;
-    denyBtn.disabled = true;
-    try {
-      await api(`/api/chat/${state.sessionId}/confirm`, {
-        method: "POST",
-        body: { callId: block.callId, allow },
-      });
-      node.append(el("div", { class: "small muted", text: allow ? "已允许，继续执行…" : "已拒绝，本次不会执行。" }));
-    } catch (e) {
-      toast(e.message);
-      node.append(el("div", { class: "small", text: `提交失败：${e.message}` }));
-    }
+    const restoreFocus = actions.contains(document.activeElement);
+    const pending = decideApproval(block, allow, () => api(`/api/chat/${sessionId}/confirm`, {
+      method: "POST", body: { callId: block.callId, allow },
+    }));
+    block.refreshConfirm();
+    await pending;
+    block.refreshConfirm(restoreFocus);
   };
   allowBtn.addEventListener("click", () => decide(true));
   denyBtn.addEventListener("click", () => decide(false));
   actions.append(allowBtn, denyBtn);
-  node.append(actions);
+  body.append(el("p", { class: "confirm-risk", text: typeof block.risk === "string" && block.risk.trim() ? block.risk : "此操作会改动校园数据。" }), payload, errorNode, actions);
+  node.append(summary, body);
   block.node = node;
+  block.refreshConfirm = refresh;
+  refresh();
   return node;
 }
 function pretty(value) {

@@ -65,7 +65,7 @@ async function main() {
     workspaceFiles: files, sandbox: fakeSandbox,
     describe: () => [tool, { name: "fixture_campus_write", readOnly: false, destructive: true, inputSchema: { type: "object", properties: {} } }],
     toolForModel: () => [{ type: "function", function: { name: tool.name, parameters: tool.inputSchema } }],
-    prepareCall: async name => name === "workspace_run" ? ({ mandatoryApproval: true, approvalArgs: { runtime: "python", scriptPath: "analysis.py", script: "print('fixture')" }, risk: "受控风险：将执行已冻结的隔离脚本，可修改当前工作区。" }) : undefined,
+    prepareCall: async name => name === "workspace_run" ? ({ mandatoryApproval: true, approvalArgs: { runtime: "python", scriptPath: "analysis.py", script: "print('fixture')\n" + "# frozen fixture review line\n".repeat(80) }, risk: "受控风险：将执行已冻结的隔离脚本，可修改当前工作区。" }) : undefined,
     call: async (_name, _args, context) => {
       if (["learn_status", "cloud_status", "rain_status", "madmodel_status"].includes(_name)) return { ok: true, data: { configured: true } };
       assert.equal(_name, "workspace_run");
@@ -105,7 +105,7 @@ async function main() {
     check("真实状态API回执包含job和statusUrl", (await status.json()).job.statusUrl === initial.statusUrl);
     check("产物API拒绝无设备授权请求", (await fetch(base + `/api/workspaces/${session.id}/files?path=report.pdf`)).status === 401);
     browser = await chromium.launch({ executablePath: await chromiumPath(), headless: true });
-    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, acceptDownloads: true });
+    const page = await browser.newPage({ serviceWorkers: "block", viewport: { width: 1920, height: 1080 }, acceptDownloads: true });
     const errors = [], fileRequests = [];
     let abortRequests = 0, directToolRequests = 0;
     page.on("pageerror", error => errors.push(error.message));
@@ -200,9 +200,57 @@ async function main() {
     check("workspace目录仅进入对话，不直接绕过审批", directToolRequests === 0 && hostCalls === 0 && (await page.locator("#composer").inputValue()).includes("workspace_run"));
     await page.fill("#composer", "确认样本"); await page.click("#chat-send");
     await page.waitForSelector(".confirm-card");
+    const approval = page.locator('.confirm-card').last();
+    check('长冻结参数默认折叠，待审批紧凑且风险与按钮可见', await approval.evaluate(node => node.open && !node.querySelector('.confirm-details').open && node.getBoundingClientRect().height < 300) && await approval.locator('.confirm-risk').isVisible() && await approval.getByRole('button', {name:'允许执行',exact:true}).isVisible());
+    await approval.locator(':scope > summary').click();
+    check('审批卡可自行收起', !await approval.locator('.confirm-risk').isVisible());
+    await approval.locator(':scope > summary').press('Enter');
+    check('审批卡可用键盘展开并恢复完整风险', await approval.locator('.confirm-risk').isVisible());
+    await approval.locator('.confirm-details > summary').click();
+    await approval.locator('.confirm-payload').scrollIntoViewIfNeeded();
+    const payloadBox = await approval.locator('.confirm-payload').boundingBox();
+    await page.mouse.move(payloadBox.x + payloadBox.width - 4, payloadBox.y + payloadBox.height - 4); await page.mouse.down();
+    await page.mouse.move(payloadBox.x + payloadBox.width - 4, payloadBox.y + payloadBox.height + 66, {steps:5}); await page.mouse.up();
+    check('完整参数可真实拖动调高，文本不截断', await approval.locator('.confirm-payload').evaluate(pre => pre.getBoundingClientRect().height > 200 && pre.textContent.includes('frozen fixture review line') && pre.textContent.includes("print('fixture')")));
+    await page.screenshot({path:path.join(screenshotDir,'approval-expanded-light-1920.png')});
+    await approval.locator('.confirm-details > summary').click();
+    await page.setViewportSize({width:390,height:740});
+    await approval.scrollIntoViewIfNeeded();
+    check('窄屏审批卡无页面横向溢出，风险不隐藏', await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth) && await approval.locator('.confirm-risk').isVisible());
+    await page.screenshot({path:path.join(screenshotDir,'approval-pending-light-390.png')});
+    await page.setViewportSize({width:1920,height:1080});
+    await page.click('#theme-dark'); await approval.scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(screenshotDir,'approval-pending-dark-1920.png')});
+    await page.click('#theme-light');
+    await approval.locator('.confirm-details > summary').click();
+    let confirmRequests=0, releaseApproval, markHeld;
+    const approvalGate=new Promise(resolve=>releaseApproval=resolve), held=new Promise(resolve=>markHeld=resolve);
+    await page.route('**/api/chat/*/confirm',async route=>{
+      confirmRequests++;
+      if(confirmRequests===1)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:{message:'受控审批提交失败'}})});
+      if(confirmRequests===2)return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,decided:false})});
+      markHeld();await approvalGate;await route.continue();
+    });
+    await approval.getByRole('button',{name:'允许执行',exact:true}).click();
+    await approval.locator('[role="alert"]').waitFor();
+    check('审批提交失败保持展开、保留参数且按钮可重试', await approval.evaluate(node=>node.open && node.dataset.state==='pending' && node.querySelector('.confirm-details').open && !node.querySelector('button').disabled) && hostCalls===0);
+    await approval.getByRole('button',{name:'允许执行',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('.confirm-card [role="alert"]').textContent.includes('审批已失效'));
+    check('HTTP成功但决定未接受不会误标批准或执行', await approval.evaluate(node=>node.dataset.state==='pending') && hostCalls===0);
     check("确认卡优先呈现具体risk与冻结脚本", (await page.locator(".confirm-card").innerText()).includes("受控风险") && (await page.locator(".confirm-card pre").innerText()).includes("print('fixture')") && hostCalls === 0);
     await page.getByRole("button", { name: "允许执行", exact: true }).click();
+    await held;
+    check("提交中禁用两个动作且不提前标记批准", await approval.evaluate(node=>node.dataset.state==="submitting" && [...node.querySelectorAll("button")].every(button=>button.disabled)) && hostCalls===0 && confirmRequests===3);
+    await page.click('button[data-view="settings"]'); await page.click('button[data-view="chat"]');
+    check("视图重绘保留提交中状态", await approval.evaluate(node=>node.dataset.state==="submitting"));
+    releaseApproval();
     await page.waitForFunction(() => document.querySelector("#chat-stop").hidden);
+    await page.waitForFunction(()=>document.querySelector('.confirm-card')?.dataset.state==='allowed');
+    check("批准回执后自动收起且保留可展开记录", await approval.evaluate(node=>!node.open && node.getBoundingClientRect().height < 80 && node.textContent.includes("print('fixture')")) && !await approval.locator("button").first().isVisible());
+    await approval.locator(':scope > summary').focus(); await approval.locator(':scope > summary').press('Enter');
+    check("已处理记录可键盘重新展开且不会重复执行", await approval.locator(".confirm-risk").isVisible() && hostCalls===1 && confirmRequests===3);
+    await approval.locator(':scope > summary').click();
+    await page.screenshot({path:path.join(screenshotDir,"approval-resolved-light-1920.png")});
     check("允许后才提交作业，提交后仍为running", hostCalls === 1 && (await page.locator(".tool-state").last().innerText()) === "作业运行中");
     jobs.set("22222222-2222-4222-8222-222222222222", { ...jobs.get("22222222-2222-4222-8222-222222222222"), state: "succeeded", stdout: "approved completed" });
     await page.waitForFunction(() => [...document.querySelectorAll(".tool-state")].at(-1)?.textContent === "作业完成");
@@ -212,6 +260,8 @@ async function main() {
     check("缺省risk保留校园风险原提示", (await page.locator(".confirm-card").last().innerText()).includes("此操作会改动校园数据。"));
     await page.locator(".confirm-card").last().getByRole("button", { name: "拒绝", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#chat-stop").hidden);
+    await page.waitForFunction(()=>[...document.querySelectorAll(".confirm-card")].at(-1)?.dataset.state==="denied");
+    check("拒绝后自动收起、按钮隐藏且仍保留原风险", await page.locator(".confirm-card").last().evaluate(node=>!node.open && node.textContent.includes("此操作会改动校园数据。")) && !await page.locator(".confirm-card").last().getByRole("button",{name:"拒绝",exact:true}).isVisible());
     check("拒绝后不执行受控写入", hostCalls === 1);
     const sizes = [];
     for (const width of [390, 1280, 1536, 1920, 2560]) {

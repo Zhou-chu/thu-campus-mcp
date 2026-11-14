@@ -1,5 +1,5 @@
-const CACHE = "campus-app-v13";
-const ASSETS = ["/", "/index.html", "/app.js?v=__ASSET_VERSION__", "/chat-stream.js", "/workspace.js", "/ui-feedback.js", "/sidebar.js", "/chat-home.js", "/turn-queue.js", "/chat-width.js", "/chat-width-ui.js", "/styles.css?v=__ASSET_VERSION__", "/motion.css?v=__ASSET_VERSION__", "/manifest.webmanifest", "/icons/icon.svg"];
+const CACHE = "campus-app-v14";
+const ASSETS = ["/", "/index.html", "/app.js?v=__ASSET_VERSION__", "/chat-stream.js", "/workspace.js", "/ui-feedback.js", "/sidebar.js", "/chat-home.js", "/turn-queue.js", "/chat-width.js", "/chat-width-ui.js", "/approval.js", "/styles.css?v=__ASSET_VERSION__", "/motion.css?v=__ASSET_VERSION__", "/manifest.webmanifest", "/icons/icon.svg"];
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
