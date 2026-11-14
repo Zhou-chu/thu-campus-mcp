@@ -1,6 +1,8 @@
 import { readChatEvents } from "./chat-stream.js";
 import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABELS, authPresentation, storagePresentation, jobStoragePresentation } from "./workspace.js";
 
+import { runAction } from "./ui-feedback.js";
+
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
 const state = {
@@ -280,29 +282,38 @@ function workspaceStorageSummary() {
   return panel;
 }
 function workspaceStorageCard() {
-  const panel = el("section", { class: "card stack workspace-storage-view workspace-storage-card" });
+  const panel = el("section", { class: "settings-section workspace-storage-view workspace-storage-card" });
   panel.draw = () => {
+    const expanded = !!panel.querySelector("details")?.open;
     const info = currentStoragePresentation();
-    clear(panel).append(el("div", { class: "auth-header" }, [el("h3", { text: "默认工作区" }), el("span", { class: "state storage-status", dataset: { s: info.state }, text: info.label })]));
-    if (info.scope) panel.append(el("div", { class: "storage-location", text: (info.state === "ready" ? "目录：" : "目标目录：") + info.scope.rootPath }));
-    if (info.message) panel.append(el("div", { class: info.state === "ready" ? "small" : "error", role: info.state === "ready" ? "status" : "alert", text: info.message }));
-    const actions = el("div", { class: "row", style: "flex-wrap:wrap" }, [el("button", { class: "ghost", type: "button", text: "刷新工作区状态", disabled: state.workspaceStorageLoading, onclick: loadWorkspaceStorage })]);
+    const body = el("div", { class: "settings-content" });
+    const heading = el("div", { class: "workspace-heading" });
+    if (info.scope) heading.append(el("span", { class: "storage-location", text: info.scope.rootPath }));
+    heading.append(el("span", { class: "state storage-status", dataset: { s: info.state }, text: info.label }));
+    body.append(heading);
+    if (info.message) body.append(el("div", { class: info.state === "ready" ? "small" : "error", role: info.state === "ready" ? "status" : "alert", text: info.message }));
+    const actions = el("div", { class: "settings-actions" }, [el("button", {
+      class: "ghost", type: "button", text: state.workspaceStorageLoading ? "刷新中…" : "刷新工作区状态",
+      "aria-label": "刷新工作区状态", "aria-busy": String(state.workspaceStorageLoading), disabled: state.workspaceStorageLoading, onclick: loadWorkspaceStorage,
+    })]);
     if (info.canInitialize) actions.append(el("button", {
       class: "primary", type: "button", text: "在对话中初始化",
       onclick: () => useInChat(`请使用workspace_initialize（无需参数）初始化默认云盘工作区。只读预览范围：${pretty(info.scope)}。以服务端重新核验的精确范围为准，展示确认卡后等待我授权。`),
     }));
     if (info.state === "login-required") actions.append(el("button", { class: "ghost", type: "button", text: "前往登录", onclick: () => { state.view = "services"; render(); } }));
-    panel.append(actions);
-    const record = el("details", { class: "auth-evidence storage-scope" }, [el("summary", { text: "范围与核验" })]);
+    body.append(actions);
+    const record = el("details", { class: "auth-evidence storage-scope", open: expanded }, [el("summary", { text: "范围与核验" })]);
     if (info.scope) record.append(el("pre", { text: pretty(info.scope) }));
     if (info.checkedAt) record.append(el("div", { class: "small", text: "隐私核验：" + new Date(info.checkedAt).toLocaleString() }));
     if (info.code) record.append(el("div", { class: "small", text: "状态码：" + info.code }));
     if (!info.scope && !info.checkedAt && !info.code) record.append(el("div", { class: "small", text: "尚无可确认的云盘范围。" }));
-    panel.append(record);
+    body.append(record);
+    clear(panel).append(el("div", { class: "section-heading" }, [el("h3", { text: "默认工作区" })]), body);
   };
   panel.draw();
   return panel;
 }
+
 /* ---------------- 模型目录与选择 ---------------- */
 function acceptModels(models, current) {
   state.models = Array.isArray(models) ? models.filter((model) => model?.id) : [];
@@ -351,6 +362,8 @@ function modelPicker(id) {
     select.value = state.selectedModel;
     select.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.models.length;
     refresh.disabled = state.busy || state.modelSaving || state.modelsLoading;
+    refresh.setAttribute("aria-busy", String(state.modelsLoading));
+    refresh.textContent = state.modelsLoading ? "刷新中…" : "刷新模型";
     status.className = "small model-status " + (state.modelsError ? "error" : "muted");
     status.textContent = state.modelsLoading ? "正在刷新…" : state.modelSaving ? "正在保存…" : state.modelsError;
     status.hidden = !status.textContent;
@@ -359,6 +372,7 @@ function modelPicker(id) {
     const previous = state.selectedModel;
     const chosen = select.value;
     state.modelSaving = true;
+    state.modelsError = "";
     syncModelPickers();
     try {
       const data = await api("/api/settings", { method: "PUT", body: { modelName: chosen } });
@@ -368,7 +382,8 @@ function modelPicker(id) {
       toast("模型已切换为" + state.selectedModel);
     } catch (e) {
       state.selectedModel = previous;
-      toast("模型未切换：" + e.message);
+      state.modelsError = "模型未切换：" + e.message;
+      toast(state.modelsError);
     } finally {
       state.modelSaving = false;
       syncModelPickers();
@@ -799,51 +814,68 @@ async function sendTurn(text) {
       throw Object.assign(new Error(data?.error?.message || `对话失败（HTTP ${response.status}）`), { code: data?.error?.code });
     }
     for await (const { event, payload } of readChatEvents(response.body)) {
-      if (event === "ready") state.sessionId = payload.sessionId;
-      else if (event === "token" && typeof payload.text === "string") {
-        ensureAssistant();
-        assistant.text += payload.text;
-        if (reasoning) reasoning.status = "done";
-        schedule();
-      } else if (event === "reasoning" && typeof payload.text === "string" && payload.text) {
-        ensureReasoning();
-        reasoning.text += payload.text;
-        reasoning.status = "streaming";
-        schedule();
-      } else if (event === "message" && payload.role === "assistant") {
-        if (payload.reasoning) { ensureReasoning(); reasoning.text = payload.reasoning; }
-        if (payload.content) { ensureAssistant(); assistant.text = payload.content; }
-        finishStep(payload.aborted ? "stopped" : payload.interrupted ? "error" : "done");
-      } else if (event === "tool") {
-        if (payload.phase === "start") {
-          const card = { kind: "tool", name: payload.name, args: payload.args, state: "running" };
+      switch (event) {
+        case "ready":
+          state.sessionId = payload.sessionId;
+          break;
+        case "token":
+          if (typeof payload.text !== "string") break;
+          ensureAssistant();
+          assistant.text += payload.text;
+          if (reasoning) reasoning.status = "done";
+          schedule();
+          break;
+        case "reasoning":
+          if (typeof payload.text !== "string" || !payload.text) break;
+          ensureReasoning();
+          reasoning.text += payload.text;
+          reasoning.status = "streaming";
+          schedule();
+          break;
+        case "message":
+          if (payload.role !== "assistant") break;
+          if (payload.reasoning) { ensureReasoning(); reasoning.text = payload.reasoning; }
+          if (payload.content) { ensureAssistant(); assistant.text = payload.content; }
+          finishStep(payload.aborted ? "stopped" : payload.interrupted ? "error" : "done");
+          break;
+        case "tool": {
+          if (payload.phase === "start") {
+            const card = { kind: "tool", name: payload.name, args: payload.args, state: "running" };
+            state.messages.push(card);
+            appendBlock(card);
+          } else {
+            const card = [...state.messages].reverse().find(b => b.kind === "tool" && b.name === payload.name && b.state === "running");
+            if (card) {
+              card.state = payload.ok ? "done" : "failed";
+              card.result = payload.ok ? payload.result : undefined;
+              card.error = payload.ok ? undefined : payload.error;
+              attachJob(card, true);
+              applyToolState(card);
+              jobPoller.sync();
+              if (["workspace_initialize", "workspace_sync"].includes(card.name)) void loadWorkspaceStorage();
+            }
+          }
+          scrollIfNearBottom();
+          break;
+        }
+        case "confirm": {
+          const card = { kind: "confirm", callId: payload.callId, name: payload.name, args: payload.args, risk: payload.risk };
           state.messages.push(card);
           appendBlock(card);
-        } else {
-          const card = [...state.messages].reverse().find(b => b.kind === "tool" && b.name === payload.name && b.state === "running");
-          if (card) {
-            card.state = payload.ok ? "done" : "failed";
-            card.result = payload.ok ? payload.result : undefined;
-            card.error = payload.ok ? undefined : payload.error;
-            attachJob(card, true);
-            applyToolState(card);
-            jobPoller.sync();
-            if (["workspace_initialize", "workspace_sync"].includes(card.name)) void loadWorkspaceStorage();
-          }
+          break;
         }
-        scrollIfNearBottom();
-      } else if (event === "confirm") {
-        const card = { kind: "confirm", callId: payload.callId, name: payload.name, args: payload.args, risk: payload.risk };
-        state.messages.push(card);
-        appendBlock(card);
-      } else if (event === "notice") addStatus({ kind: "notice", message: payload.message || payload.code });
-      else if (event === "error") {
-        finishStep("error");
-        addStatus({ kind: "error", code: payload.code, message: payload.message || "本轮失败。" });
-      } else if (event === "done") {
-        state.sessionId = payload.sessionId || state.sessionId;
-        finishStep(payload.aborted ? "stopped" : "done");
-        completed = true;
+        case "notice":
+          addStatus({ kind: "notice", message: payload.message || payload.code });
+          break;
+        case "error":
+          finishStep("error");
+          addStatus({ kind: "error", code: payload.code, message: payload.message || "本轮失败。" });
+          break;
+        case "done":
+          state.sessionId = payload.sessionId || state.sessionId;
+          finishStep(payload.aborted ? "stopped" : "done");
+          completed = true;
+          break;
       }
     }
     if (!completed) throw Object.assign(new Error("连接中断，已保留收到的内容，请重试。"), { code: "STREAM_INTERRUPTED" });
@@ -861,7 +893,7 @@ async function sendTurn(text) {
 }
 /* ---------------- 其它视图 ---------------- */
 function sessionsView() {
-  const wrap = el("div", { class: "stack" });
+  const wrap = el("div", { class: "stack sessions-view", "aria-busy": "false" });
   wrap.append(
     el("div", { class: "row between" }, [
       el("h2", { text: "会话" }),
@@ -896,6 +928,9 @@ function sessionsView() {
     for (const session of matched) list.append(sessionRow(session));
   };
   search.addEventListener("input", draw);
+  wrap.updateSessions = () => {
+    if (!list.querySelector(".session-row > input")) draw();
+  };
   draw();
   return wrap;
 }
@@ -1306,8 +1341,14 @@ function helpPanel(diagnostics) {
     el("summary", { text: "帮助与说明" }), usage, diagnostics,
   ]);
 }
+function settingsSection(title, children, extra = "") {
+  return el("section", { class: "settings-section " + extra }, [
+    el("div", { class: "section-heading" }, [el("h3", { text: title })]),
+    el("div", { class: "settings-content" }, children),
+  ]);
+}
 function settingsView() {
-  const wrap = el("div", { class: "stack" });
+  const wrap = el("div", { class: "stack settings-page" });
   wrap.append(el("h2", { text: "设置" }));
   const meta = state.meta || {};
   const diagnostics = el("details", { class: "help-section" }, [
@@ -1319,58 +1360,39 @@ function settingsView() {
       el("div", { class: "small", text: `账号 ${meta.account?.masked || "未绑定"}` }),
     ]),
   ]);
-  const settingsCard = el("div", { class: "card stack" }, [modelPicker("settings-model")]);
-  wrap.append(workspaceStorageCard(), settingsCard);
-  const codeNode = el("div", { class: "small muted", text: "" });
-  const linkBox = el("div", { class: "stack", style: "gap:8px" });
+  const surface = el("div", { class: "settings-surface" });
+  surface.append(workspaceStorageCard(), settingsSection("对话模型", [modelPicker("settings-model")]));
+  const codeNode = el("output", { class: "pair-code", "aria-label": "一次性配对码", hidden: true });
+  const validity = el("span", { class: "small muted", hidden: true });
+  const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });
+  const linkBox = el("div", { class: "stack pair-links" });
   const inviteButton = el("button", {
-    class: "ghost",
-    type: "button",
-    text: "生成配对码",
-    onclick: async () => {
-      try {
-        const data = await api("/api/pair/invite", { method: "POST" });
-        codeNode.textContent = `配对码 ${data.code}（${data.ttlSeconds} 秒内有效，一次性）`;
-        clear(linkBox);
-        const urls = (data.lanUrls || []).length ? data.lanUrls : [location.origin];
-        for (const url of urls) {
-          const web = `${url.replace(/\/+$/, "")}/#code=${data.code}`;
-          const app = `thucampus://pair?base=${encodeURIComponent(url)}&code=${data.code}`;
-          linkBox.append(pairLinkRow("浏览器打开", web), pairLinkRow("App 深链", app));
-        }
-      } catch (e) {
-        toast(e.message);
+    class: "primary", type: "button", text: "生成配对码",
+    onclick: (event) => runAction(event.currentTarget, async () => {
+      const data = await api("/api/pair/invite", { method: "POST" });
+      codeNode.textContent = data.code; codeNode.hidden = false;
+      validity.textContent = `${data.ttlSeconds}秒内有效 · 仅可使用一次`; validity.hidden = false;
+      clear(linkBox);
+      const urls = (data.lanUrls || []).length ? data.lanUrls : [location.origin];
+      for (const url of urls) {
+        const web = `${url.replace(/\/+$/, "")}/#code=${data.code}`;
+        const app = `thucampus://pair?base=${encodeURIComponent(url)}&code=${data.code}`;
+        linkBox.append(pairLinkRow("浏览器打开", web), pairLinkRow("App深链", app));
       }
-    },
+      return data;
+    }, { pending: "正在生成…", success: "配对码已生成", errorNode }),
   });
-  wrap.append(
-    el("div", { class: "card stack" }, [
-      el("h3", { text: "接入其它设备" }),
-      inviteButton,
-      codeNode,
-      linkBox,
-    ]),
-  );
-  diagnostics.append(residentCard(), el("a", {
-    href: "/preview.html", target: "_blank", rel: "noreferrer", text: "设计目录",
-  }));
-  wrap.append(helpPanel(diagnostics));
-  wrap.append(
-    el("div", { class: "card stack" }, [
-      el("h3", { text: "安全" }),
-      el("button", {
-        class: "ghost danger",
-        type: "button",
-        text: "清除本地令牌并退出",
-        onclick: () => {
-          forgetToken();
-          showPair("已清除本地令牌。");
-        },
-      }),
-    ]),
-  );
+  surface.append(settingsSection("接入其它设备", [inviteButton, errorNode, codeNode, validity, linkBox]));
+  diagnostics.append(residentCard(), el("a", { href: "/preview.html", target: "_blank", rel: "noreferrer", text: "设计目录" }));
+  surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
+  surface.append(settingsSection("设备安全", [el("button", {
+    class: "ghost danger", type: "button", text: "清除本地令牌并退出",
+    onclick: () => { forgetToken(); showPair("已清除本地令牌。"); },
+  })], "settings-security"));
+  wrap.append(surface);
   return wrap;
 }
+
 async function loadSessions() {
   try {
     const data = await api("/api/sessions");
@@ -1382,6 +1404,8 @@ async function loadSessions() {
 function render() {
   jobPoller.stop();
   const view = $("#view");
+  view.dataset.view = state.view;
+  $("#view-context").textContent = ({chat:"对话工作台",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置"})[state.view] || "对话工作台";
   clear(view);
   for (const tab of document.querySelectorAll(".tab"))
     tab.setAttribute("aria-current", tab.dataset.view === state.view ? "page" : "false");
@@ -1409,10 +1433,15 @@ async function start() {
       state.view = tab.dataset.view;
       render();
       // 只在切到会话页时取一次数据；不能让 render 自己触发加载，否则会自激。
-      if (state.view === "sessions")
+      if (state.view === "sessions") {
+        $("#view .sessions-view").setAttribute("aria-busy", "true");
         void loadSessions().then(() => {
-          if (state.view === "sessions") render();
+          if (state.view !== "sessions") return;
+          const panel = $("#view .sessions-view");
+          panel?.updateSessions();
+          panel?.setAttribute("aria-busy", "false");
         });
+      }
     });
   const applyTheme = (mode) => {
     document.documentElement.dataset.theme = mode;
@@ -1429,10 +1458,11 @@ async function start() {
   $("#pair-code").addEventListener("keydown", (event) => {
     if (event.key === "Enter") void submitPair();
   });
-  $("#refresh").addEventListener("click", async () => {
-    await refreshMeta();
+  $("#refresh").addEventListener("click", (event) => runAction(event.currentTarget, async () => {
+    const ok = await refreshMeta();
+    if (!ok) throw new Error(state.authError || "状态刷新失败，请重试。");
     render();
-  });
+  }, { pending: "", success: "状态已更新" }));
   if (!state.token) {
     const autoPair = !!state.deeplinkCode;
     showPair();

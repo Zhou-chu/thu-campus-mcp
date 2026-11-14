@@ -233,6 +233,9 @@ async function main() {
     record("编号按行递增", String(pseudo.increment).includes("entry"), JSON.stringify(pseudo));
 
     // 5.5 会话：搜索与重命名（这两个是纯前端交互，只有真浏览器能验）
+    let releaseSessions;
+    const sessionsGate = new Promise(resolve => { releaseSessions = resolve; });
+    await page.route("**/api/sessions", async request => { await sessionsGate; await request.continue(); });
     step("切到会话页");
     await page.click('button[data-view="sessions"]');
     await page.waitForSelector(".session-row");
@@ -244,14 +247,26 @@ async function main() {
     const filteredCount = await page.locator(".session-row").count();
     const searchValue = await page.inputValue('input[type="search"]');
     record("搜索按标题过滤", filteredCount === 1, `行数=${filteredCount} 输入=${searchValue}`);
+    releaseSessions();
+    await page.waitForFunction(() => document.querySelector('.sessions-view')?.getAttribute('aria-busy') === 'false');
+    record("迟到刷新保留搜索与焦点", await page.inputValue('input[type="search"]') === "雨课堂" && await page.locator('.session-row').count() === 1 && await page.locator('input[type="search"]').evaluate(node => document.activeElement === node));
+    await page.unroute("**/api/sessions");
     await page.fill('input[type="search"]', "");
     record("清空搜索恢复全部", (await page.locator(".session-row").count()) === 4);
+    let releaseRename;
+    const renameGate = new Promise(resolve => { releaseRename = resolve; });
+    await page.route("**/api/sessions", async request => { await renameGate; await request.continue(); });
+    await page.click('button[data-view="sessions"]');
     step("准备点重命名");
     const firstRow = page.locator(".session-row").filter({ hasText: "雨课堂签到的自动提醒" }).first();
     await firstRow.getByRole("button", { name: "重命名" }).click({ timeout: 8000 });
     step("已进入重命名");
     const titleInput = page.getByRole("textbox", { name: "会话标题", exact: true });
     await titleInput.fill("端到端改名");
+    releaseRename();
+    await page.waitForFunction(() => document.querySelector('.sessions-view')?.getAttribute('aria-busy') === 'false');
+    record("迟到刷新保留改名草稿与焦点", await titleInput.inputValue() === "端到端改名" && await titleInput.evaluate(node => document.activeElement === node));
+    await page.unroute("**/api/sessions");
     await titleInput.press("Enter");
     await page.waitForFunction(() => document.body.innerText.includes("端到端改名"), null, { timeout: 8000 });
     record("重命名即时生效", true);

@@ -21,30 +21,28 @@
     <a class="skip" href="#view">跳到主要内容</a>
     <div id="app" class="app" hidden>
       <header class="topbar">
-        <div class="brand">
-          <div class="brand-row">
-            <span class="dot" id="health-dot" aria-hidden="true"></span>
-            <h1>清华校园助手</h1>
-          </div>
-        </div>
+        <div class="topbar-inner">
+        <div class="brand"><span id="view-context" class="view-context">对话工作台</span></div>
         <div class="topbar-meta">
-          <span id="account" class="chip" title="应用服务连接状态" role="status"></span>
+          <span class="chip"><span class="dot" id="health-dot" aria-hidden="true"></span><span id="account" title="应用服务连接状态" role="status"></span></span>
           <div class="theme-switch" role="group" aria-label="配色">
             <button id="theme-light" class="theme-btn" type="button" aria-pressed="true">自然</button>
             <button id="theme-dark" class="theme-btn" type="button" aria-pressed="false">深色</button>
           </div>
-          <button id="refresh" class="icon-btn" type="button" title="刷新状态" aria-label="刷新状态">⟳</button>
+          <button id="refresh" class="icon-btn" type="button" title="刷新状态" aria-label="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.1 8a7 7 0 0 1 11.6-3L20 9M4 15l3.3 4A7 7 0 0 0 19 16"/></svg></button>
+        </div>
         </div>
       </header>
 
       <main id="view" class="view" tabindex="-1"></main>
 
       <nav class="tabbar" aria-label="主导航">
-        <button class="tab" data-view="chat" type="button">对话</button>
-        <button class="tab" data-view="sessions" type="button">会话</button>
-        <button class="tab" data-view="services" type="button">服务</button>
-        <button class="tab" data-view="tools" type="button">工具</button>
-        <button class="tab" data-view="settings" type="button">设置</button>
+        <div class="rail-brand"><img src="/icons/icon.svg" alt="" width="30" height="30"/><h1>清华校园助手</h1></div>
+        <button class="tab" data-view="chat" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v12H9l-4 4V4Z M9 8h6M9 12h4"/></svg><span>对话</span></button>
+        <button class="tab" data-view="sessions" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6V3Z M9 8h6M9 12h6M9 16h4"/></svg><span>会话</span></button>
+        <button class="tab" data-view="services" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4Z M14 4h6v6h-6V4Z M4 14h6v6H4v-6Z M14 14h6v6h-6v-6Z"/></svg><span>服务</span></button>
+        <button class="tab" data-view="tools" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M4 20l7-7M12 4a6 6 0 0 0 8 8l-6 6-8-8 6-6Z"/></svg><span>工具</span></button>
+        <button class="tab" data-view="settings" type="button"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg><span>设置</span></button>
       </nav>
     </div>
 
