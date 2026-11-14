@@ -36,7 +36,7 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 **实际任务执行**：默认以清华云盘个人默认资料库下的全私有`/Agent工作区`作为持久硬盘，先核验真实账号与完整分享权限、确认精确范围再创建；本地只作隔离缓存，无法证明私有时阻止，不选共享库替代。可经确认导入附件、读文本/解包ZIP、写代码、在真正隔离的Python/Node容器中运行，核对实际PDF/图表/代码并打包下载。计算完成与云盘同步分别显示；同步失败保留本地结果并明确未保存，不能假成功。代码仅容器执行，禁网、非root、只挂单会话目录；Docker或本地镜像未就绪时明确不可运行，绝不回退宿主机。镜像由应用所有者提前准备，Python环境用uv管理、无Conda。后台提交、退出成功、产物生成与校园提交分别验收，提交仍需独立确认。准备方式与限制见[Agent工作区与隔离执行](<docs/agent-workspace.md>)。
 
-发布前请照 [发布清单](docs/release-checklist.md) 走一遍，其中「未完成」的两项是真机验收。
+发布前请照 [发布清单](docs/release-checklist.md) 走一遍，其中「未完成」的两项是真机验收。真实质量分析已接入[公开SonarQube Cloud项目](<docs/sonarqube.md>)：由GitHub App自动分析main；必须核对提交revision与真实质量门，自动分析不提供测试覆盖率。
 
 运行时的 HTTP/SSE 契约见 [设计契约](docs/superpowers/specs/2026-11-11-campus-agent-app.md)，实施计划见 [实施计划](docs/superpowers/plans/2026-11-11-campus-agent-app.md)。新增需求与状态见[功能点清单](<docs/app-features.md>)：模型思考强度选择与审批模式选择均为待实现，不能把现有思考展示或启动审批开关当成已接通的控件。
 
