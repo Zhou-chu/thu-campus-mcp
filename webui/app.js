@@ -5,6 +5,7 @@ import { runAction } from "./ui-feedback.js";
 import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
 import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } from "./chat-home.js";
 import { createTurnQueue } from "./turn-queue.js";
+import { createChatWidthUI } from "./chat-width-ui.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -65,6 +66,7 @@ const clear = (node) => {
   return node;
 };
 const $ = (selector) => document.querySelector(selector);
+const chatWidthUI = createChatWidthUI();
 let toastTimer = 0;
 function toast(message) {
   const node = $("#toast");
@@ -804,7 +806,7 @@ function chatView() {
     class: "home-shortcut", type: "button", dataset: { action: action.id }, onclick: () => activateHomeAction(action.id, textarea),
   }, [homeIcon(action.icon), el("span", { text: action.label })]));
   const dock = el("div", { class: "chat-dock" }, [queuePanel(), composer]);
-  wrap.append(hero, messages, dock, quick);
+  wrap.append(...chatWidthUI.handles(), hero, messages, dock, quick);
   for (const block of state.messages) messages.append(blockNode(block));
   const send = () => submitDraft(textarea);
   sendButton.addEventListener("click", send);
@@ -1572,6 +1574,7 @@ function render() {
     settings: settingsView,
   };
   view.append((views[state.view] || chatView)());
+  chatWidthUI.refresh();
   syncModelPickers();
   jobPoller.sync();
   if (state.view === "chat") {
@@ -1581,6 +1584,7 @@ function render() {
 }
 async function start() {
   initSidebar();
+  chatWidthUI.init();
   window.addEventListener("beforeunload", event => {
     if (!turnQueue.snapshot().pending.length) return;
     event.preventDefault();
