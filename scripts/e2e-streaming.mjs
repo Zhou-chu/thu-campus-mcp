@@ -290,6 +290,7 @@ async function main() {
     widthLive.send({ content: '宽度调整后的继续输出。' });
     await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('宽度调整后的继续输出'));
     check('拖动不重启或中断正在工作的模型', !widthLive.closed && contexts.get('宽度拖动验收').length === 2 && await page.locator('#chat-stop').isVisible());
+    check('活动消息、工具卡和输入区不被静态入场遮挡', await page.evaluate(() => [...document.querySelectorAll('.bubble.assistant,.tool-card,.chat-dock')].every(element => getComputedStyle(element).animationName === 'none' && getComputedStyle(element).opacity === '1')));
     for (const theme of ['dark', 'light']) {
       await page.click('#theme-' + theme);
       if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, `width-${theme}-1920.png`) });
@@ -328,6 +329,26 @@ async function main() {
     await page.click('button[data-view="chat"]'); await waitWidth(savedWidth);
     await page.locator('#chat-width-picker > summary').click(); await page.locator('#chat-width-reset').click(); await waitWidth(originalFrame);
     check('顶栏恢复默认可清除覆盖', await page.evaluate(() => localStorage.getItem('campus.app.chatWidth') === null));
+    // 博客式微交互只用于静态界面，必须兼容减少动态与键盘恢复。
+    await page.keyboard.press('Escape');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    check('静态空会话采用统一动效令牌，不改业务状态', await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--motion-base').trim() === '220ms' && getComputedStyle(document.querySelector('.chat-home')).animationName === 'surface-settle' && document.querySelector('#chat-stop').hidden));
+    const shortcut = page.locator('.home-shortcut').first();
+    await shortcut.hover();
+    await page.waitForFunction(() => new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.home-shortcut .home-icon')).transform).m42 < -1.5);
+    check('真实悬停提供轻量图标反馈', await shortcut.locator('.home-icon').evaluate(icon => new DOMMatrixReadOnly(getComputedStyle(icon).transform).m42 < -1.5));
+    await page.mouse.down();
+    await page.waitForFunction(() => new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.home-shortcut')).transform).m11 < .995);
+    check('真实按压产生缩放但不提前触发模型', await shortcut.evaluate(button => new DOMMatrixReadOnly(getComputedStyle(button).transform).m11 < .995) && await page.locator('#chat-stop').isHidden());
+    await page.mouse.up();
+    await page.locator('.add-menu > summary').click();
+    check('菜单按需展开采用短入场', await page.locator('.add-menu .composer-popover-body').evaluate(menu => getComputedStyle(menu).animationName === 'menu-unfold'));
+    await page.keyboard.press('Escape');
+    check('动效不破坏Escape关闭和焦点恢复', await page.evaluate(() => !document.querySelector('.add-menu').open && document.activeElement === document.querySelector('.add-menu > summary')));
+    await page.emulateMedia({ reducedMotion: 'reduce' }); await shortcut.hover();
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.chat-home')).animationName === 'none');
+    check('减少动态时无入场、回弹或悬停位移', await page.evaluate(() => getComputedStyle(document.querySelector('.chat-dock')).animationName === 'none' && getComputedStyle(document.querySelector('.home-shortcut')).transitionDuration === '0s' && getComputedStyle(document.querySelector('.home-shortcut .home-icon')).transform === 'none'));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     check("无页面脚本错误", errors.length === 0);
     console.log(`\n流式与思考真实浏览器回归通过${checks}项；仅使用受控样本，没有调用计费模型或真实校园工具。`);
   } finally {

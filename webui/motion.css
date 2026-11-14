@@ -1,0 +1,79 @@
+/* 木漏参考：统一微交互词汇；不延迟消息、工具事件或真实业务状态。 */
+:root {
+  --motion-fast: 160ms;
+  --motion-base: 220ms;
+  --motion-slow: 380ms;
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+}
+
+/* 材质变化独立于位移，减少厚边框与表单堆叠的观感。 */
+.composer:hover {border-color:var(--line-strong);}
+.home-title {font-weight:700;line-height:1.13;letter-spacing:-.025em;}
+.composer-popover-body {box-shadow:var(--surface-edge),var(--surface-depth);}
+.home-shortcut {border-radius:var(--radius-control);}
+.home-shortcut:focus-visible,.recent-session:focus-visible {outline-offset:-3px;}
+.theme-btn[aria-pressed="true"] {box-shadow:var(--surface-edge),0 2px 8px color-mix(in srgb,var(--ink) 7%,transparent);}
+.chat-resize-handle::before {transition:opacity var(--motion-fast) var(--ease-out);}
+.chat-resize-handle:is(:hover,:focus-visible)::before {opacity:1;}
+
+@media (prefers-reduced-motion:no-preference) {
+  button,input,select,textarea,summary {
+    transition:background-color var(--motion-fast) var(--ease-out),
+      border-color var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out),
+      box-shadow var(--motion-base) var(--ease-out),
+      transform var(--motion-slow) var(--ease-spring);
+  }
+  button:active:not(:disabled),.ghost:active:not(:disabled) {
+    transform:scale(.98);
+    transition-duration:80ms;
+  }
+  .composer .composer-send:active:not(:disabled) {transform:scale(.96);}
+  .composer {transition:border-color var(--motion-base) var(--ease-out),box-shadow var(--motion-slow) var(--ease-out);}
+  .home-shortcut .home-icon,.tab .nav-icon {
+    transition:transform var(--motion-base) var(--ease-out);
+  }
+  .home-shortcut:hover .home-icon {transform:translateY(-2px);}
+  .home-shortcut:active .home-icon {transform:none;}
+  .add-action:hover .home-icon {transform:translateX(2px);}
+  .add-action .home-icon {transition:transform var(--motion-base) var(--ease-out);}
+  .composer-popover[open] > .composer-popover-body {
+    transform-origin:bottom left;
+    animation:menu-unfold var(--motion-base) var(--ease-out) both;
+  }
+  .width-picker[open] > .composer-popover-body {
+    transform-origin:top right;
+    animation-name:menu-unfold-down;
+  }
+  /* 仅空会话的静态内容做一次短入场；活动消息不参与。 */
+  .chat[data-empty="true"] .chat-home {
+    animation:surface-settle var(--motion-slow) var(--ease-out) both;
+  }
+  .chat[data-empty="true"] .chat-dock {
+    animation:surface-settle var(--motion-slow) 60ms var(--ease-out) both;
+  }
+  .chat[data-empty="true"] .home-shortcuts {
+    animation:surface-settle var(--motion-slow) 120ms var(--ease-out) both;
+  }
+  .view:not([data-view="chat"]) > * {
+    animation:surface-settle var(--motion-base) var(--ease-out) both;
+  }
+  @keyframes surface-settle {
+    from {opacity:.25;translate:0 8px;}
+    to {opacity:1;translate:0 0;}
+  }
+  @keyframes menu-unfold {
+    from {opacity:0;transform:translateY(6px) scale(.985);}
+    to {opacity:1;transform:none;}
+  }
+  @keyframes menu-unfold-down {
+    from {opacity:0;transform:translateY(-6px) scale(.985);}
+    to {opacity:1;transform:none;}
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  button:active:not(:disabled),.ghost:active:not(:disabled) {transform:none;}
+  .chat-resize-handle::before {transition:none;}
+  .tab:hover:not([aria-current="page"]) .nav-icon,.home-shortcut:hover .home-icon,.add-action:hover .home-icon {transform:none;}
+}

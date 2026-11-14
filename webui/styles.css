@@ -3,17 +3,17 @@
    中性扩散画布、分层轻玻璃、统一圆角；文字和真实状态优先。
    ------------------------------------------------------------------ */
 :root {
-  --paper: #eceeed;
-  --panel: #f5f7f5;
-  --ink: #222724;
-  --ink-soft: #414843;
-  --muted: #535b55;
-  --line: rgba(35, 43, 38, .13);
-  --line-strong: rgba(35, 43, 38, .27);
+  --paper: #eeeeeb;
+  --panel: #f9f9f7;
+  --ink: #151515;
+  --ink-soft: #41413d;
+  --muted: #55564f;
+  --line: rgba(21, 21, 21, .13);
+  --line-strong: rgba(21, 21, 21, .27);
   --ready: #376548;
   --warn: #81532d;
   --danger: #893632;
-  --canvas-bg: radial-gradient(ellipse 90% 95% at 4% 0%, rgba(255,255,255,.95), rgba(255,255,255,.28) 48%, transparent 82%), radial-gradient(ellipse 80% 95% at 100% 100%, rgba(178,185,180,.23), transparent 76%), linear-gradient(145deg,#f2f4f2,#e5e9e6 52%,#eef0ed);
+  --canvas-bg: radial-gradient(ellipse 95% 85% at 8% 0%,rgba(255,255,255,.9),transparent 76%), radial-gradient(ellipse 85% 110% at 100% 100%,rgba(169,170,160,.16),transparent 78%), linear-gradient(135deg,#f3f3f0,#e9e9e5 46%,#efefeb);
   --glass-fill: rgba(255,255,255,.54);
   --chrome-fill: rgba(247,249,247,.5);
   --surface-reflection: linear-gradient(135deg,rgba(255,255,255,.48),rgba(255,255,255,.08) 42%,transparent 72%);
@@ -29,7 +29,7 @@
   --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   --rail: 272px;
   --content-width: 1440px;
-  --motion: 150ms;
+  --motion: 160ms;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -74,19 +74,19 @@
   }
 }
 :root[data-theme="dark"] {
-  --paper: #202426;
-  --panel: #2b3032;
-  --ink: #f0f2f0;
-  --ink-soft: #d7dcd8;
-  --muted: #bcc4bf;
-  --line: rgba(238,244,240,.12);
-  --line-strong: rgba(238,244,240,.27);
+  --paper: #181818;
+  --panel: #242424;
+  --ink: #e8e8e4;
+  --ink-soft: #d7d7d2;
+  --muted: #bcbfb7;
+  --line: rgba(232,232,228,.12);
+  --line-strong: rgba(232,232,228,.27);
   --ready: #a0cdae;
   --warn: #e9c397;
   --danger: #f0b0aa;
-  --canvas-bg: radial-gradient(ellipse 80% 100% at 4% 0%, rgba(138,146,151,.25), rgba(104,113,119,.08) 45%, transparent 80%), radial-gradient(ellipse 76% 100% at 100% 100%, rgba(100,110,116,.2), transparent 76%), linear-gradient(145deg,#303538,#1b1f21 54%,#272d30);
-  --glass-fill: rgba(37,42,45,.64);
-  --chrome-fill: rgba(25,29,32,.54);
+  --canvas-bg: radial-gradient(ellipse 90% 90% at 8% 0%,rgba(125,125,116,.18),transparent 76%), radial-gradient(ellipse 80% 100% at 100% 100%,rgba(108,108,103,.13),transparent 76%), linear-gradient(140deg,#282827,#121313 55%,#202121);
+  --glass-fill: rgba(32,33,32,.66);
+  --chrome-fill: rgba(22,23,22,.54);
   --surface-reflection: linear-gradient(135deg,rgba(240,246,250,.075),rgba(240,246,250,.015) 42%,transparent 72%);
   --surface-edge: inset 0 1px 0 rgba(246,250,255,.11), inset 0 -1px 0 rgba(0,0,0,.16);
   --surface-depth: 0 18px 60px rgba(8,12,15,.17);
