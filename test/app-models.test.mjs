@@ -8,12 +8,12 @@ import { SessionStore } from "../lib/app/sessions.mjs";
 import { MadModelClient } from "../lib/madmodel/client.mjs";
 import { createModelRoute } from "../lib/app/model.mjs";
 
-async function fixture(t, route) {
+async function fixture(t, route, hostOverrides = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-models-"));
   const sessions = new SessionStore(dir);
   const app = createAppServer({
     config: { host: "127.0.0.1", port: 0, hostname: "localhost", stateDir: dir, token: "test", modelRoute: "madmodel", modelName: "", maxSteps: 2 },
-    host: { describe: () => [], toolForModel: () => [], call: async () => ({ ok: true, data: {} }) },
+    host: { describe: () => [], toolForModel: () => [], call: async () => ({ ok: true, data: {} }), ...hostOverrides },
     route, sessions, version: "test",
   });
   const url = await app.listen();
@@ -71,6 +71,85 @@ test("保存的模型持久化且用于对话，单次请求可覆盖", async (t
   assert.deepEqual(seen, ["second", "first"]);
   assert.equal((await (await request("/api/settings")).json()).settings.modelName, "second");
 });
+
+for (const explicitModel of [true, false]) {
+  test(`运行中切换只影响下一轮，${explicitModel ? "请求指定" : "默认设置"}模型跨工具步骤固定`, { timeout: 10000 }, async (t) => {
+    const modelStarted = Promise.withResolvers();
+    const releaseModel = Promise.withResolvers();
+    const toolStarted = Promise.withResolvers();
+    const releaseTool = Promise.withResolvers();
+    const seen = [];
+    const toolCalls = [];
+    const { request, sessions } = await fixture(t, {
+      chat: async (body, { signal }) => {
+        seen.push({ model: body.model, toolIds: body.messages.filter((m) => m.role === "tool").map((m) => m.tool_call_id) });
+        assert.equal(body.stream, true);
+        assert.equal(signal.aborted, false);
+        const step = seen.length;
+        if (step === 1) {
+          modelStarted.resolve();
+          await releaseModel.promise;
+        }
+        if (step > 2) return reply();
+        const delta = { tool_calls: [{ index: 0, id: `call-${step}`, type: "function", function: { name: "learn_status", arguments: "{}" } }] };
+        return new Response(`data: ${JSON.stringify({ choices: [{ delta, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
+      },
+    }, {
+      describe: () => [{ name: "learn_status", destructive: false }],
+      toolForModel: () => [{ type: "function", function: { name: "learn_status", parameters: { type: "object", properties: {} } } }],
+      call: async (name, args, { sessionId }) => {
+        toolCalls.push({ name, args, sessionId });
+        if (toolCalls.length === 1) {
+          toolStarted.resolve();
+          await releaseTool.promise;
+        }
+        return { ok: true, data: { ready: true } };
+      },
+    });
+    const session = await sessions.create({});
+    assert.equal((await request("/api/settings", { modelName: explicitModel ? "B" : "A" })).status, 200);
+    const response = await request("/api/chat", { sessionId: session.id, text: "A轮", ...(explicitModel ? { model: "A" } : {}) });
+    const reading = response.text();
+    try {
+      assert.equal(response.status, 200);
+      await modelStarted.promise;
+      const saved = await request("/api/settings", { modelName: "B" });
+      assert.equal(saved.status, 200);
+      assert.equal((await saved.json()).settings.modelName, "B");
+      const rejectConcurrent = async () => {
+        const concurrent = await request("/api/chat", { sessionId: session.id, text: "不得插入本轮", model: "B" });
+        assert.equal(concurrent.status, 409);
+        assert.equal((await concurrent.json()).error.code, "TURN_RUNNING");
+      };
+      await rejectConcurrent();
+      releaseModel.resolve();
+      await toolStarted.promise;
+      assert.deepEqual(seen.map((call) => call.model), ["A"]);
+      assert.equal((await (await request("/api/settings")).json()).settings.modelName, "B");
+      await rejectConcurrent();
+      releaseTool.resolve();
+      const events = await reading;
+      assert.match(events, /"model":"A"/);
+      assert.match(events, /"steps":3/);
+      assert.doesNotMatch(events, /event: error/);
+      assert.deepEqual(seen, [
+        { model: "A", toolIds: [] },
+        { model: "A", toolIds: ["call-1"] },
+        { model: "A", toolIds: ["call-1", "call-2"] },
+      ]);
+      assert.deepEqual(toolCalls, [1, 2].map(() => ({ name: "learn_status", args: {}, sessionId: session.id })));
+      const next = await request("/api/chat", { sessionId: session.id, text: "B轮", model: "B" });
+      assert.equal(next.status, 200);
+      assert.match(await next.text(), /"model":"B"/);
+      assert.deepEqual(seen.map((call) => call.model), ["A", "A", "A", "B"]);
+      assert.deepEqual((await sessions.get(session.id)).messages.filter((m) => m.role === "user").map((m) => m.content), ["A轮", "B轮"]);
+    } finally {
+      releaseModel.resolve();
+      releaseTool.resolve();
+      await reading;
+    }
+  });
+}
 
 test("空目录不锁住会话，目录恢复后可重试", async (t) => {
   let recovered = false;

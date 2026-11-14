@@ -1229,3 +1229,17 @@ input,select {background:var(--control-fill);}
  .home-shortcut .home-icon {width:20px;height:20px;}
  .cloud-picker .composer-popover-body {left:-60px;}
 }
+
+/* 待发队列：收起时仅占一行，不能挤走消息和输入。 */
+.turn-queue {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:start;border-top:1px solid var(--line);font-size:var(--text-ui);}
+.queue-details {min-width:0;}
+.queue-details > summary {min-height:44px;cursor:pointer;align-content:center;color:var(--ink-soft);}
+.queue-state {overflow-wrap:anywhere;}
+.queue-actions {display:flex;gap:var(--space-2);flex-wrap:wrap;justify-content:flex-end;}
+.queue-actions button {min-height:44px;padding:4px 12px;}
+.queue-list {max-height:128px;overflow:auto;padding:0;margin:0;list-style:none;}
+.queue-row {display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--line);}
+.queue-text {min-width:0;flex:1;white-space:pre-wrap;overflow-wrap:anywhere;}
+.queue-row button {min-height:44px;flex:none;}
+.queue-reason {font-size:var(--text-meta);color:var(--warn);margin:0 0 8px;overflow-wrap:anywhere;}
+@media(max-width:700px) {.turn-queue {gap:var(--space-2);} .queue-actions {gap:var(--space-1);} .queue-actions button {padding-inline:8px;}}

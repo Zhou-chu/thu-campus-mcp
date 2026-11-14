@@ -4,6 +4,7 @@ import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABEL
 import { runAction } from "./ui-feedback.js";
 import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
 import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } from "./chat-home.js";
+import { createTurnQueue } from "./turn-queue.js";
 
 const STORAGE_TOKEN = "campus.app.token";
 const STORAGE_BASE = "campus.app.base";
@@ -16,6 +17,9 @@ const state = {
   chatDraft: "",
   sessionId: null,
   busy: false,
+  activeModel: "",
+  stopping: false,
+  stopRequested: false,
   controller: null,
   tools: [],
   sessions: [],
@@ -35,6 +39,11 @@ const state = {
   workspaceStorageError: "",
   deeplinkCode: "",
 };
+const turnQueue = createTurnQueue({
+  canRun: () => !state.busy && !state.stopping && !state.modelSaving && !state.modelsLoading && !!state.selectedModel,
+  run: item => sendTurn(item.text),
+  onChange: () => syncModelPickers(),
+});
 const el = (tag, props = {}, children = []) => {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
@@ -334,9 +343,15 @@ function syncModelPickers() {
   refreshSidebar();
   syncChatLayout();
   const send = $("#chat-send");
-  if (send) send.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel;
+  if (send) {
+    send.disabled = !state.selectedModel;
+    const label = hasQueuedWork() ? "加入队列" : "发送";
+    send.setAttribute("aria-label", label);
+    send.title = label;
+  }
   const stop = $("#chat-stop");
-  if (stop) stop.hidden = !state.busy;
+  if (stop) { stop.hidden = !state.busy; stop.disabled = state.stopping; }
+  for (const panel of document.querySelectorAll(".turn-queue")) panel.draw();
   for (const picker of document.querySelectorAll(".model-picker")) picker.updateModels();
 }
 async function refreshModels() {
@@ -352,6 +367,7 @@ async function refreshModels() {
   } finally {
     state.modelsLoading = false;
     syncModelPickers();
+    void turnQueue.drain();
   }
 }
 function modelPicker(id, compact = false) {
@@ -372,13 +388,14 @@ function modelPicker(id, compact = false) {
       }));
     }
     select.value = state.selectedModel;
-    select.disabled = state.busy || state.modelSaving || state.modelsLoading || !state.models.length;
-    refresh.disabled = state.busy || state.modelSaving || state.modelsLoading;
+    select.disabled = state.modelSaving || state.modelsLoading || !state.models.length;
+    select.setAttribute("aria-label", state.busy ? "下一轮模型" : "对话模型");
+    refresh.disabled = state.modelSaving || state.modelsLoading;
     refresh.setAttribute("aria-busy", String(state.modelsLoading));
     if (compact) refresh.replaceChildren(homeIcon("refresh"));
     else refresh.textContent = state.modelsLoading ? "刷新中…" : "刷新模型";
     status.className = "small model-status " + (state.modelsError ? "error" : "muted");
-    status.textContent = state.modelsLoading ? "正在刷新…" : state.modelSaving ? "正在保存…" : state.modelsError;
+    status.textContent = state.modelsLoading ? "正在刷新…" : state.modelSaving ? "正在保存…" : state.modelsError || (state.busy && state.selectedModel !== state.activeModel ? "下一轮生效" : "");
     status.hidden = !status.textContent;
   };
   select.addEventListener("change", async () => {
@@ -392,14 +409,16 @@ function modelPicker(id, compact = false) {
       state.settings = data.settings;
       state.selectedModel = data.settings.modelName;
       if (state.meta?.model) state.meta.model.name = state.selectedModel;
-      toast("模型已切换为" + state.selectedModel);
+      toast((state.busy ? "下一轮将使用" : "模型已切换为") + state.selectedModel);
     } catch (e) {
       state.selectedModel = previous;
       state.modelsError = "模型未切换：" + e.message;
+      turnQueue.pause("模型保存失败，请重试或确认后继续。");
       toast(state.modelsError);
     } finally {
       state.modelSaving = false;
       syncModelPickers();
+      void turnQueue.drain();
     }
   });
   picker.updateModels();
@@ -674,7 +693,7 @@ function homeIcon(name) {
 function syncChatLayout() {
   const chat = document.querySelector(".chat");
   if (!chat) return;
-  const empty = String(homeIsEmpty(state.messages, state.busy));
+  const empty = String(homeIsEmpty(state.messages, hasQueuedWork()));
   if (chat.dataset.empty === empty) return;
   chat.dataset.empty = empty;
   const input = $("#composer");
@@ -701,8 +720,71 @@ function composerAddMenu(input) {
     el("summary", { "aria-label": "添加内容", title: "添加内容" }, [homeIcon("plus")]), menu,
   ]);
 }
+function hasQueuedWork() {
+  const queue = turnQueue.snapshot();
+  return state.busy || state.stopping || queue.running || queue.pending.length > 0;
+}
+function submitDraft(textarea) {
+  const text = textarea.value.trim();
+  if (!text || !state.selectedModel) return;
+  const queue = turnQueue.snapshot();
+  if (!hasQueuedWork() && queue.paused) turnQueue.resume();
+  if (!turnQueue.enqueue(text)) return;
+  textarea.value = "";
+  state.chatDraft = "";
+  autoGrow(textarea);
+  void turnQueue.drain();
+}
+function takeBackQueued(id) {
+  const item = turnQueue.remove(id);
+  if (!item) return;
+  const input = $("#composer");
+  const draft = input?.value || state.chatDraft;
+  state.chatDraft = draft ? draft + "\n\n" + item.text : item.text;
+  if (input) { input.value = state.chatDraft; autoGrow(input); input.focus(); }
+}
+function queuePanel() {
+  const panel = el("div", { class: "turn-queue", hidden: true });
+  panel.draw = () => {
+    const queue = turnQueue.snapshot();
+    const expanded = !!panel.querySelector("details")?.open;
+    panel.hidden = queue.pending.length === 0;
+    clear(panel);
+    if (panel.hidden) return;
+    const details = el("details", { class: "queue-details", open: expanded }, [
+      el("summary", {}, [el("span", { class: "queue-state", role: "status", text: "待发" + queue.pending.length + "条" + (queue.paused ? " · 已暂停" : "") })]),
+    ]);
+    if (queue.paused) details.append(el("p", { class: "queue-reason", text: queue.paused }));
+    const list = el("ol", { class: "queue-list" });
+    for (const item of queue.pending) list.append(el("li", { class: "queue-row", dataset: { queueId: item.id } }, [
+      el("span", { class: "queue-text", text: item.text }),
+      el("button", { class: "ghost", type: "button", text: "取回", "aria-label": "取回待发消息", onclick: () => takeBackQueued(item.id) }),
+    ]));
+    details.append(list);
+    const actions = el("div", { class: "queue-actions" });
+    if (queue.paused) actions.append(el("button", { class: "ghost", type: "button", text: "继续队列", disabled: state.busy || state.stopping || queue.running, onclick: () => { turnQueue.resume(); void turnQueue.drain(); } }));
+    actions.append(el("button", { class: "ghost", type: "button", text: "清空", "aria-label": "清空待发消息", onclick: () => { if (confirm("清空这" + queue.pending.length + "条未发送消息？")) turnQueue.clear(); } }));
+    panel.append(details, actions);
+  };
+  panel.draw();
+  return panel;
+}
+async function stopCurrentTurn() {
+  if (!state.busy || state.stopping) return;
+  state.stopRequested = true;
+  state.stopping = true;
+  turnQueue.pause("当前轮已请求停止，待发消息已暂停。");
+  syncModelPickers();
+  try {
+    if (state.sessionId) await api("/api/chat/" + state.sessionId + "/abort", { method: "POST" });
+    else state.controller?.abort();
+  } catch (e) {
+    turnQueue.pause("停止请求失败，请重试停止；待发消息保持暂停。");
+    toast(e.message);
+  } finally { state.stopping = false; syncModelPickers(); }
+}
 function chatView() {
-  const wrap = el("div", { class: "stack chat", dataset: { empty: String(homeIsEmpty(state.messages, state.busy)) } });
+  const wrap = el("div", { class: "stack chat", dataset: { empty: String(homeIsEmpty(state.messages, hasQueuedWork())) } });
   const hero = el("div", { class: "chat-home" }, [
     el("div", { class: "home-eyebrow", text: "校园工作台" }),
     el("h2", { class: "home-title" }, [el("span", { text: "今天，" }), el("span", { text: "想完成什么？" })]),
@@ -721,27 +803,17 @@ function chatView() {
   for (const action of HOME_ACTIONS) quick.append(el("button", {
     class: "home-shortcut", type: "button", dataset: { action: action.id }, onclick: () => activateHomeAction(action.id, textarea),
   }, [homeIcon(action.icon), el("span", { text: action.label })]));
-  const dock = el("div", { class: "chat-dock" }, [composer]);
+  const dock = el("div", { class: "chat-dock" }, [queuePanel(), composer]);
   wrap.append(hero, messages, dock, quick);
   for (const block of state.messages) messages.append(blockNode(block));
-  const send = async () => {
-    const text = textarea.value.trim();
-    if (!text || state.busy || state.modelSaving || state.modelsLoading || !state.selectedModel) return;
-    textarea.value = "";
-    state.chatDraft = "";
-    autoGrow(textarea);
-    await sendTurn(text);
-  };
+  const send = () => submitDraft(textarea);
   sendButton.addEventListener("click", send);
   textarea.addEventListener("input", () => { state.chatDraft = textarea.value; autoGrow(textarea); });
   textarea.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); }
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); }
   });
-  stopButton.addEventListener("click", async () => {
-    if (!state.sessionId) return;
-    try { await api("/api/chat/" + state.sessionId + "/abort", { method: "POST" }); } catch (e) { toast(e.message); }
-  });
-  if (state.busy) { sendButton.disabled = true; stopButton.hidden = false; }
+  stopButton.addEventListener("click", stopCurrentTurn);
+  if (state.busy) stopButton.hidden = false;
   return wrap;
 }
 function autoGrow(textarea) {
@@ -776,7 +848,19 @@ function trackTail(container) {
 function scrollIfNearBottom(container = $("#messages")) {
   if (container && container.dataset.followTail !== "false") container.scrollTop = container.scrollHeight;
 }
+function completedTurnOutcome(payload, failure, stopped) {
+  if (payload.aborted || stopped) return { ok: false, reason: "当前轮已停止，待发消息保持暂停。" };
+  if (failure) return { ok: false, reason: failure };
+  return { ok: true };
+}
+function failedTurnOutcome(error) {
+  if (error.name === "AbortError") return { ok: false, reason: "当前轮已停止，队列已暂停。" };
+  return { ok: false, reason: error.message || "连接中断，队列已暂停。" };
+}
 async function sendTurn(text) {
+  const turnModel = state.selectedModel;
+  state.activeModel = turnModel;
+  state.stopRequested = false;
   state.busy = true;
   syncModelPickers();
   const container = $("#messages");
@@ -788,6 +872,8 @@ async function sendTurn(text) {
   let reasoning = null;
   let frame = 0;
   let completed = false;
+  let failure = "";
+  let outcome = { ok: false, reason: "本轮未完成，队列已暂停。" };
   const flush = () => {
     frame = 0;
     if (assistant) setBubbleText(assistant, assistant.text);
@@ -825,7 +911,7 @@ async function sendTurn(text) {
     if (state.token) headers.authorization = "Bearer " + state.token;
     const response = await fetch(endpoint("/api/chat"), {
       method: "POST", headers,
-      body: JSON.stringify({ text, sessionId: state.sessionId || undefined, model: state.selectedModel || undefined }),
+      body: JSON.stringify({ text, sessionId: state.sessionId || undefined, model: turnModel || undefined }),
       signal: state.controller.signal,
     });
     if (!response.ok || !response.body) {
@@ -855,6 +941,7 @@ async function sendTurn(text) {
           if (payload.role !== "assistant") break;
           if (payload.reasoning) { ensureReasoning(); reasoning.text = payload.reasoning; }
           if (payload.content) { ensureAssistant(); assistant.text = payload.content; }
+          if (payload.aborted || payload.interrupted) failure = payload.aborted ? "当前轮已停止。" : "当前轮已中断。";
           finishStep(payload.aborted ? "stopped" : payload.interrupted ? "error" : "done");
           break;
         case "tool": {
@@ -887,6 +974,7 @@ async function sendTurn(text) {
           addStatus({ kind: "notice", message: payload.message || payload.code });
           break;
         case "error":
+          failure = payload.message || "当前轮失败。";
           finishStep("error");
           addStatus({ kind: "error", code: payload.code, message: payload.message || "本轮失败。" });
           break;
@@ -894,21 +982,26 @@ async function sendTurn(text) {
           state.sessionId = payload.sessionId || state.sessionId;
           finishStep(payload.aborted ? "stopped" : "done");
           completed = true;
+          outcome = completedTurnOutcome(payload, failure, state.stopRequested);
           break;
       }
     }
     if (!completed) throw Object.assign(new Error("连接中断，已保留收到的内容，请重试。"), { code: "STREAM_INTERRUPTED" });
   } catch (e) {
+    outcome = failedTurnOutcome(e);
     finishStep(e.name === "AbortError" ? "stopped" : "error");
     if (e.name !== "AbortError") addStatus({ kind: "error", code: e.code, message: e.message || "对话中断。" });
   } finally {
     finishStep();
     state.busy = false;
+    state.activeModel = "";
+    state.stopRequested = false;
     state.controller = null;
     syncModelPickers();
     scrollIfNearBottom();
     void loadSessions();
   }
+  return outcome;
 }
 /* ---------------- 其它视图 ---------------- */
 function sessionsView() {
@@ -920,7 +1013,7 @@ function sessionsView() {
         class: "ghost",
         type: "button",
         text: "新对话",
-        disabled: state.busy,
+        disabled: hasQueuedWork(),
         onclick: startNewConversation,
       }),
     ]),
@@ -1410,7 +1503,7 @@ async function loadSessions() {
 }
 let sessionNavigation = 0;
 function startNewConversation() {
-  if (state.busy) { toast("请先停止当前对话。"); return; }
+  if (hasQueuedWork()) { toast(state.busy ? "请先停止当前对话。" : "请先处理或清空待发消息。"); return; }
   sessionNavigation++;
   state.sessionId = null;
   state.messages = [];
@@ -1420,12 +1513,12 @@ function startNewConversation() {
   $("#composer")?.focus();
 }
 async function openSavedSession(id, button) {
-  if (state.busy) { toast("请先停止当前对话。"); return; }
+  if (hasQueuedWork()) { toast(state.busy ? "请先停止当前对话。" : "请先处理或清空待发消息。"); return; }
   const ticket = ++sessionNavigation;
   const displayedView = $("#view").firstElementChild;
   await runAction(button, async () => {
     const data = await api("/api/sessions/" + encodeURIComponent(id));
-    if (ticket !== sessionNavigation || state.busy || $("#view").firstElementChild !== displayedView) return;
+    if (ticket !== sessionNavigation || hasQueuedWork() || $("#view").firstElementChild !== displayedView) return;
     state.sessionId = data.session.id;
     state.messages = blocksFromSession(data.session);
     state.view = "chat";
@@ -1436,7 +1529,7 @@ function refreshSidebar() {
   const list = $("#recent-list");
   if (!list) return;
   const sessions = recentSessions(state.sessions);
-  $("#rail-new-chat").disabled = state.busy;
+  $("#rail-new-chat").disabled = hasQueuedWork();
   $("#rail-recents").hidden = !sessions.length && !state.sessionsError;
   $("#recent-error").hidden = !state.sessionsError;
   $("#recent-error").textContent = state.sessionsError;
@@ -1444,7 +1537,7 @@ function refreshSidebar() {
   clear(list);
   for (const session of sessions) list.append(el("button", {
     class: "recent-session", type: "button", text: session.title, title: session.title,
-    disabled: state.busy, "aria-current": String(state.view === "chat" && state.sessionId === session.id),
+    disabled: hasQueuedWork(), "aria-current": String(state.view === "chat" && state.sessionId === session.id),
     dataset: { sessionId: session.id },
     onclick: event => openSavedSession(session.id, event.currentTarget),
   }));
@@ -1488,6 +1581,11 @@ function render() {
 }
 async function start() {
   initSidebar();
+  window.addEventListener("beforeunload", event => {
+    if (!turnQueue.snapshot().pending.length) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
   document.addEventListener("click", event => {
     for (const popover of document.querySelectorAll(".composer-popover[open]")) if (!popover.contains(event.target)) popover.open = false;
   });

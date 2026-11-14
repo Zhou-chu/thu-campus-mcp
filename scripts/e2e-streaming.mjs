@@ -16,7 +16,7 @@ let calls = 0, checks = 0;
 function check(name, value) { assert.ok(value, name); checks++; console.log("  ✔ " + name); }
 function streamFor(name, request) {
   let control;
-  const context = { closed: false, cancelled: false };
+  const context = { closed: false, cancelled: false, model: request.model };
   const body = new ReadableStream({
     start(c) { control = c; },
     cancel() { context.cancelled = true; context.closed = true; },
@@ -39,7 +39,7 @@ const host = {
   close: async () => {},
 };
 const route = {
-  route: "madmodel", models: async () => [{ id: "fixture", label: "流式验收样本" }],
+  route: "madmodel", models: async () => [{ id: "fixture", label: "流式验收样本" }, { id: "next", label: "下一轮样本" }, { id: "last", label: "第三轮样本" }],
   status: async () => ({ configured: true, available: true, masked: "测试样本" }),
   chat: async request => {
     assert.equal(request.stream, true);
@@ -175,6 +175,90 @@ async function main() {
     contexts.get("多步思考验收")[1].send({ content: "第二步正文样本" });
     contexts.get("多步思考验收")[1].finish(); await idle();
     check("两步均完成而不串段", await page.locator(".reasoning-block").count() === 2 && (await page.locator(".reasoning-content").last().textContent()) === "第二步思考样本");
+    // 工作中可输入与切换下一轮模型；真实本地HTTP，延迟受控上游。
+    const waitReasoning = count => page.waitForFunction(n => document.querySelectorAll('.reasoning-block').length >= n, count);
+    const enqueue = async text => { await page.fill('#composer', text); await page.click('#chat-send'); };
+    const chooseModel = async model => {
+      await page.selectOption('#chat-model', model);
+      await page.waitForFunction(value => document.querySelector('#chat-model').value === value && !document.querySelector('#chat-model').disabled, model);
+    };
+    await start('队列第一轮'); await waitReasoning(1);
+    check('工作中发送与下一轮模型仍可用', await page.locator('#chat-send').isEnabled() && await page.locator('#chat-model').isEnabled() && await page.locator('#chat-send').getAttribute('aria-label') === '加入队列');
+    await enqueue('队列第二轮'); await enqueue('队列第三轮');
+    check('两条待发保留FIFO且没有并发启动', await page.locator('.queue-row').count() === 2 && !contexts.has('队列第二轮') && !contexts.has('队列第三轮'));
+    await chooseModel('next');
+    check('切换下一轮模型不改变运行轮', contexts.get('队列第一轮')[0].model === 'fixture' && (await page.locator('.model-status').textContent()).includes('下一轮生效'));
+    for (const theme of ['dark', 'light']) {
+      await page.click('#theme-' + theme);
+      for (const width of [1920, 390]) {
+        await page.setViewportSize({ width, height: width === 390 ? 640 : 1080 });
+        const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, input: document.querySelector('.composer').getBoundingClientRect().bottom, messages: document.querySelector('#messages').getBoundingClientRect().height }));
+        check(`${theme} ${width}排队时仍可输入和阅读`, geometry.scroll <= width && geometry.input <= (width === 390 ? 640 : 1080) && geometry.messages > 150);
+        if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, `queue-${theme}-${width}.png`) });
+      }
+    }
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    contexts.get('队列第一轮')[0].finish(); await waitReasoning(2);
+    check('第二轮启动时使用刚选择的模型', contexts.get('队列第二轮')[0].model === 'next' && !contexts.has('队列第三轮'));
+    await chooseModel('last'); contexts.get('队列第二轮')[0].finish(); await waitReasoning(3);
+    check('队列不提前绑定模型，第三轮使用最新选择', contexts.get('队列第三轮')[0].model === 'last');
+    contexts.get('队列第三轮')[0].finish(); await idle();
+    check('顺序完成后没有重复用户消息或残留队列', await page.locator('.bubble.user').count() === 3 && await page.locator('.turn-queue').isHidden());
+
+    await start('模型保存等待验收'); await waitReasoning(1);
+    let releaseSave;
+    const savingGate = new Promise(resolve => { releaseSave = resolve; });
+    await page.route('**/api/settings', async intercepted => {
+      if (intercepted.request().method() === 'PUT') await savingGate;
+      await intercepted.continue();
+    });
+    await page.selectOption('#chat-model', 'fixture');
+    await enqueue('保存确认后再发');
+    contexts.get('模型保存等待验收')[0].finish(); await idle();
+    check('保存未确认时队列等待而非使用旧模型', !contexts.has('保存确认后再发') && await page.locator('.queue-row').count() === 1);
+    releaseSave(); await waitReasoning(2); await page.unroute('**/api/settings');
+    check('保存完成后自动用新模型续发', contexts.get('保存确认后再发')[0].model === 'fixture');
+    contexts.get('保存确认后再发')[0].finish(); await idle();
+
+    await start('停止队列验收'); await waitReasoning(1); await enqueue('停止后保留这条');
+    await page.click('#chat-stop'); await idle();
+    check('停止当前轮不会偷偷启动下一条', !contexts.has('停止后保留这条') && (await page.locator('.queue-state').textContent()).includes('已暂停'));
+    check('暂停队列绑定原会话且可明确继续', await page.locator('#rail-new-chat').isDisabled() && await page.getByRole('button', { name: '继续队列', exact: true }).isEnabled());
+    await page.getByRole('button', { name: '继续队列', exact: true }).click(); await waitReasoning(2);
+    check('停止后只有明确继续才发送', contexts.has('停止后保留这条'));
+    contexts.get('停止后保留这条')[0].finish(); await idle();
+
+    await start('队列断流验收'); await waitReasoning(1); await enqueue('断流后保留这条');
+    contexts.get('队列断流验收')[0].fail(); await idle();
+    check('上游断流保留并暂停待发，不自动重试当前轮', !contexts.has('断流后保留这条') && (await page.locator('.queue-state').textContent()).includes('已暂停') && contexts.get('队列断流验收').length === 1);
+    await page.getByRole('button', { name: '继续队列', exact: true }).click(); await waitReasoning(2);
+    check('断流后的待发可明确恢复', contexts.has('断流后保留这条'));
+    contexts.get('断流后保留这条')[0].finish(); await idle();
+
+    await start('模型保存失败验收'); await waitReasoning(1); await enqueue('修复模型后再发');
+    await page.route('**/api/settings', intercepted => intercepted.request().method() === 'PUT'
+      ? intercepted.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'FIXTURE_SAVE', message: '受控保存失败' } }) })
+      : intercepted.continue());
+    await page.selectOption('#chat-model', 'last');
+    await page.waitForFunction(() => document.querySelector('.model-status').textContent.includes('模型未切换') && !document.querySelector('#chat-model').disabled);
+    contexts.get('模型保存失败验收')[0].finish(); await idle();
+    check('模型保存失败不回退旧模型偷偷发队列', !contexts.has('修复模型后再发') && (await page.locator('.queue-state').textContent()).includes('已暂停'));
+    await page.unroute('**/api/settings'); await chooseModel('next');
+    check('修复模型不擅自解除已暂停队列', !contexts.has('修复模型后再发'));
+    await page.getByRole('button', { name: '继续队列', exact: true }).click(); await waitReasoning(2);
+    check('明确恢复后采用修复的下一轮模型', contexts.get('修复模型后再发')[0].model === 'next');
+    contexts.get('修复模型后再发')[0].finish(); await idle();
+
+    await start('取回清空队列验收'); await waitReasoning(1);
+    await enqueue('取回到输入的消息'); await enqueue('清空的待发消息');
+    check('有待发时注册刷新保护', await page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; }));
+    await page.locator('.queue-details > summary').click();
+    await page.locator('.queue-row').filter({ hasText: '取回到输入的消息' }).getByRole('button', { name: '取回待发消息' }).click();
+    check('取回保留原文且不打断活动轮', await page.inputValue('#composer') === '取回到输入的消息' && await page.locator('.queue-row').count() === 1 && !contexts.get('取回清空队列验收')[0].closed);
+    page.once('dialog', dialog => dialog.accept()); await page.getByRole('button', { name: '清空待发消息', exact: true }).click();
+    check('确认清空只清待发不停止当前轮', await page.locator('.turn-queue').isHidden() && !contexts.get('取回清空队列验收')[0].closed);
+    check('清空后不再误拦截刷新', await page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return !event.defaultPrevented; }));
+    contexts.get('取回清空队列验收')[0].finish(); await idle();
     check("无页面脚本错误", errors.length === 0);
     console.log(`\n流式与思考真实浏览器回归通过${checks}项；仅使用受控样本，没有调用计费模型或真实校园工具。`);
   } finally {
