@@ -31,6 +31,24 @@
 
 “可访问/配置成功”和“当前源码质量门通过”分别验收；首次结果尚未产生时不能报通过。
 
+## 2026-11-14首份真实基线
+
+- 后台任务`AaHZoK5mgdnaIrRUmS1-`为SUCCESS；analysis为`c6a7769c-cfc3-498d-9648-4d6880dba68b`，revision精确对应`5ae6d8ba4bdc0d70535e81949125514c874b0a5d`。
+- 绑定默认Sonar way，新代码定义Previous version保持原值；[该analysis的质量门](https://sonarcloud.io/api/qualitygates/project_status?analysisId=c6a7769c-cfc3-498d-9648-4d6880dba68b)返回NONE、没有判定条件，**不是通过**。
+
+| 首扫指标 | 实测 |
+| --- | --- |
+| 有效源码行/文件 | 37,691 / 231 |
+| Sonar报告Bug | 4 |
+| Sonar报告漏洞 | 25 |
+| Sonar报告Code Smell | 34 |
+| 开放问题合计 | 63；经典严重级别含2 BLOCKER、4 CRITICAL |
+| 重复行密度 | 3.5% |
+| 可靠性/安全/可维护性评级 | D / E / A |
+| 覆盖率 | 无数据；未上传LCOV，不写成0%或100% |
+
+优先复核Sonar标记的两项会话路径遍历流（[sessions.mjs:34](../lib/app/sessions.mjs#L34)、[sessions.mjs:101](../lib/app/sessions.mjs#L101)），再核实弱哈希的实际安全语义（[protocol.mjs:5](../lib/madmodel/protocol.mjs#L5)）及三处排序比较规则（[classroom.ts:28](../packages/hetang/src/classroom.ts#L28)、[jobs.ts:361–362](../packages/hetang/src/jobs.ts#L361-L362)）。这些是**扫描器发现，不等于已人工确认可利用**；不能未检查输入校验/调用链就批量忽略，也不能机械改排序或哈希造成业务行为变化。本次是恢复分析与建立基线，尚未完成这些代码整改或CI覆盖率接入。
+
 ## 官方依据
 
 - [Free/OSS方案与私有LOC额度](https://docs.sonarsource.com/sonarqube-cloud/administering-sonarcloud/managing-subscription/subscription-plans)
