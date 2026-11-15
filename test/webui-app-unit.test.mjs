@@ -627,6 +627,33 @@ test("app: right sidebar external tabs stay honest and failed preparation is rec
   assert.match(a.$(".rsidebar-body").textContent, /微信小程序/);
 });
 
+test("app: right sidebar resizes by drag and keyboard and closes extra tabs", async t => {
+  const a = await app(t);
+  const grip = a.$(".rsidebar-grip");
+  const width = () => JSON.parse(a.localStorage.getItem("campus.app.sidebar.layout") || "{}").width;
+  assert.equal(width(), 380);
+  a.event(grip, "pointerdown", { button: 0, clientX: 400 });
+  a.event(a.document, "pointermove", { clientX: 300 });
+  a.event(a.document, "pointerup", {});
+  assert.equal(width(), 480);
+  a.event(grip, "keydown", { key: "ArrowLeft" });
+  assert.equal(width(), 504);
+  a.event(grip, "keydown", { key: "ArrowRight", shiftKey: true });
+  assert.equal(width(), 440);
+  a.event(grip, "keydown", { key: "Enter" });
+  assert.equal(width(), 380);
+  a.event(grip, "keydown", { key: "Escape" });
+  assert.equal(width(), 380, "无关按键不改变宽度");
+  assert.equal(a.$("#right-sidebar").style.getPropertyValue("--rsidebar-width"), "380px");
+
+  a.click(a.button("添加 待批改"));
+  assert.ok(a.$("#rsidebar-tab-ungraded"));
+  assert.equal(a.all(".rsidebar-tab").length, 2);
+  a.click(a.all(".rsidebar-tab-close")[0]);
+  assert.equal(a.all(".rsidebar-tab").length, 1);
+  assert.equal(a.all(".rsidebar-tab-close").length, 0, "只剩一个标签时不提供关闭入口");
+});
+
 test("app: width drag/keyboard is the only entry, persists without losing draft, narrow view keeps preference", async t => {
   const a = await app(t);
   a.input("#composer", "宽度不能清掉的草稿");

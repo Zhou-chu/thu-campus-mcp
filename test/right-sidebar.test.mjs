@@ -7,7 +7,7 @@ import { createAppServer } from "../lib/app/server.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
 import { DeviceStore } from "../lib/app/devices.mjs";
 import { PairingCodes } from "../lib/app/pairing.mjs";
-import { AssignmentsService, normalizeItem, sortUngraded, splitPending, toMillis } from "../lib/app/assignments.mjs";
+import { AssignmentsService, normalizeItem, sortUngraded, splitPending, toMillis, graded } from "../lib/app/assignments.mjs";
 import { canonicalJson, createConfirmations } from "../lib/app/confirmations.mjs";
 import { applyOrder, clampWidth, filterArchived, moveId, readJson, remaining, toggleArchived, writeJson } from "../webui/ddl-model.js";
 
@@ -94,6 +94,94 @@ test("assignments service: a throwing tool host degrades to unavailable and conc
   assert.equal(first.fetchedAt, second.fetchedAt);
   await service.overview({ refresh: true });
   assert.equal(calls, 2, "强制刷新跳过缓存");
+});
+
+test("assignments service: pagination stops on missing or empty pages and arguments stay explicit", async () => {
+  const seen = [];
+  const host = {
+    call: async (name, args) => {
+      seen.push(args);
+      if (name === "learn_prepare_submission") return { ok: true, data: { id: "11111111-1111-4111-8111-111111111111" } };
+      if (name === "learn_list_assignments") return { ok: true, data: { items: [{ ...homework("h1"), submitted: "1", grade: "" }], nextOffset: "not-a-number" } };
+      return { ok: true, data: {} };
+    },
+  };
+  const service = new AssignmentsService(host, { cacheTtl: 0 });
+  const first = await service.overview();
+  assert.equal(first.state, "ready");
+  assert.equal(first.pages, 1, "非数字 nextOffset 视为结束");
+  const empty = await new AssignmentsService({ call: async () => ({ ok: true, data: { items: [], nextOffset: 5 } }) }).overview();
+  assert.equal(empty.active.length, 0);
+
+  await service.overview();
+  assert.equal(seen.filter(args => args && args.limit !== undefined).length >= 2, true, "缓存过期后重新读取");
+  await service.prepare({ courseId: "c1", homeworkId: "h1" });
+  assert.deepEqual(seen.at(-1), { courseId: "c1", homeworkId: "h1" }, "没有正文与文件时不带这些字段");
+  await service.prepare({ courseId: "c1", homeworkId: "h1", overwrite: true });
+  assert.deepEqual(seen.at(-1), { courseId: "c1", homeworkId: "h1", overwrite: true });
+  const minimal = await service.detail("c1", "h1");
+  assert.deepEqual(minimal.data.attachments, []);
+  assert.equal(minimal.data.body, "");
+  assert.equal((await service.prepare({ courseId: "bad/id", homeworkId: "h1" })).ok, false);
+});
+
+test("confirmations: malformed tokens, expiry and clearing never authorise", () => {
+  let now = 0;
+  const store = createConfirmations({ ttlMs: 50, now: () => now, limit: 2 });
+  assert.equal(store.consume("short", "s", "b"), false);
+  assert.equal(store.consume("z".repeat(48), "s", "b"), false);
+  const first = store.issue("s", "b");
+  store.issue("s", "b");
+  store.issue("s", "b");
+  now = 60;
+  assert.equal(store.consume(first.token, "s", "b"), false, "过期凭证即使未被清理也不能使用");
+  const fresh = store.issue("s", "b");
+  store.clear();
+  assert.equal(store.consume(fresh.token, "s", "b"), false, "清空后全部失效");
+});
+
+test("sidebar http: attachment upload rejects empty and unsafe names", async t => {
+  const host = { describe: () => [], call: async () => ({ ok: true, data: {} }), close: async () => {} };
+  const app = await appWith(host);
+  t.after(app.close);
+  const headers = { ...auth, "content-type": "application/octet-stream" };
+  assert.equal((await fetch(app.base + "/api/sidebar/attachments?name=" + encodeURIComponent("../.."), { method: "POST", headers, body: Buffer.from("") })).status, 400);
+  assert.equal((await fetch(app.base + "/api/sidebar/attachments?name=" + encodeURIComponent("a/b.txt"), { method: "POST", headers, body: Buffer.from("x") })).status, 200);
+  assert.equal((await fetch(app.base + "/api/sidebar/attachments?name=", { method: "POST", headers, body: Buffer.from("x") })).status, 400);
+});
+
+test("assignments: ties, missing fields and blank grades keep deterministic order", () => {
+  const now = Date.parse("2026-11-15T12:00:00Z");
+  assert.deepEqual(
+    splitPending([{ id: "b", title: "B", deadlineMs: now + 1000 }, { id: "a", title: "A", deadlineMs: now + 1000 }], now).map(item => item.id),
+    ["a", "b"],
+    "同期限按标题稳定排序",
+  );
+  assert.deepEqual(
+    splitPending([{ id: "y", title: "Y", deadlineMs: null }, { id: "x", title: "X", deadlineMs: null }], now).map(item => item.id),
+    ["x", "y"],
+  );
+  assert.deepEqual(
+    sortUngraded([{ id: "m2", title: "M", submitMs: null, deadlineMs: null }, { id: "m1", title: "M", submitMs: null, deadlineMs: now }]).map(item => item.id),
+    ["m1", "m2"],
+    "缺提交时间退到期限，两者都缺按 0 处理",
+  );
+  assert.equal(graded("  "), false);
+  assert.equal(graded("A"), true);
+  assert.equal(normalizeItem({ id: "x", courseId: "c" }).course, "c");
+  assert.equal(normalizeItem({ id: "x", courseId: "c" }).title, "x");
+});
+
+test("assignments service: empty payloads and partial detail keep an honest empty result", async () => {
+  const empty = await new AssignmentsService({ call: async () => ({ ok: true, data: null }) }, { cacheTtl: 0 }).overview();
+  assert.equal(empty.state, "ready");
+  assert.deepEqual(empty.active, []);
+  const offline = await new AssignmentsService({ call: async () => ({ ok: false, error: {} }) }).overview();
+  assert.equal(offline.error.code, "LEARNX_UNAVAILABLE");
+  const bare = await new AssignmentsService({ call: async () => ({ ok: true, data: null }) }).detail("c1", "h1");
+  assert.equal(bare.ok, true);
+  assert.equal(bare.data.grade, null);
+  assert.equal(bare.data.title, "");
 });
 
 test("sidebar model: storage failures and boundary texts stay explicit", () => {
