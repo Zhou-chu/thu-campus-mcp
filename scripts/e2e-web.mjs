@@ -214,7 +214,13 @@ async function main() {
     await page.goto(`${base}/?e2e=1#token=${TOKEN}`, { waitUntil: "load" });
     await page.waitForSelector("#app .tab", { state: "visible", timeout: 10000 });
     record("主应用可见", await page.locator("#app").isVisible());
-    record("五个导航标签", (await page.locator(".tabbar .tab").count()) === 5);
+    record("六个导航标签", (await page.locator(".tabbar .tab").count()) === 6);
+    await page.click('button[data-view="timetable"]');
+    await page.waitForSelector(".timetable-page");
+    record("课表视图可打开且无横向溢出", (await page.locator("#view-context").innerText()) === "课表" && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.waitForFunction(() => !document.querySelector(".timetable-page").textContent.includes("正在读取课表"), null, { timeout: 15000 });
+    record("没有课表数据时如实说明而非画空格子", (await page.locator(".timetable-page").innerText()).includes("没有可排进课表的课程") && (await page.locator(".course-block").count()) === 0);
+    await page.click('button[data-view="chat"]');
     await page.waitForFunction(() => document.querySelectorAll('.recent-session').length === 3);
     record("左栏展示三条真实最近会话", await page.locator('.recent-session').count() === 3);
     const material = await page.evaluate(() => ({ background: getComputedStyle(document.body).backgroundImage, radius: getComputedStyle(document.querySelector('#rail-new-chat')).borderRadius }));

@@ -627,6 +627,35 @@ test("app: right sidebar external tabs stay honest and failed preparation is rec
   assert.match(a.$(".rsidebar-body").textContent, /微信小程序/);
 });
 
+test("app: timetable renders the weekly grid, today marker and course detail", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/timetable": { ok: true, state: "ready", fetchedAt: checkedAt, semester: { id: "s1", name: "秋季学期" }, unscheduled: 1, courses: [{ id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 1, from: 1, to: 2, weeks: null, location: "一教101" }] }] },
+    },
+  });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 1, "timetable grid");
+  assert.equal(a.$("#view-context").textContent, "课表");
+  assert.equal(a.all(".timetable-cell").length, 84, "7 天 × 12 节");
+  assert.equal(a.all(".timetable-day").length, 7);
+  assert.match(a.$(".course-block").textContent, /甲课/);
+  assert.match(a.$(".course-block").textContent, /第1-2节/);
+  assert.match(a.$(".timetable-agenda").textContent, /一教101/);
+  assert.match(a.$(".timetable-page").textContent, /1 门课程没有上课时间地点/);
+  assert.match(a.$(".timetable-head").textContent, /秋季学期/);
+  a.click(a.$(".course-block"));
+  assert.match(a.$(".course-detail").textContent, /甲老师/);
+  assert.match(a.$(".course-detail").textContent, /一教101/);
+});
+
+test("app: timetable reports an unreadable semester without inventing courses", async t => {
+  const a = await app(t, { routes: { "GET /api/timetable": { ok: true, state: "unavailable", fetchedAt: checkedAt, semester: null, courses: [], unscheduled: 0, error: { code: "AUTH_REQUIRED", message: "需要登录网络学堂" } } } });
+  a.nav("timetable");
+  await until(() => /需要登录网络学堂/.test(a.$(".timetable-page").textContent), "timetable unavailable");
+  assert.equal(a.all(".course-block").length, 0);
+  assert.equal(a.all(".timetable-agenda").length, 0);
+});
+
 test("app: right sidebar resizes by drag and keyboard and closes extra tabs", async t => {
   const a = await app(t);
   const grip = a.$(".rsidebar-grip");

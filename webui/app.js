@@ -7,6 +7,7 @@ import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } fro
 import { createTurnQueue } from "./turn-queue.js";
 import { createChatWidthUI } from "./chat-width-ui.js";
 import { createRightSidebar } from "./right-sidebar.js";
+import { createTimetableView } from "./timetable-view.js";
 import { approvalPresentation, decideApproval } from "./approval.js";
 import { buildApiUrl, sanitizeBaseUrl, sanitizePairCode, sanitizeToken, trimTrailingSlashes } from "./guards.js";
 import { CONNECTION_KEY, LEGACY_BASE_KEY, LEGACY_TOKEN_KEY, resolveStartupConnection, writeConnection } from "./connection.js";
@@ -72,6 +73,7 @@ const clear = (node) => {
 };
 const $ = (selector) => document.querySelector(selector);
 const chatWidthUI = createChatWidthUI({ onError: toast });
+const timetablePage = createTimetableView({ el, api });
 const rightSidebar = createRightSidebar({
   el, api, toast, renderRich, uploadFile,
   onResize: () => chatWidthUI.refresh(),
@@ -1699,12 +1701,13 @@ function render() {
   jobPoller.stop();
   const view = $("#view");
   view.dataset.view = state.view;
-  $("#view-context").textContent = ({chat:"对话工作台",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置"})[state.view] || "对话工作台";
+  $("#view-context").textContent = ({chat:"对话工作台",timetable:"课表",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置"})[state.view] || "对话工作台";
   clear(view);
   for (const tab of document.querySelectorAll(".tab"))
     tab.setAttribute("aria-current", tab.dataset.view === state.view ? "page" : "false");
   const views = {
     chat: chatView,
+    timetable: () => timetablePage(),
     sessions: sessionsView,
     services: servicesView,
     tools: toolsView,

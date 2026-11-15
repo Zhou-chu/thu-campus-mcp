@@ -262,6 +262,13 @@ test("assignments service: detail and submission surface tool errors instead of 
   assert.equal(rejected.error.code, "DEADLINE_PASSED");
   assert.equal((await service.submit("not-a-uuid")).ok, false);
   assert.equal((await service.detail("../etc", "h1")).ok, false);
+  const sameStamp = sortUngraded([
+    { id: "z", title: "B", submitMs: 5, deadlineMs: null },
+    { id: "y", title: "A", submitMs: 5, deadlineMs: null },
+  ]);
+  assert.deepEqual(sameStamp.map(item => item.id), ["y", "z"], "同一提交时间按标题稳定排序");
+  const gradedDetail = await new AssignmentsService({ call: async () => ({ ok: true, data: { id: "h", title: "t", grade: 92 } }) }).detail("c1", "h1");
+  assert.equal(gradedDetail.data.grade, 92);
 });
 
 async function appWith(host) {

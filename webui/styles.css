@@ -203,7 +203,7 @@ h3 {
 .icon-btn:hover {background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink);}
 .view {counter-reset:entry;overflow:auto;padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-5);min-width:0;min-height:0;}
 .view > * {width:100%;max-width:var(--content-width);margin-inline:auto;}
-.tabbar {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom);}
+.tabbar {display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom);}
 .rail-brand,.rail-create,.rail-recents,.rail-storage {display:none;}
 .rail-main,.rail-footer {display:contents;}
 .tab {display:flex;align-items:center;justify-content:center;gap:var(--space-3);min-width:0;min-height:56px;padding:var(--space-3);border:0;background:transparent;color:var(--muted);font-size:var(--text-ui);cursor:pointer;}
@@ -1329,4 +1329,37 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 @media(max-width:1099px) {
   .rsidebar {position:fixed;inset:0 0 0 auto;width:min(92vw,420px);z-index:30;box-shadow:var(--surface-depth);}
   .rsidebar-grip {display:none;}
+}
+
+/* 课表：周视图网格 + 窄屏日程；只用灰阶层级，不靠彩色区分课程。 */
+.timetable-page {gap:var(--space-4);}
+.timetable-head {display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;width:100%;}
+.timetable-head h2 {margin:0;font-family:var(--serif);font-size:var(--text-heading);}
+.timetable-head p {margin:var(--space-1) 0 0;}
+.timetable-actions {display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;}
+.timetable-body {width:100%;display:flex;flex-direction:column;gap:var(--space-3);}
+.timetable-grid {display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));grid-auto-rows:minmax(58px,auto);gap:1px;width:100%;background:var(--line);border:1px solid var(--line);border-radius:var(--radius-control);overflow:hidden;}
+.timetable-corner {background:var(--panel);}
+.timetable-day {display:flex;align-items:center;justify-content:center;gap:var(--space-1);min-height:44px;background:var(--panel);font-size:var(--text-ui);color:var(--ink-soft);}
+.timetable-day[data-today="true"] {color:var(--ink);font-weight:600;}
+.timetable-day[data-today="true"]::after {content:"今天";font-size:var(--text-meta);color:var(--muted);font-weight:400;}
+.timetable-period {display:flex;align-items:flex-start;justify-content:center;padding-top:var(--space-2);background:var(--panel);font-family:var(--mono);font-size:var(--text-meta);color:var(--muted);}
+.timetable-cell {grid-column:var(--day, auto);grid-row:var(--period, auto);background:var(--paper);min-width:0;}
+.timetable-cell[data-today="true"] {background:color-mix(in srgb,var(--ink) 4%,var(--paper));}
+.course-block {grid-column:var(--day, auto);grid-row:var(--from, auto) / span var(--span, 1);z-index:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin:3px;margin-left:calc(3px + var(--lane, 0) * 16%);max-width:calc(100% - var(--lane, 0) * 16%);padding:var(--space-2);min-width:0;text-align:left;border:1px solid var(--line-strong);border-left:3px solid var(--ink);border-radius:var(--radius-small);background:var(--control-fill);color:var(--ink);cursor:pointer;overflow:hidden;}
+.course-block:hover {background:var(--selected-fill);}
+.course-block:focus-visible {outline:2px solid var(--ink);outline-offset:-2px;}
+.course-name {font-size:var(--text-meta);font-weight:600;line-height:1.35;overflow-wrap:anywhere;}
+.course-meta {font-size:var(--text-meta);color:var(--muted);line-height:1.35;overflow-wrap:anywhere;}
+.course-detail {grid-column:var(--day, auto);grid-row:var(--from, auto) / span var(--span, 1);z-index:1;margin:3px;padding:var(--space-2);border:1px dashed var(--line-strong);border-radius:var(--radius-small);background:var(--panel);font-size:var(--text-meta);color:var(--ink-soft);overflow-wrap:anywhere;}
+.timetable-agenda {display:none;flex-direction:column;gap:var(--space-4);}
+.agenda-day {display:flex;flex-direction:column;gap:var(--space-1);}
+.agenda-day h3 {margin:0 0 var(--space-1);font-size:var(--text-ui);color:var(--ink-soft);font-weight:600;}
+.agenda-item {display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"time name" "time meta";gap:2px var(--space-3);min-height:52px;padding:var(--space-2) 0;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;}
+.agenda-time {grid-area:time;font-family:var(--mono);font-size:var(--text-meta);color:var(--muted);}
+.agenda-name {grid-area:name;font-size:var(--text-body);color:var(--ink);font-weight:600;overflow-wrap:anywhere;}
+.agenda-item .small {grid-area:meta;}
+@media(max-width:1099px) {
+  .timetable-grid {display:none;}
+  .timetable-agenda {display:flex;}
 }
