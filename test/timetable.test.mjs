@@ -113,6 +113,16 @@ async function appWith(host) {
   return { base, close: async () => { await server.close?.(); await rm(dir, { recursive: true, force: true }); } };
 }
 
+test("timetable: accepts the array shape that 网络学堂 actually returns", () => {
+  assert.deepEqual(parseSchedule(["星期一第2节(全周)，六教6A216"]).map(slot => slot.day), [1]);
+  const pair = parseSchedule(["星期二第2节(全周)，五教5104", "星期五第3节(全周)，五教5104"]);
+  assert.deepEqual(pair.map(slot => slot.day), [2, 5]);
+  const table = buildTimetable([{ id: "c", name: "甲课", timeAndLocation: ["星期一第2节(全周)，六教6A216", "星期五第3节(全周)，五教5104"] }]);
+  assert.equal(table.courses.length, 1);
+  assert.equal(table.courses[0].slots.length, 2);
+  assert.equal(table.courses[0].timeAndLocation, "星期一第2节(全周)，六教6A216 星期五第3节(全周)，五教5104");
+});
+
 test("timetable: tolerates missing fields, odd spec text and non-object entries", () => {
   assert.deepEqual(parseSchedule(undefined), []);
   assert.deepEqual(parseSchedule("星期一第3节(第5周)")[0].weeks, { ranges: [[5, 5]], odd: false, even: false });
