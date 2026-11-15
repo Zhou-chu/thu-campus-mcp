@@ -1,6 +1,18 @@
 # SonarQube Cloud：公开项目接入
 
-## 2026-11-15 首轮CI实扫证据（当前远端结果）
+## 2026-11-15 第二轮远端结果：374d071
+
+[CI 43691394033](https://github.com/Zhou-chu/thu-campus-mcp/actions/runs/43691394033)的Node 22、Node 24和Android全部成功。Windows上传前、Linux下载后的四套严格报告校验均通过，两个LCOV真实消费。不可变覆盖产物ID为14152058777，SHA256为6465c01fa9f6dd6a6efc53bdd16481a02047c65b167afb99a8aa7197fcc6bd31。
+
+Sonar analysis `e375726e-4890-480b-ad43-f39e38aa6c8c`精确匹配374d071，可靠性/安全/可维护性均A、重复1.3%、热点100%；质量门只因新覆盖35.3%失败。分析恢复到382文件，但SDK测试被算进未覆盖生产行。37个开放CODE_SMELL均在HostPolicyTest.kt，且[规则API](https://sonarcloud.io/api/rules/show?organization=zhou-chu&key=kotlin:S1313)确认kotlin:S1313只适用MAIN；未批量改37项状态。
+
+根因为项目另开了`sonar.scanner.autoconfig.enabled=true`，不是已关闭的Automatic Analysis。[官方CLI文档](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/scanners/sonarscanner-cli#automatic-configuration-scope-and-fine-tuning)明确该Beta忽略显式source/test分类参数，并允许既有项目关闭它。第三批仅修正分类：项目UI与版本化配置均关闭，API回读两个自动开关均false；sources/tests全仓候选，按测试模式划分TEST，保留产物排除、两个LCOV、原门禁与基线。配置回归3/3通过；未变生产源码的原覆盖门禁、完整性和来源审计仍通过。正确TEST角色、37项自然复算及覆盖必须经下一实扫确认，不能以设置已保存代替成功。
+
+该run不可变产物的真实unit行/语句/函数/分支为92.78% / 90.71% / 92.20% / 90.52%，combined为93.14% / 91.03% / 92.26% / 91.55%，原115文件八项门禁均过。新增19文件tooling的unit行为39.26%、combined行为77.22%，仍如实低于90%。产物报告哈希及Istanbul重算摘要另经本地回读验证，未修改CI正式字节校验。
+
+跨环境下载对照还发现本地4个旧文件共7处零散CRLF；仅LF规范化后的字节与CI源哈希精确相同，Git属性为eol=lf且工作区干净。正式CI仍校验真实checkout字节，未改哈希算法或放宽验证。
+
+## 2026-11-15 首轮CI实扫证据（第一轮留档）
 
 - 提交 `943e20e624b680da8482f5c5d7da4b8877f4d42d`，对应 [CI run 43688282359](https://github.com/Zhou-chu/thu-campus-mcp/actions/runs/43688282359)，Sonar analysis `82a3b79a-c03a-4f9a-9adc-9353bea5306d` 的 revision 精确匹配。Automatic analysis 已关闭；CI确实读取同一run的combined LCOV，未报路径解析失败。
 - Node 24全job成功，包括覆盖门禁、4个真实浏览器E2E、smoke、源码/预备便携包与搬迁校验。远端unit行/语句/函数/分支为92.78% / 90.71% / 92.20% / 90.51%，combined为93.14% / 91.03% / 92.26% / 91.54%，两套完整且errors为空。

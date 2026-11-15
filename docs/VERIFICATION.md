@@ -100,6 +100,12 @@
 - 扫描器忽略旧sources/tests/test.inclusions参数，首轮测试排除造成分析遗漏。第二批恢复测试分析、额外生成19个scripts文件的真实tooling LCOV；原115个runtime+SDK文件的unit/combined范围及四指标90%阈值不变。测试分类及恢复后的发现必须由下一次实扫确认。
 - 四套报告均加入源码/报告哈希、LCOV清单、结构和重新计算摘要校验；tooling的unit raw快照带逐文件哈希并验证为combined raw的未修改子集。采集器两文件窄测22/22通过；仅三个采集脚本的c8窄测行/语句99.81%、函数98.21%、分支91.52%，不能当19脚本或115文件整体验收。
 
+### 第二轮远端结果与第三轮分类修正
+
+374d071的CI 43691394033中Node 22、Node 24、Android全部成功，上传前及Linux下载后的严格报告校验通过。Sonar analysis e375726e-4890-480b-ad43-f39e38aa6c8c精确匹配该提交，可靠性/安全/可维护性均A；质量门仅新覆盖35.3%失败。382文件均索引、两LCOV均消费，但测试误计生产覆盖；37个CODE_SMELL全部来自HostPolicyTest中的IP策略输入，规则API确认S1313只适用MAIN。
+
+已找到独立于Automatic Analysis的Scanner automatic configuration Beta：项目值原为true，官方文档证实它会忽略显式测试分类。第三批在项目UI和版本化配置关闭该项，公开API回读两项自动开关均false；sources/tests全仓候选，按测试模式分MAIN/TEST，测试仍接受TEST规则分析。新增配置防回退测试；不新增测试/覆盖排除、不改规则门禁或基线。实际角色和37项复算仍待下一精确提交实扫，不以保存设置冒充修复成功。
+
 ## 当前限制
 
 真实认证只支持 Windows DPAPI，新机器需要本机登录。CI 不包含学校凭据。
