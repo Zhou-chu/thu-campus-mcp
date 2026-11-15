@@ -466,6 +466,41 @@ async function main() {
     );
     record("视图容器不整块播报", (await page.locator("#view").getAttribute("aria-live")) === null);
 
+    // 首次学堂登录：只拦截认证任务，绝不向真实校园提交测试学号。
+    step("登录任务失败与学号恢复");
+    const loginPosts = [];
+    let loginStep = 0;
+    await page.route("**/api/auth/login", async route => {
+      loginPosts.push(route.request().postDataJSON()); loginStep = 0;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, jobId: "login-e2e-fixture", job: { status: "queued" } }) });
+    });
+    await page.route("**/api/jobs/login-e2e-fixture", async route => {
+      const stages = [{ status: "queued" }, { status: "running", phase: "downloading" }, { status: "running", phase: "login" }, { status: "complete" }];
+      const job = loginPosts.at(-1)?.account ? stages[Math.min(loginStep++, stages.length - 1)] : { status: "failed", error: "BROWSER_ACCOUNT_REQUIRED" };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, found: true, job: { service: "learnx", ...job } }) });
+    });
+    for (const width of [1280, 398]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.click('button[data-view="services"]');
+      const row = page.locator('[data-service="learnx"]');
+      const before = loginPosts.length;
+      await row.getByRole("button", { name: "登录", exact: true }).click();
+      await row.locator(".auth-notice.error").filter({ hasText: "需要填写学号" }).waitFor();
+      record(`学号缺失明确失败 ${width}`, await page.locator("#learnx-account").evaluate(input => input.required));
+      await row.getByRole("button", { name: "登录", exact: true }).click();
+      record(`空学号不重复提交 ${width}`, loginPosts.length === before + 1);
+      record(`登录表单无横向溢出 ${width}`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.getByLabel("学号", { exact: true }).fill(" fixture-e2e-account ");
+      await row.getByRole("button", { name: "登录", exact: true }).click();
+      await row.locator(".auth-notice").filter({ hasText: "任务运行中" }).waitFor();
+      record(`运行任务不假报已打开 ${width}`, !/窗口已打开|已登录/.test(await row.innerText()));
+      await row.locator(".auth-notice").filter({ hasText: "任务已结束" }).waitFor();
+      record(`学号已传参且不持久保存 ${width}`, loginPosts.at(-1).account === "fixture-e2e-account" && await page.locator("#learnx-account").inputValue() === "" && !(await page.evaluate(() => JSON.stringify(localStorage))).includes("fixture-e2e-account"));
+    }
+    await page.unroute("**/api/auth/login");
+    await page.unroute("**/api/jobs/login-e2e-fixture");
+    await page.setViewportSize({ width: 1280, height: 900 });
+
     // 10. 换址链接不能把已存令牌带去新目标（真实浏览器 + 路由拦截，无真实网络）
     step("换址链接不得携带旧令牌");
     const probeToken = "tc1_leak_probe_" + "x".repeat(24);

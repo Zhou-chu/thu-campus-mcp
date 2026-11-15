@@ -60,7 +60,7 @@ async function main() {
     toolForModel: () => [{ type: "function", function: { name: initialize.name, parameters: initialize.inputSchema } }],
     prepareCall: async name => ({ mandatoryApproval: name === "workspace_initialize", approvalArgs: { accountId: scope.accountId, expectedRepoId: scope.repoId, rootPath: scope.rootPath, private: true, sessions: "sessions/<UUID>/" }, risk: "将在已核验的个人私有资料库创建固定Agent工作区，仅限下列完整范围。" }),
     async call(name, args, context) {
-      if (name === "campus_browser_login") { loginCalls++; return { ok: true, data: { jobId: "fixture-browser-open", state: "running" } }; }
+      if (name === "campus_browser_login") { loginCalls++; return { ok: true, data: { jobId: "fixture-browser-open", status: "queued" } }; }
       if (Object.hasOwn(statuses, name)) {
         assert.equal(args.verify, true, "认证探针必须显式执行只读验证");
         const value = statuses[name]; return value.error ? { ok: false, error: value.error } : { ok: true, data: value };
@@ -90,6 +90,12 @@ async function main() {
     for (const name of ["workspace_initialize", "cloud_workspace_init"]) check(name + "手动写API禁止绕审批", (await fetch(base + "/api/tools/" + name, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: "{}" })).status === 403);
     browser = await chromium.launch({ executablePath: await chromiumPath(), headless: true });
     const page = await browser.newPage({ viewport: { width: 1920, height: 1000 }, acceptDownloads: true });
+    let loginJobPolls = 0;
+    await page.route("**/api/jobs/fixture-browser-open", async route => {
+      loginJobPolls++;
+      const job = { service: "hetang", status: loginJobPolls === 1 ? "running" : "complete", phase: "login" };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, found: true, job }) });
+    });
     const errors = []; page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (/\/api\/jobs\//.test(request.url())) jobRequests++; if (request.method() !== "GET" && /\/api\/(?:workspace\/storage|tools\/(?:cloud_workspace|workspace_initialize|workspace_sync))/.test(request.url())) directWrites++; });
     await page.goto(base + "/#token=" + TOKEN); await page.waitForSelector("#composer");
@@ -103,8 +109,9 @@ async function main() {
     check("核验记录可主动展开来源与时间", (await service("cloud").locator(".auth-evidence").innerText()).includes("protected-api:cloud-account-info"));
     await page.waitForSelector(".timeline-item");
     check("旧ready历史无证据降未核验，新证据仍显示已登录", (await page.locator(".timeline-item").nth(0).innerText()).includes("未核验") && (await page.locator(".timeline-item").nth(1).innerText()).includes("已登录"));
-    await service("hetang").getByRole("button", { name: "登录", exact: true }).click(); await service("hetang").locator(".auth-notice").waitFor();
-    check("打开登录窗口不算登录成功", loginCalls === 1 && await label("hetang") === "未核验" && jobRequests === 0);
+    await service("hetang").getByRole("button", { name: "登录", exact: true }).click();
+    await service("hetang").locator(".auth-notice").filter({ hasText: "任务已结束" }).waitFor();
+    check("登录任务结束不算认证成功", loginCalls === 1 && await label("hetang") === "未核验" && jobRequests === 2 && loginJobPolls === 2);
     await verify(); check("窗口未产生核验证据仍为未登录", await label("hetang") === "未登录");
     statuses.rain_status = proof("rain-basic-info"); await verify(); check("有效保存会话无需新扫码也可真实核验", await label("hetang") === "已登录");
     statuses.rain_status = { error: { code: "AUTH_EXPIRED", message: "fixture expired" } }; statuses.learn_status = { error: { code: "NETWORK_ERROR", message: "fixture unavailable" } }; await verify();

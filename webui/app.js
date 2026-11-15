@@ -35,6 +35,8 @@ const state = {
   authChecking: false,
   authError: "",
   authLoginBusy: "",
+  authAccount: "",
+  authAccountRequired: false,
   authNotices: {},
   workspaceStorage: null,
   workspaceStorageLoading: false,
@@ -152,6 +154,8 @@ function bootToken() {
 }
 function forgetToken() {
   state.token = "";
+  state.authAccount = "";
+  state.authAccountRequired = false;
   writeConnection(localStorage, { base: state.base, token: "" });
 }
 /* ---------------- 配对 ---------------- */
@@ -1142,24 +1146,92 @@ async function verifyAuthentication() {
     const data = await api("/api/auth/status");
     if (!data.services || typeof data.services !== "object") throw new Error("认证状态响应无效，请重试核验。");
     state.meta = { ...state.meta, services: data.services };
+    if (authPresentation(data.services.learnx).state === "ready") {
+      state.authAccount = "";
+      state.authAccountRequired = false;
+    }
     state.authError = "";
     state.authNotices = {};
     await loadWorkspaceStorage();
   } catch (error) { state.authError = "核验失败：" + error.message; }
   finally { state.authChecking = false; updateAuthPanels(); }
 }
+function loginFailure(code) {
+  const messages = {
+    BROWSER_ACCOUNT_REQUIRED: "首次登录网络学堂需要填写学号。",
+    BROWSER_BUSY: "另一个浏览器任务正在运行，请先完成或关闭该窗口后重试。",
+    BROWSER_INSTALL_FAILED: "浏览器安装失败，请检查网络后重试。",
+    BROWSER_RUNTIME_INVALID: "浏览器运行时不可用，请修复安装后重试。",
+    WORKER_START: "无法启动登录进程，请重试。",
+  };
+  const error = new Error(messages[code] || "登录任务未完成（" + code + "），请重试。");
+  error.code = code;
+  return error;
+}
+function checkLoginConnection(connection) {
+  if (state.base !== connection.base || state.token !== connection.token)
+    throw loginFailure("LOGIN_TARGET_CHANGED");
+}
+function loginJobProgress(result, name) {
+  const job = result.job;
+  if (!result.found || !job) throw loginFailure("LOGIN_JOB_NOT_FOUND");
+  if (job.service && job.service !== name) throw loginFailure("LOGIN_JOB_MISMATCH");
+  if (job.status === "complete") return { done: true };
+  if (["failed", "stopped", "interrupted"].includes(job.status))
+    throw loginFailure(/^[A-Z_]{1,64}$/.test(job.error || "") ? job.error : "LOGIN_" + job.status.toUpperCase());
+  if (!["queued", "running"].includes(job.status)) throw loginFailure("LOGIN_JOB_INVALID");
+  if (job.phase === "downloading") return { text: "正在安装登录浏览器，请稍候…" };
+  return { text: job.status === "queued" ? "登录任务已提交，正在启动浏览器…" : "登录任务运行中，请在运行时所在电脑的浏览器完成登录。" };
+}
+async function followLoginJob(id, name, connection) {
+  for (let attempt = 0; attempt < 900; attempt++) {
+    checkLoginConnection(connection);
+    const result = await api("/api/jobs/" + encodeURIComponent(id));
+    checkLoginConnection(connection);
+    const progress = loginJobProgress(result, name);
+    if (progress.done) return;
+    state.authNotices[name] = progress;
+    updateAuthPanels();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw loginFailure("LOGIN_WAIT_TIMEOUT");
+}
 async function openLogin(name) {
   if (state.authLoginBusy) return;
+  const account = name === "learnx" ? state.authAccount.trim() : "";
+  if (name === "learnx" && state.authAccountRequired && !account) {
+    state.authNotices[name] = { error: true, text: "请先填写学号，再打开登录窗口。" };
+    updateAuthPanels();
+    $("#learnx-account")?.focus();
+    return;
+  }
   state.authLoginBusy = name;
-  delete state.authNotices[name];
+  state.authNotices[name] = { text: "正在提交登录任务…" };
   updateAuthPanels();
   try {
-    await api("/api/auth/login", { method: "POST", body: { service: name } });
+    const connection = { base: state.base, token: state.token };
+    const result = await api("/api/auth/login", { method: "POST", body: { service: name, ...(account ? { account } : {}) } });
+    if (result.job?.status === "busy") throw loginFailure("BROWSER_BUSY");
+    if (typeof result.jobId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(result.jobId))
+      throw loginFailure("LOGIN_JOB_MISSING");
+    await followLoginJob(result.jobId, name, connection);
     state.meta = { ...state.meta, services: { ...state.meta?.services, [name]: { ...state.meta?.services?.[name], state: "unverified", verified: false } } };
-    state.authNotices[name] = { text: "登录窗口已打开，完成后请点击“核验登录状态”。" };
-    if (name === "cloud") { state.workspaceStorageError = "云盘登录窗口已打开，请重新核验工作区。"; updateStoragePanels(); }
-  } catch (error) { state.authNotices[name] = { error: true, text: "登录窗口未打开：" + error.message }; }
-  finally { state.authLoginBusy = ""; updateAuthPanels(); }
+    state.authNotices[name] = { text: "登录任务已结束，请点击“核验登录状态”确认结果。" };
+    if (name === "learnx") { state.authAccount = ""; state.authAccountRequired = false; }
+    if (name === "cloud") { state.workspaceStorageError = "云盘登录任务已结束，请重新核验工作区。"; updateStoragePanels(); }
+  } catch (error) {
+    if (name === "learnx" && error.code === "BROWSER_ACCOUNT_REQUIRED") state.authAccountRequired = true;
+    state.authNotices[name] = { error: true, text: "登录未完成：" + error.message };
+  } finally { state.authLoginBusy = ""; updateAuthPanels(); }
+}
+function appendLoginAccount(row, name, info) {
+  if (name !== "learnx") return;
+  if (info.state === "ready" && !state.authAccountRequired) return;
+  const input = el("input", { id: "learnx-account", type: "text", inputMode: "numeric", autocomplete: "username", maxLength: 64, placeholder: "首次登录必填，已有绑定可留空", value: state.authAccount, disabled: !!state.authLoginBusy, required: state.authAccountRequired, "aria-invalid": String(state.authAccountRequired && !state.authAccount.trim()), oninput: event => {
+    state.authAccount = event.target.value;
+    event.target.setAttribute("aria-invalid", String(state.authAccountRequired && !state.authAccount.trim()));
+  } });
+  row.insertBefore(el("label", { class: "field auth-account" }, [el("span", { text: "学号" }), input]), row.lastChild);
 }
 function servicesView() {
   const wrap = el("div", { class: "stack" });
@@ -1176,8 +1248,9 @@ function servicesView() {
       const info = authPresentation(state.meta?.services?.[name], { checking: state.authChecking, stale: !!state.authError });
       const row = el("section", { class: "auth-service", dataset: { service: name } }, [
         el("div", { class: "auth-service-main" }, [el("span", { class: "item-title", text: label }), el("span", { class: "state", dataset: { s: info.state }, text: info.label })]),
-        el("button", { class: "ghost", type: "button", text: state.authLoginBusy === name ? "打开中…" : "登录", disabled: !!state.authLoginBusy || state.authChecking, onclick: () => openLogin(name) }),
+        el("button", { class: "ghost", type: "button", text: state.authLoginBusy === name ? "登录中…" : "登录", disabled: !!state.authLoginBusy || state.authChecking, onclick: () => openLogin(name) }),
       ]);
+      appendLoginAccount(row, name, info);
       const notice = state.authNotices[name];
       if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : "small"), role: notice.error ? "alert" : "status", text: notice.text }));
       const record = el("details", { class: "auth-evidence" }, [el("summary", { text: "核验记录" })]);

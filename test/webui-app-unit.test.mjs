@@ -414,11 +414,12 @@ test("app: tool catalog errors are visible rather than fake empty results", asyn
 
 test("app: service login does not imply verified authentication; failed checks remain recoverable", async t => {
   const evidence = { state: "ready", verified: true, source: "protected-api:fixture", checkedAt, code: "OK" };
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true }, "GET /api/auth/status": { ok: true, services: { learnx: evidence, cloud: { state: "ready" }, hetang: { mode: "mock" } } } } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, jobId: "fixture-login" }, "GET /api/jobs/fixture-login": { ok: true, found: true, job: { service: "cloud", status: "complete" } }, "GET /api/auth/status": { ok: true, services: { learnx: evidence, cloud: { state: "ready" }, hetang: { mode: "mock" } } } } });
   a.nav("services"); await flush();
   let cloud = a.$('[data-service="cloud"]');
   a.click(a.button("登录", cloud)); await flush(); cloud = a.$('[data-service="cloud"]');
-  assert.match(cloud.textContent, /登录窗口已打开.*核验登录状态/);
+  assert.match(cloud.textContent, /登录任务已结束.*核验登录状态/);
+  assert.doesNotMatch(cloud.textContent, /窗口已打开/);
   assert.equal(cloud.querySelector(".state").dataset.s, "unverified");
   a.click(a.button("核验登录状态")); await flush();
   assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "ready");
@@ -430,7 +431,96 @@ test("app: service login does not imply verified authentication; failed checks r
   assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unknown");
   a.routes.set("POST /api/auth/login", { ok: false, error: { message: "fixture window unavailable" } });
   a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /未打开.*fixture window unavailable/);
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /登录未完成.*fixture window unavailable/);
+});
+
+test("app: first learnx login exposes account failure, sends trimmed account and never stores it", async t => {
+  let completed = false;
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "POST /api/auth/login": { ok: true, jobId: "learnx-login" },
+    "GET /api/jobs/learnx-login": () => ({ ok: true, found: true, job: { service: "learnx", status: completed ? "complete" : "failed", error: "BROWSER_ACCOUNT_REQUIRED" } }),
+  } });
+  a.nav("services"); await flush();
+  assert.equal(a.$('label.auth-account > span').textContent, "学号");
+  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /需要填写学号/);
+  assert.equal(a.$("#learnx-account").hasAttribute("required"), true);
+  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
+  assert.equal(a.count("POST /api/auth/login"), 1);
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /请先填写/);
+  a.input("#learnx-account", "  fixture-student  "); completed = true;
+  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
+  assert.deepEqual(a.calls.filter(call => call.method === "POST").at(-1).body, { service: "learnx", account: "fixture-student" });
+  assert.equal(a.$("#learnx-account").value, "");
+  assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unverified");
+  assert.equal([...a.savedValues.values()].some(value => value.includes("fixture-student")), false);
+});
+
+test("app: login polls queued, downloading and running without claiming a window or duplicate starts", async t => {
+  const jobs = [{ status: "queued" }, { status: "running", phase: "downloading" }, { status: "running", phase: "login" }, { status: "complete" }];
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "POST /api/auth/login": { ok: true, jobId: "cloud-login" },
+    "GET /api/jobs/cloud-login": () => ({ ok: true, found: true, job: { service: "cloud", ...jobs.shift() } }),
+  } });
+  a.nav("services"); await flush();
+  a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
+  assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /任务已提交/);
+  a.click(a.button("登录中…", a.$('[data-service="cloud"]'))); await flush();
+  assert.equal(a.count("POST /api/auth/login"), 1);
+  await a.tick(1000); assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /正在安装/);
+  await a.tick(1000); assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /任务运行中/);
+  assert.doesNotMatch(a.$('[data-service="cloud"]').textContent, /窗口已打开|已登录/);
+  await a.tick(1000); assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /任务已结束/);
+  assert.equal(a.button("登录", a.$('[data-service="cloud"]')).disabled, false);
+});
+
+for (const [label, data, expected] of [
+  ["install", { found: true, job: { status: "failed", error: "BROWSER_INSTALL_FAILED" } }, /安装失败/],
+  ["runtime", { found: true, job: { status: "failed", error: "BROWSER_RUNTIME_INVALID" } }, /运行时不可用/],
+  ["worker", { found: true, job: { status: "failed", error: "WORKER_START" } }, /无法启动登录进程/],
+  ["unknown failure", { found: true, job: { status: "failed", error: "not-a-safe-code" } }, /LOGIN_FAILED/],
+  ["stopped", { found: true, job: { status: "stopped" } }, /LOGIN_STOPPED/],
+  ["interrupted", { found: true, job: { status: "interrupted" } }, /LOGIN_INTERRUPTED/],
+  ["missing", { found: false }, /LOGIN_JOB_NOT_FOUND/],
+  ["mismatch", { found: true, job: { status: "complete", service: "hetang" } }, /LOGIN_JOB_MISMATCH/],
+  ["invalid", { found: true, job: { status: "unexpected" } }, /LOGIN_JOB_INVALID/],
+  ["poll failure", { ok: false, error: { message: "fixture status offline" } }, /fixture status offline/],
+]) test(`app: login ${label} remains an explicit recoverable failure`, async t => {
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, jobId: "fixture-login" }, "GET /api/jobs/fixture-login": { ok: true, ...data } } });
+  a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
+  assert.match(a.$('[data-service="cloud"] .auth-notice.error').textContent, expected);
+  assert.equal(a.button("登录", a.$('[data-service="cloud"]')).disabled, false);
+});
+
+for (const [label, reply, expected] of [
+  ["busy", { jobId: "other-login", job: { status: "busy" } }, /另一个浏览器任务/],
+  ["no id", {}, /LOGIN_JOB_MISSING/],
+  ["invalid id", { jobId: "unsafe/path" }, /LOGIN_JOB_MISSING/],
+]) test(`app: login ${label} never starts an unrelated poll`, async t => {
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, ...reply } } });
+  a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
+  assert.match(a.$('[data-service="cloud"] .auth-notice.error').textContent, expected);
+  assert.equal(a.calls.some(call => new URL(call.url).pathname.startsWith("/api/jobs/")), false);
+});
+
+test("app: clearing credentials while login starts never polls with a changed connection", async t => {
+  const pending = deferred();
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "GET /api/service": { ok: true, supported: false }, "POST /api/auth/login": () => pending.promise } });
+  a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
+  a.nav("settings"); await flush(); a.click(a.button("清除本地令牌并退出"));
+  pending.resolve({ ok: true, jobId: "old-login" }); await flush();
+  assert.equal(a.calls.some(call => new URL(call.url).pathname.startsWith("/api/jobs/")), false);
+});
+
+test("app: login polling is bounded and timeout never claims success", async t => {
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, jobId: "slow-login" }, "GET /api/jobs/slow-login": { ok: true, found: true, job: { status: "running" } } } });
+  a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
+  for (let i = 0; i < 900; i++) await a.tick(1000);
+  assert.match(a.$('[data-service="cloud"] .auth-notice.error').textContent, /LOGIN_WAIT_TIMEOUT/);
+  assert.equal(a.count("GET /api/jobs/slow-login"), 900);
+  assert.equal(a.button("登录", a.$('[data-service="cloud"]')).disabled, false);
 });
 
 test("app: workspace status recovery and initialize action never issue writes", async t => {
