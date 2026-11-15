@@ -70,7 +70,7 @@ const clear = (node) => {
   return node;
 };
 const $ = (selector) => document.querySelector(selector);
-const chatWidthUI = createChatWidthUI();
+const chatWidthUI = createChatWidthUI({ onError: toast });
 let toastTimer = 0;
 function toast(message) {
   const node = $("#toast");

@@ -42,10 +42,7 @@
     transform-origin:bottom left;
     animation:menu-unfold var(--motion-base) var(--ease-out) both;
   }
-  .width-picker[open] > .composer-popover-body {
-    transform-origin:top right;
-    animation-name:menu-unfold-down;
-  }
+
   /* 仅空会话的静态内容做一次短入场；活动消息不参与。 */
   .chat[data-empty="true"] .chat-home {
     animation:surface-settle var(--motion-slow) var(--ease-out) both;
@@ -65,10 +62,6 @@
   }
   @keyframes menu-unfold {
     from {opacity:0;transform:translateY(6px) scale(.985);}
-    to {opacity:1;transform:none;}
-  }
-  @keyframes menu-unfold-down {
-    from {opacity:0;transform:translateY(-6px) scale(.985);}
     to {opacity:1;transform:none;}
   }
 }

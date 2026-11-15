@@ -183,14 +183,15 @@ test('unit2: artifact non-JSON failure and thrown transport retain retry link', 
 
 test('unit2: width boundaries, no-op keys and ignored pointer IDs never clobber drafts', async t => {
   const a = await boot(t, { width: 900 }); const handle = a.$('.chat-resize-handle[data-edge="left"]'); a.input('#composer', '保留草稿');
-  a.event(handle, 'keydown', { key: 'End' }); assert.equal(a.saved.get('campus.app.chatWidth'), a.$('#chat-width-range').max);
-  a.event(handle, 'keydown', { key: 'F2' }); assert.equal(a.saved.get('campus.app.chatWidth'), a.$('#chat-width-range').max);
+  const max = handle.getAttribute('aria-valuemax'); assert.ok(!a.$('#chat-width-picker'));
+  a.event(handle, 'keydown', { key: 'End' }); assert.equal(a.saved.get('campus.app.chatWidth'), max);
+  a.event(handle, 'keydown', { key: 'F2' }); assert.equal(a.saved.get('campus.app.chatWidth'), max);
   a.event(handle, 'keydown', { key: 'Enter' }); assert.equal(a.saved.has('campus.app.chatWidth'), false);
   a.event(handle, 'pointerdown', { button: 1, pointerId: 1, clientX: 20 }); assert.equal(a.document.body.classList.contains('chat-resizing'), false);
   a.event(handle, 'pointerdown', { button: 0, pointerId: 2, clientX: 20 }); a.event(a.document, 'pointermove', { pointerId: 3, clientX: 100 }); a.event(a.document, 'pointermove', { pointerId: 2, clientX: 21 }); a.event(handle, 'keydown', { key: 'Home' }); a.event(a.document, 'pointerup', { pointerId: 3 }); assert.equal(a.document.body.classList.contains('chat-resizing'), true);
   a.event(handle, 'lostpointercapture'); assert.equal(a.saved.has('campus.app.chatWidth'), false);
-  globalThis.innerWidth = 899; a.event(a.w, 'resize'); assert.equal(a.$('#chat-width-picker').hidden, true); a.event(handle, 'pointerdown', { button: 0, pointerId: 4, clientX: 20 }); assert.equal(a.document.body.classList.contains('chat-resizing'), false);
-  globalThis.innerWidth = 900; Object.defineProperty(a.$('#view'), 'clientWidth', { configurable: true, value: 400 }); a.event(a.w, 'resize'); assert.equal(a.$('#chat-width-range').disabled, true); assert.equal(handle.hidden, true); assert.equal(a.$('#composer').value, '保留草稿');
+  globalThis.innerWidth = 899; a.event(a.w, 'resize'); assert.equal(handle.hidden, true); a.event(handle, 'pointerdown', { button: 0, pointerId: 4, clientX: 20 }); assert.equal(a.document.body.classList.contains('chat-resizing'), false);
+  globalThis.innerWidth = 900; Object.defineProperty(a.$('#view'), 'clientWidth', { configurable: true, value: 400 }); a.event(a.w, 'resize'); assert.equal(handle.hidden, true); assert.equal(a.$('#composer').value, '保留草稿');
 });
 
 test('unit2: tool missing schema, omitted optional values, catalog cache and response fallback', async t => {

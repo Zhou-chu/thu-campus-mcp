@@ -552,28 +552,31 @@ test("app: settings invites validate links, copy/fallback, diagnostics and local
   assert.equal(JSON.parse(a.localStorage.getItem(connectionKey)).token, "");
 });
 
-test("app: width keyboard/range/drag persist without losing draft, narrow view preserves preference", async t => {
+test("app: width drag/keyboard is the only entry, persists without losing draft, narrow view keeps preference", async t => {
   const a = await app(t);
   a.input("#composer", "宽度不能清掉的草稿");
   const right = a.$('.chat-resize-handle[data-edge="right"]');
-  const min = Number(a.$("#chat-width-range").min), max = Number(a.$("#chat-width-range").max);
+  const min = Number(right.getAttribute("aria-valuemin")), max = Number(right.getAttribute("aria-valuemax"));
   assert.ok(max > min && min === 640);
+  assert.ok(!a.$("#chat-width-picker"));
+  assert.equal(a.all("#view summary").filter(node => node.textContent.trim() === "宽度").length, 0);
+  a.localStorage.removeItem("campus.app.chatWidth");
   a.event(right, "keydown", { key: "Home" }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), String(min));
+  assert.equal(right.getAttribute("aria-valuenow"), String(min));
   a.event(right, "keydown", { key: "ArrowRight", shiftKey: true }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), String(min + 128));
-  a.input("#chat-width-range", "900"); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), String(min + 128));
-  a.event("#chat-width-range", "change"); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "900");
   a.event(right, "pointerdown", { button: 0, pointerId: 1, clientX: 100 });
-  a.event(a.document, "pointermove", { pointerId: 1, clientX: 120 });
-  a.event(a.document, "pointerup", { pointerId: 1 }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "1040");
+  a.event(a.document, "pointermove", { pointerId: 1, clientX: 50 });
+  a.event(a.document, "pointerup", { pointerId: 1 }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "900");
+  assert.equal(right.getAttribute("aria-valuenow"), "900");
   assert.equal(a.$("#composer").value, "宽度不能清掉的草稿");
   globalThis.innerWidth = 390; a.event(a.window, "resize");
   assert.equal(a.document.body.dataset.chatCustomWidth, "false");
-  assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "1040");
+  assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "900");
   globalThis.innerWidth = 1280; a.event(a.window, "resize");
   assert.equal(a.document.body.dataset.chatCustomWidth, "true");
   a.event(right, "pointerdown", { button: 0, pointerId: 2, clientX: 100 });
   a.event(a.document, "pointermove", { pointerId: 2, clientX: 150 });
-  a.event(a.document, "pointercancel", { pointerId: 2 }); assert.equal(a.$("#chat-width-range").value, "1040");
+  a.event(a.document, "pointercancel", { pointerId: 2 }); assert.equal(right.getAttribute("aria-valuenow"), "900");
   a.event(right, "dblclick"); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), null);
   assert.equal(a.document.body.dataset.chatCustomWidth, "false");
 });
@@ -712,19 +715,22 @@ test("app: refresh state exposes connection failure and successful retry restore
   await a.tick(1600); assert.equal(a.$(".topbar-meta .action-feedback"), undefined);
 });
 
-test("app: width storage failure and Escape/blur pointer recovery keep controls usable", async t => {
+test("app: width storage failure surfaces once and Escape/blur pointer recovery keep controls usable", async t => {
   const a = await app(t);
   const handle = a.$('.chat-resize-handle[data-edge="left"]');
   a.localStorage.setItem = () => { throw new Error("fixture quota"); };
-  a.input("#chat-width-range", "900"); a.event("#chat-width-range", "change");
-  assert.match(a.$("#chat-width-error").textContent, /保存会话宽度失败/);
   a.event(handle, "pointerdown", { button: 0, pointerId: 3, clientX: 200 });
-  a.event(a.document, "pointermove", { pointerId: 3, clientX: 180 });
-  a.event(a.document, "keydown", { key: "Escape" });
-  assert.equal(a.$("#chat-width-range").value, "900");
-  assert.equal(a.document.body.classList.contains("chat-resizing"), false);
+  a.event(a.document, "pointermove", { pointerId: 3, clientX: 150 });
+  a.event(a.document, "pointerup", { pointerId: 3 });
+  assert.match(a.$("#toast").textContent, /保存会话宽度失败/);
+  assert.equal(handle.getAttribute("aria-valuenow"), "1100");
   a.event(handle, "pointerdown", { button: 0, pointerId: 4, clientX: 200 });
-  a.event(a.document, "pointermove", { pointerId: 4, clientX: 190 });
+  a.event(a.document, "pointermove", { pointerId: 4, clientX: 180 });
+  a.event(a.document, "keydown", { key: "Escape" });
+  assert.equal(handle.getAttribute("aria-valuenow"), "1100");
+  assert.equal(a.document.body.classList.contains("chat-resizing"), false);
+  a.event(handle, "pointerdown", { button: 0, pointerId: 5, clientX: 200 });
+  a.event(a.document, "pointermove", { pointerId: 5, clientX: 190 });
   a.event(a.window, "blur"); assert.equal(a.document.body.classList.contains("chat-resizing"), false);
-  a.click("#chat-width-reset"); assert.equal(a.$("#chat-width-reset").disabled, true);
+  a.event(handle, "dblclick"); assert.equal(a.document.body.dataset.chatCustomWidth, "false");
 });

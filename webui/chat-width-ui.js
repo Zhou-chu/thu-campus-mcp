@@ -1,20 +1,15 @@
 import { createChatWidth, dragChatWidth, keyChatWidth } from "./chat-width.js";
 
 const $ = selector => document.querySelector(selector);
-function node(tag, className, text) {
-  const result = document.createElement(tag);
-  result.className = className;
-  if (text) result.textContent = text;
-  return result;
-}
 function localWidthStorage() {
   try { return window.localStorage; } catch { return undefined; }
 }
 
 /** Width-only updates: never re-render a conversation or interrupt its stream. */
-export function createChatWidthUI() {
+export function createChatWidthUI({ onError } = {}) {
   const preference = createChatWidth(localWidthStorage());
   let drag = null;
+  let lastError = null;
 
   function available() {
     const view = $("#view");
@@ -28,17 +23,8 @@ export function createChatWidthUI() {
     const value = preference.snapshot(available());
     document.body.dataset.chatCustomWidth = String(desktop && chat && !value.automatic);
     document.documentElement.style.setProperty("--chat-width", value.value + "px");
-    const picker = $("#chat-width-picker");
-    if (picker) {
-      picker.hidden = !desktop || !chat;
-      const range = $("#chat-width-range");
-      range.min = value.min; range.max = value.max; range.value = value.value;
-      range.disabled = value.min === value.max;
-      $("#chat-width-value").textContent = (value.automatic ? "自动 · " : "") + value.value + "px";
-      $("#chat-width-reset").disabled = value.automatic;
-      $("#chat-width-error").textContent = value.error;
-      $("#chat-width-error").hidden = !value.error;
-    }
+    if (value.error && value.error !== lastError) onError?.(value.error);
+    lastError = value.error;
     for (const handle of document.querySelectorAll(".chat-resize-handle")) {
       handle.hidden = !desktop || value.min === value.max;
       handle.setAttribute("aria-valuemin", value.min);
@@ -88,7 +74,8 @@ export function createChatWidthUI() {
   }
   function handles() {
     return ["left", "right"].map(edge => {
-      const handle = node("div", "chat-resize-handle");
+      const handle = document.createElement("div");
+      handle.className = "chat-resize-handle";
       handle.dataset.edge = edge;
       handle.tabIndex = 0;
       handle.setAttribute("role", "separator");
@@ -103,30 +90,7 @@ export function createChatWidthUI() {
       return handle;
     });
   }
-  function picker() {
-    const details = node("details", "composer-popover width-picker");
-    details.id = "chat-width-picker";
-    const summary = node("summary", "ghost", "宽度");
-    summary.setAttribute("aria-label", "会话宽度");
-    const body = node("div", "composer-popover-body width-picker-body");
-    const label = node("label", "width-label", "会话宽度");
-    label.htmlFor = "chat-width-range";
-    const output = node("output", "small"); output.id = "chat-width-value";
-    const range = node("input", "width-range");
-    range.id = "chat-width-range"; range.type = "range"; range.step = "1";
-    range.addEventListener("input", () => { preference.set(Number(range.value), false); refresh(); });
-    range.addEventListener("change", () => { preference.persist(); refresh(); });
-    const reset = node("button", "ghost", "恢复默认");
-    reset.id = "chat-width-reset"; reset.type = "button";
-    reset.addEventListener("click", () => { preference.set(null); refresh(); });
-    const help = node("p", "small muted", "也可拖动会话两侧，或用方向键调整");
-    const error = node("p", "small error"); error.id = "chat-width-error"; error.setAttribute("role", "status");
-    body.append(label, output, range, reset, help, error);
-    details.append(summary, body);
-    return details;
-  }
   function init() {
-    $(".topbar-meta").insertBefore(picker(), $("#refresh"));
     window.addEventListener("resize", refresh);
     window.addEventListener("blur", () => finishDrag(true));
     document.addEventListener("pointermove", moveDrag);

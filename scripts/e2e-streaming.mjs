@@ -307,11 +307,10 @@ async function main() {
     check('End可扩展到侧栏之外全部可用版心', Math.abs(await frameWidth() - maximumWidth) < 1);
     await grip('right').dblclick(); await waitWidth(originalFrame);
     check('双击恢复默认并移除本地宽度覆盖', await page.evaluate(() => localStorage.getItem('campus.app.chatWidth') === null && document.body.dataset.chatCustomWidth === 'false'));
-    await page.locator('#chat-width-picker > summary').click();
-    await page.locator('#chat-width-range').focus(); await page.keyboard.press('End'); await page.keyboard.press('ArrowLeft');
-    const savedWidth = maximumWidth - 1; await waitWidth(savedWidth);
-    check('顶栏滑块支持真实键盘操作并保存数值', await page.evaluate(n => localStorage.getItem('campus.app.chatWidth') === String(n), savedWidth));
-    await page.keyboard.press('Escape');
+    check('顶栏不再重复提供宽度控件', (await page.locator('#chat-width-picker').count()) === 0 && (await page.locator('.topbar-meta summary').count()) === 0);
+    await grip('right').focus(); await page.keyboard.press('End'); await page.keyboard.press('ArrowLeft');
+    const savedWidth = maximumWidth - 32; await waitWidth(savedWidth);
+    check('拖柄键盘操作直接保存宽度', await page.evaluate(n => localStorage.getItem('campus.app.chatWidth') === String(n), savedWidth));
     await moveGrip('right', -40, false); await page.keyboard.press('Escape'); await page.mouse.up(); await waitWidth(savedWidth);
     check('Escape取消未完成拖动且不覆盖已保存宽度', await page.evaluate(n => localStorage.getItem('campus.app.chatWidth') === String(n) && !document.body.classList.contains('chat-resizing'), savedWidth));
     widthLive.finish(); await waitReasoning(3); contexts.get('宽度调整期间的待发')[0].finish(); await idle();
@@ -320,15 +319,15 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 800 });
     check('桌面窗口缩小会约束宽度但不覆盖偏好', await frameWidth() < savedWidth && await page.evaluate(n => document.documentElement.scrollWidth === innerWidth && localStorage.getItem('campus.app.chatWidth') === String(n), savedWidth));
     await page.setViewportSize({ width: 390, height: 640 });
-    check('窄屏自动适配并隐藏拖柄和桌面宽度控件', await page.locator('.chat-resize-handle').first().isHidden() && await page.locator('#chat-width-picker').isHidden() && await page.evaluate(n => document.documentElement.scrollWidth === innerWidth && localStorage.getItem('campus.app.chatWidth') === String(n), savedWidth));
+    check('窄屏自动适配并隐藏拖柄', await page.locator('.chat-resize-handle').first().isHidden() && await page.evaluate(n => document.documentElement.scrollWidth === innerWidth && localStorage.getItem('campus.app.chatWidth') === String(n), savedWidth));
     if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, 'width-mobile-390.png') });
     await page.setViewportSize({ width: 1920, height: 1080 }); await waitWidth(savedWidth);
     check('回到宽屏恢复原偏好而非手机宽度', Math.abs(await frameWidth() - savedWidth) < 1);
     await page.click('button[data-view="settings"]');
-    check('宽度设置只作用于会话，不污染设置页', await page.locator('#chat-width-picker').isHidden() && await page.evaluate(() => document.body.dataset.chatCustomWidth === 'false'));
+    check('宽度设置只作用于会话，不污染设置页', await page.evaluate(() => document.body.dataset.chatCustomWidth === 'false'));
     await page.click('button[data-view="chat"]'); await waitWidth(savedWidth);
-    await page.locator('#chat-width-picker > summary').click(); await page.locator('#chat-width-reset').click(); await waitWidth(originalFrame);
-    check('顶栏恢复默认可清除覆盖', await page.evaluate(() => localStorage.getItem('campus.app.chatWidth') === null));
+    await grip('right').dblclick(); await waitWidth(originalFrame);
+    check('双击拖柄恢复默认可清除覆盖', await page.evaluate(() => localStorage.getItem('campus.app.chatWidth') === null));
     // 博客式微交互只用于静态界面，必须兼容减少动态与键盘恢复。
     await page.keyboard.press('Escape');
     await page.emulateMedia({ reducedMotion: 'no-preference' });

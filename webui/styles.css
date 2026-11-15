@@ -1258,11 +1258,6 @@ input,select {background:var(--control-fill);}
 /* 会话宽度：自动保留原阅读布局；手动选择后内容与输入同步展开。 */
 .chat {position:relative;}
 .chat-resize-handle {display:none;}
-.width-picker > summary {padding-inline:var(--space-3);min-height:44px;}
-.width-picker .width-picker-body {top:calc(100% + 12px);bottom:auto;left:auto;right:0;min-width:260px;}
-.width-label {font-size:var(--text-ui);}
-.width-picker-body p {margin:0;}
-.width-range {padding:0;accent-color:var(--ink);}
 @media(min-width:900px) {
  body[data-chat-custom-width="true"] #view > .chat,body[data-chat-custom-width="true"] .topbar-inner {max-width:var(--chat-width,var(--content-width));}
  body[data-chat-custom-width="true"] .chat {--reading-width:var(--chat-width,var(--content-width));}
@@ -1275,4 +1270,3 @@ input,select {background:var(--control-fill);}
  .chat-resize-handle:focus-visible {outline:2px solid var(--ink);outline-offset:-4px;}
  .chat-resizing,.chat-resizing * {cursor:col-resize!important;user-select:none!important;}
 }
-@media(max-width:899px) {.width-picker {display:none;}}
