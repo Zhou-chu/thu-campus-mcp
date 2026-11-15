@@ -6,6 +6,7 @@ import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
 import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } from "./chat-home.js";
 import { createTurnQueue } from "./turn-queue.js";
 import { createChatWidthUI } from "./chat-width-ui.js";
+import { createRightSidebar } from "./right-sidebar.js";
 import { approvalPresentation, decideApproval } from "./approval.js";
 import { buildApiUrl, sanitizeBaseUrl, sanitizePairCode, sanitizeToken, trimTrailingSlashes } from "./guards.js";
 import { CONNECTION_KEY, LEGACY_BASE_KEY, LEGACY_TOKEN_KEY, resolveStartupConnection, writeConnection } from "./connection.js";
@@ -71,6 +72,11 @@ const clear = (node) => {
 };
 const $ = (selector) => document.querySelector(selector);
 const chatWidthUI = createChatWidthUI({ onError: toast });
+const rightSidebar = createRightSidebar({
+  el, api, toast, renderRich, uploadFile,
+  onResize: () => chatWidthUI.refresh(),
+  canLoad: () => !!state.token,
+});
 let toastTimer = 0;
 function toast(message) {
   const node = $("#toast");
@@ -83,6 +89,21 @@ function toast(message) {
 }
 function renderRich(text) {
   return renderMarkdown(text, { origin: location.origin, onArtifact: downloadArtifact });
+}
+async function uploadFile(file) {
+  const response = await fetch(endpoint("/api/sidebar/attachments?name=" + encodeURIComponent(file.name)), {
+    method: "POST",
+    headers: { authorization: "Bearer " + state.token, "content-type": "application/octet-stream" },
+    body: file,
+    credentials: "omit",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data?.error?.message || `附件上传失败（HTTP ${response.status}）`);
+    error.code = data?.error?.code || `HTTP_${response.status}`;
+    throw error;
+  }
+  return data.file;
 }
 async function downloadArtifact(link, anchor) {
   if (anchor.getAttribute("aria-busy") === "true") return;
@@ -104,8 +125,8 @@ function endpoint(path) {
   // 只有校验通过的路径与服务器地址才会进入 fetch，避免把存储/查询串里的任意值拼成请求地址。
   return buildApiUrl(state.base, path);
 }
-async function api(path, { method = "GET", body, signal } = {}) {
-  const headers = {};
+async function api(path, { method = "GET", body, signal, headers: extra = {} } = {}) {
+  const headers = { ...extra };
   if (body !== undefined) headers["content-type"] = "application/json";
   if (state.token) headers.authorization = "Bearer " + state.token;
   const response = await fetch(endpoint(path), {
@@ -1437,11 +1458,38 @@ function toolItem(tool) {
     }
     submit.disabled = true;
     output.textContent = "调用中…";
+    const callTool = token => api(`/api/tools/${tool.name}`, {
+      method: "POST",
+      body: args,
+      headers: token ? { "x-campus-approval": token } : {},
+    });
     try {
-      const data = await api(`/api/tools/${tool.name}`, { method: "POST", body: args });
+      const data = await callTool();
       output.textContent = pretty(data.data ?? data);
     } catch (e) {
-      output.textContent = `失败：${e.code || ""} ${e.message}`;
+      if (e.code !== "APPROVAL_REQUIRED") {
+        output.textContent = `失败：${e.code || ""} ${e.message}`;
+        return;
+      }
+      // 写入类工具必须由人再确认一次；确认凭证只对这次参数有效。
+      output.textContent = "该工具会写入校园数据，需要确认这一次的具体调用。";
+      const approve = el("button", {
+        class: "primary",
+        type: "button",
+        text: "确认执行",
+        onclick: async () => {
+          approve.disabled = true;
+          try {
+            const issued = await api("/api/tool-approvals", { method: "POST", body: { name: tool.name, args } });
+            const data = await callTool(issued.token);
+            output.textContent = pretty(data.data ?? data);
+            approve.remove();
+          } catch (error) {
+            output.textContent = `失败：${error.code || ""} ${error.message}`;
+          } finally { approve.disabled = false; }
+        },
+      });
+      form.append(approve);
     } finally {
       submit.disabled = false;
     }
@@ -1733,6 +1781,7 @@ async function start() {
   }
   const ok = await refreshMeta();
   if (!ok) return;
+  rightSidebar.init();
   $("#app").hidden = false;
   $("#pair").hidden = true;
   await loadSessions();

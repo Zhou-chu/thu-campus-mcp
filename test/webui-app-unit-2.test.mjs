@@ -47,7 +47,7 @@ async function boot(t, { paired = true, href = origin + '/', routes: overrides =
   const saved = new Map(paired ? [[key, JSON.stringify({ version: 1, base: origin, token })]] : []);
   const localStorage = { getItem(k) { if (storageError) throw new Error('fixture storage blocked'); return saved.get(k) ?? null; }, setItem(k, v) { if (storageError) throw new Error('fixture storage blocked'); saved.set(k, String(v)); }, removeItem(k) { if (storageError) throw new Error('fixture storage blocked'); saved.delete(k); } };
   w.localStorage = localStorage;
-  const routes = new Map(Object.entries({ 'GET /api/meta': meta(), 'GET /api/sessions': { ok: true, sessions: [] }, 'GET /api/workspace/storage': { ok: true, storage: { mode: 'cloud', state: 'unavailable' } }, ...overrides }));
+  const routes = new Map(Object.entries({ 'GET /api/meta': meta(), 'GET /api/sessions': { ok: true, sessions: [] }, 'GET /api/workspace/storage': { ok: true, storage: { mode: 'cloud', state: 'unavailable' } }, 'GET /api/sidebar/assignments': { ok: true, state: 'ready', fetchedAt: '2026-11-15T00:00:00.000Z', active: [], expired: [], ungraded: [], courseErrors: [] }, ...overrides }));
   const calls = [], denied = [], streams = [], timers = new Map(), frames = new Map(); let serial = 0, now = 0;
   const a = { w, document: w.document, saved, routes, calls,
     $: s => w.document.querySelector(s), all: s => [...w.document.querySelectorAll(s)],

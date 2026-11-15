@@ -275,6 +275,9 @@ async function main() {
       await page.mouse.move(box.x + box.width / 2 + delta, box.y + box.height / 2, { steps: 8 });
       if (release) await page.mouse.up();
     };
+    // 右侧工作区停靠时会占去画布宽度；先验证可收起，再单独衡量会话拖宽。
+    await page.click('#sidebar-toggle');
+    check('可收起右侧工作区独占画布', await page.locator('#right-sidebar').isHidden());
     const beforeReading = await page.locator('.bubble.assistant').first().evaluate(box => box.getBoundingClientRect().width);
     await enqueue('宽度调整期间的待发'); await page.fill('#composer', '拖动后保留的草稿');
     await page.locator('#messages').evaluate(box => { box.scrollTop = 0; box.dispatchEvent(new Event('scroll')); });

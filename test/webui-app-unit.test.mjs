@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -550,6 +550,81 @@ test("app: settings invites validate links, copy/fallback, diagnostics and local
   a.click(a.button("生成配对码")); await flush(); assert.match(a.$(".settings-page").textContent, /fixture invite failed/);
   a.click(a.button("清除本地令牌并退出")); assert.equal(a.$("#app").hidden, true);
   assert.equal(JSON.parse(a.localStorage.getItem(connectionKey)).token, "");
+});
+
+test("app: right sidebar lists deadlines, archives, opens detail and submits in two steps", async t => {
+  const item = (id, extra) => ({ id, courseId: "c1", course: "电力电子", title: "作业" + id, submitted: false, deadline: checkedAt, deadlineMs: Date.parse(checkedAt), submitTime: null, submitMs: null, grade: null, ungraded: false, ...extra });
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [item("h1")], expired: [item("h2")], ungraded: [], courseErrors: [] },
+      "GET /api/sidebar/assignments/c1/h1": { ok: true, id: "h1", courseId: "c1", title: "作业h1", body: "请提交实验报告", attachments: [{ name: "模板.pdf", role: "attachment" }], submitted: false, deadline: checkedAt },
+      "POST /api/sidebar/submissions/prepare": { ok: true, preparation: { id: "11111111-1111-4111-8111-111111111111", course: "电力电子", content: "正文" }, confirmToken: "a".repeat(48) },
+      "POST /api/sidebar/submissions/confirm": { ok: true, receipt: { status: "submitted", message: "已回读核验" } },
+    },
+  });
+  await until(() => a.all(".ddl").length === 2, "sidebar list");
+  assert.equal(await a.$("#right-sidebar").hidden, false);
+  assert.match(a.$(".ddl-divider").textContent, /已过期/);
+  assert.match(a.$(".ddl").textContent, /作业h1/);
+
+  a.click(a.button("归档", a.all(".ddl")[0]));
+  assert.equal(a.all(".ddl").length, 1);
+  assert.match(a.$(".rsidebar-foot").textContent, /1 条归档/);
+  assert.match(a.$(".rsidebar-foot").textContent, /显示 1 条归档/);
+  a.click(a.button("显示 1 条归档", a.$(".rsidebar-foot")));
+  assert.equal(a.all(".ddl").length, 2);
+
+  a.click(a.button("详情", a.all(".ddl").find(node => node.textContent.includes("作业h1"))));
+  await until(() => !!a.$(".rsidebar-detail"), "sidebar detail");
+  assert.match(a.$(".rsidebar-detail").textContent, /请提交实验报告/);
+  assert.match(a.$(".rsidebar-detail").textContent, /模板.pdf/);
+
+  a.click(a.button("提交", a.$(".rsidebar-detail")));
+  a.input(".ddl-content", "受控正文");
+  a.click(a.button("准备提交"));
+  await until(() => !!a.$(".ddl-prepared"), "prepared preview");
+  assert.equal(a.calls.filter(call => call.url.includes("/submissions/prepare")).length, 1);
+  assert.equal(a.calls.filter(call => call.url.includes("/submissions/confirm")).length, 0, "准备阶段不得上传");
+  assert.match(a.$(".ddl-prepared").textContent, /确认后才会真正上传/);
+
+  a.click(a.button("确认提交"));
+  await until(() => !!a.$(".ddl-receipt"), "submission receipt");
+  assert.match(a.$(".ddl-receipt").textContent, /submitted/);
+  const confirmCall = a.calls.find(call => call.url.includes("/submissions/confirm"));
+  assert.equal(confirmCall.body.confirmToken, "a".repeat(48));
+  assert.equal(a.localStorage.getItem("campus.app.sidebar.archived").includes("h1"), true);
+
+  a.click("#sidebar-toggle");
+  assert.equal(globalThis.document.body.dataset.sidebar, "closed");
+});
+
+test("app: right sidebar external tabs stay honest and failed preparation is recoverable", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [{ id: "h1", courseId: "c1", course: "电力电子", title: "作业h1", submitted: false, deadline: checkedAt, deadlineMs: Date.parse(checkedAt), submitTime: null, submitMs: null, grade: null, ungraded: false }], expired: [], ungraded: [], courseErrors: [] },
+      "GET /api/sidebar/assignments/c1/h1": { ok: true, id: "h1", courseId: "c1", title: "作业h1", body: "要求", attachments: [], submitted: false, deadline: checkedAt },
+      "POST /api/sidebar/submissions/prepare": { ok: false, error: { code: "DEADLINE_PASSED", message: "已过允许的提交截止时间。" } },
+    },
+  });
+  await until(() => a.all(".ddl").length === 1, "sidebar list");
+  a.click(a.button("详情", a.all(".ddl")[0]));
+  await until(() => !!a.$(".rsidebar-detail"), "sidebar detail");
+  a.click(a.button("提交", a.$(".rsidebar-detail")));
+  a.input(".ddl-content", "正文");
+  a.click(a.button("准备提交"));
+  await until(() => !!a.$(".rsidebar-detail .error"), "prepare failure");
+  assert.match(a.$(".rsidebar-detail .error").textContent, /已过允许的提交截止时间/);
+  assert.equal(a.calls.filter(call => call.url.includes("/submissions/confirm")).length, 0, "准备失败不得进入确认提交");
+
+  a.click(a.button("添加 清华体育"));
+  assert.match(a.$(".rsidebar-body").textContent, /预约尚未接入/);
+  assert.match(a.$(".rsidebar-body a").getAttribute("href"), /sports\.tsinghua\.edu\.cn/);
+  const closeSports = a.all(".rsidebar-tab-close").find(node => node.parentElement.textContent.includes("清华体育"));
+  a.click(closeSports);
+  assert.equal(a.all(".rsidebar-tab").length, 1);
+
+  a.click(a.button("添加 掌上艺教"));
+  assert.match(a.$(".rsidebar-body").textContent, /微信小程序/);
 });
 
 test("app: width drag/keyboard is the only entry, persists without losing draft, narrow view keeps preference", async t => {

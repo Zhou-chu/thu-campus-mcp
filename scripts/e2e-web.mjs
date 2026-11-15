@@ -405,8 +405,12 @@ async function main() {
         const composer = document.querySelector('.composer').getBoundingClientRect();
         const nav = document.querySelector('.tabbar').getBoundingClientRect();
         const rail = innerWidth >= 900 ? nav.right : 0;
+        // 右侧工作区停靠时，居中要相对剩余内容区衡量，而不是整个视口。
+        const sidebar = document.querySelector('#right-sidebar');
+        const docked = innerWidth >= 1100 && sidebar && getComputedStyle(sidebar).display !== 'none' && sidebar.getBoundingClientRect().width > 0;
+        const rightEdge = docked ? sidebar.getBoundingClientRect().left : innerWidth;
         return {
-          centered: Math.abs((chat.left - rail) - (innerWidth - chat.right)) < 3,
+          centered: Math.abs((chat.left - rail) - (rightEdge - chat.right)) < 3,
           aligned: Math.abs(messages.left - dock.left) < 2 && Math.abs(messages.right - dock.right) < 2,
           visible: composer.bottom <= innerHeight && composer.top > 0 && messages.height > 150,
           noOverflow: document.documentElement.scrollWidth <= innerWidth,
@@ -500,6 +504,102 @@ async function main() {
     await page.unroute("**/api/auth/login");
     await page.unroute("**/api/jobs/login-e2e-fixture");
     await page.setViewportSize({ width: 1280, height: 900 });
+
+    // 右侧工作区：真实拖动、标签页、归档、排序、详情与两步提交（作业数据全部为受控样本）
+    step("右侧工作区拖宽与作业操作");
+    const now = Date.now();
+    const workItems = [
+      { id: "h1", courseId: "c1", course: "电力电子", title: "第一次作业", submitted: false, deadline: new Date(now + 36e5 * 30).toISOString(), deadlineMs: now + 36e5 * 30, submitTime: null, submitMs: null, grade: null, ungraded: false },
+      { id: "h2", courseId: "c2", course: "电机学", title: "第二次作业", submitted: false, deadline: new Date(now - 36e5 * 8).toISOString(), deadlineMs: now - 36e5 * 8, submitTime: null, submitMs: null, grade: null, ungraded: false },
+      { id: "h3", courseId: "c3", course: "自动控制", title: "第三次作业", submitted: true, deadline: new Date(now + 36e5 * 60).toISOString(), deadlineMs: now + 36e5 * 60, submitTime: new Date(now - 36e5 * 20).toISOString(), submitMs: now - 36e5 * 20, grade: null, ungraded: true },
+    ];
+    const submitCalls = [];
+    await page.route("**/api/sidebar/**", async route => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      const body = request.method() === "POST" ? (request.postDataJSON() || {}) : {};
+      if (pathname === "/api/sidebar/assignments")
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, state: "ready", fetchedAt: new Date().toISOString(), active: [workItems[0]], expired: [workItems[1]], ungraded: [workItems[2]], courseErrors: [] }) });
+      if (pathname.startsWith("/api/sidebar/assignments/"))
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, id: "h1", courseId: "c1", title: "第一次作业", body: "请提交一份实验报告。", attachments: [{ name: "模板.pdf", role: "attachment" }], submitted: false, deadline: workItems[0].deadline, grade: null }) });
+      if (pathname === "/api/sidebar/submissions/prepare") {
+        submitCalls.push(["prepare", body]);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, preparation: { id: "33333333-3333-4333-8333-333333333333", course: "电力电子", content: body.content || "", createdAt: new Date().toISOString() }, confirmToken: "a".repeat(48) }) });
+      }
+      if (pathname === "/api/sidebar/submissions/confirm") {
+        submitCalls.push(["confirm", body]);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, receipt: { status: "submitted", message: "服务器提交状态与正文已回读核验。" } }) });
+      }
+      return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, error: { code: "UNEXPECTED", message: pathname } }) });
+    });
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.locator("#right-sidebar").getByRole("button", { name: "刷新", exact: true }).click();
+    await page.waitForSelector("#right-sidebar .ddl");
+    record("右侧工作区默认停靠", await page.locator("#right-sidebar").isVisible() && await page.locator(".ddl").count() === 2);
+    record("过期作业沉底并单独标记", (await page.locator(".ddl-divider").innerText()).includes("已过期") && (await page.locator(".ddl").last().innerText()).includes("第二次作业"));
+    const widthBefore = await page.locator("#right-sidebar").evaluate(node => node.getBoundingClientRect().width);
+    const gripBox = await page.locator(".rsidebar-grip").boundingBox();
+    await page.mouse.move(gripBox.x + 6, gripBox.y + 240);
+    await page.mouse.down();
+    await page.mouse.move(gripBox.x + 6 - 60, gripBox.y + 240, { steps: 8 });
+    await page.mouse.up();
+    const widthAfter = await page.locator("#right-sidebar").evaluate(node => node.getBoundingClientRect().width);
+    record("拖动左缘可加宽并记住宽度", Math.abs(widthAfter - (widthBefore + 60)) < 3 && await page.evaluate(w => Math.abs(JSON.parse(localStorage.getItem("campus.app.sidebar.layout")).width - w) < 2, widthAfter));
+
+    const orderBefore = await page.locator(".ddl").evaluateAll(nodes => nodes.map(node => node.dataset.id));
+    const secondGrip = await page.locator(".ddl .ddl-grip").nth(1).boundingBox();
+    const firstBox = await page.locator(".ddl").nth(0).boundingBox();
+    await page.mouse.move(secondGrip.x + secondGrip.width / 2, secondGrip.y + secondGrip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(secondGrip.x + secondGrip.width / 2, firstBox.y + 4, { steps: 8 });
+    await page.mouse.up();
+    const orderAfter = await page.locator(".ddl").evaluateAll(nodes => nodes.map(node => node.dataset.id));
+    record("按住拖柄可调整顺序并保存", orderAfter[0] === orderBefore[1] && await page.evaluate(id => JSON.parse(localStorage.getItem("campus.app.sidebar.order")).pending[0] === id, orderBefore[1]));
+
+    await page.locator(".ddl").first().getByRole("button", { name: "归档" }).click();
+    record("归档后从列表移除并计入归档", await page.locator(".ddl").count() === 1 && (await page.locator(".rsidebar-foot").innerText()).includes("1 条归档"));
+    await page.locator(".rsidebar-foot").getByRole("button", { name: /显示 1 条归档/ }).click();
+    record("可恢复显示已归档条目", await page.locator(".ddl").count() === 2);
+    await page.locator(".rsidebar-foot").getByRole("button", { name: /隐藏 1 条归档/ }).click();
+
+    await page.locator(".ddl").first().getByRole("button", { name: "详情" }).click();
+    await page.waitForSelector(".rsidebar-detail .ddl-body");
+    record("详情页显示要求与附件", (await page.locator(".rsidebar-detail").innerText()).includes("请提交一份实验报告") && (await page.locator(".rsidebar-detail").innerText()).includes("模板.pdf"));
+    await page.locator(".rsidebar-detail").getByRole("button", { name: "提交", exact: true }).click();
+    await page.locator(".ddl-content").fill("受控样本正文");
+    await page.getByRole("button", { name: "准备提交" }).click();
+    await page.waitForSelector(".ddl-prepared");
+    record("准备阶段不上传且展示将提交的内容", submitCalls.length === 1 && submitCalls[0][0] === "prepare" && submitCalls[0][1].content === "受控样本正文" && (await page.locator(".ddl-prepared").innerText()).includes("确认后才会真正上传"));
+    await page.getByRole("button", { name: "确认提交" }).click();
+    await page.waitForSelector(".ddl-receipt");
+    record("确认后才真正提交并显示核验回执", submitCalls.length === 2 && submitCalls[1][0] === "confirm" && (await page.locator(".ddl-receipt").innerText()).includes("submitted"));
+
+    await page.locator(".rsidebar-add > summary").click();
+    await page.getByRole("button", { name: "添加 待批改" }).click();
+    await page.waitForSelector("#rsidebar-tab-ungraded");
+    await page.locator("#right-sidebar").getByText("第三次作业").waitFor();
+    record("可添加第二个标签页并显示已交未批改", await page.locator("#right-sidebar").getByText("第三次作业").isVisible());
+    await page.locator(".rsidebar-add > summary").click();
+    await page.getByRole("button", { name: "添加 清华体育" }).click();
+    record("体育标签如实说明未接入预约并提供官网入口", (await page.locator(".rsidebar-body").innerText()).includes("预约尚未接入") && await page.locator('.rsidebar-body a[href*="sports.tsinghua"]').isVisible());
+    await page.locator(".rsidebar-add > summary").click();
+    await page.getByRole("button", { name: "添加 掌上艺教" }).click();
+    record("艺教标签如实说明需要微信授权", (await page.locator(".rsidebar-body").innerText()).includes("微信小程序"));
+
+    await page.setViewportSize({ width: 900, height: 900 });
+    await page.waitForFunction(() => document.body.dataset.sidebarMode === "overlay" && document.body.dataset.sidebar === "closed");
+    record("窄屏收起为抽屉且不再占位", await page.locator("#right-sidebar").isHidden());
+    await page.locator("#sidebar-toggle").click();
+    record("窄屏可用按钮打开抽屉", await page.locator("#right-sidebar").isVisible() && await page.evaluate(() => document.body.dataset.sidebar === "open"));
+    await page.keyboard.press("Escape");
+    record("Escape 关闭窄屏抽屉", await page.locator("#right-sidebar").isHidden());
+    await page.unroute("**/api/sidebar/**");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => {
+      localStorage.removeItem("campus.app.sidebar.layout");
+      localStorage.removeItem("campus.app.sidebar.archived");
+      localStorage.removeItem("campus.app.sidebar.order");
+    });
 
     // 10. 换址链接不能把已存令牌带去新目标（真实浏览器 + 路由拦截，无真实网络）
     step("换址链接不得携带旧令牌");

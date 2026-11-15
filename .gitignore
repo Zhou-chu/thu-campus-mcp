@@ -27,3 +27,4 @@ mobile/android/local.properties
 mobile/android/keystore.properties
 *.jks
 *.keystore
+.cache/

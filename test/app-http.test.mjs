@@ -225,9 +225,22 @@ test("工具列表区分只读与写入，工具调用失败返回错误码", as
   assert.equal(tools.tools[0].readOnly, true);
   assert.equal(tools.tools[1].readOnly, false);
   assert.equal(tools.tools[1].destructive, true);
-  const failure = await fetch(url + "/api/tools/learn_submit_assignment", {
+  const blocked = await fetch(url + "/api/tools/learn_submit_assignment", {
     method: "POST",
     headers,
+    body: JSON.stringify({ preparationId: "" }),
+  });
+  assert.equal(blocked.status, 428);
+  assert.equal((await blocked.json()).error.code, "APPROVAL_REQUIRED");
+  const issued = await (await fetch(url + "/api/tool-approvals", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ name: "learn_submit_assignment", args: { preparationId: "" } }),
+  })).json();
+  assert.ok(issued.token);
+  const failure = await fetch(url + "/api/tools/learn_submit_assignment", {
+    method: "POST",
+    headers: { ...headers, "x-campus-approval": issued.token },
     body: JSON.stringify({ preparationId: "" }),
   });
   assert.equal(failure.status, 400);
