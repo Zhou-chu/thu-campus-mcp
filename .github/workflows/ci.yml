@@ -12,7 +12,7 @@ jobs:
   verify:
     name: Windows / Node ${{ matrix.node }}
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -28,8 +28,28 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node bin/thu-campus.mjs browser install
-      - run: npm run check
+      - if: matrix.node == 22
+        run: npm run check
+      - if: matrix.node == 24
+        run: npm run typecheck && npm run build && npm run licenses:check && npm run audit:source && npm run audit:smells
+      - name: 完整测试与LCOV（含真实浏览器）
+        if: matrix.node == 24
+        run: npm run test:coverage
+      - name: 上传真实覆盖率报告
+        if: always() && matrix.node == 24
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sonar-lcov
+          path: |
+            coverage/lcov.info
+            coverage/coverage-summary.json
+            coverage/coverage-manifest.json
+            coverage/unit/
+            coverage/html/
+          retention-days: 14
+          if-no-files-found: error
       - name: WebUI 端到端（真实 Chromium）
+        if: matrix.node == 22
         run: npm run e2e:web
       - run: npm run verify:clients
       - run: npm run smoke
@@ -51,6 +71,50 @@ jobs:
           path: .local/release/thu-campus-mcp-windows-x64.zip*
           retention-days: 14
           if-no-files-found: error
+      - name: 生产代码覆盖率下限（90%）
+        if: matrix.node == 24
+        run: npm run coverage:check
+
+  sonar:
+    name: SonarQube Cloud / main
+    needs: verify
+    if: ${{ always() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: 下载同一提交的LCOV
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sonar-lcov
+          path: coverage
+      - name: 验证覆盖率报告完整性
+        run: >-
+          node --input-type=module -e 'import {readFileSync} from "node:fs";
+          for (const dir of ["coverage","coverage/unit"]) {
+          const m=JSON.parse(readFileSync(dir+"/coverage-manifest.json","utf8"));
+          if (!m.collectionComplete || m.errors?.length) throw new Error("Incomplete coverage: "+dir);
+          if (!readFileSync(dir+"/lcov.info","utf8").includes("SF:")) throw new Error("Empty LCOV: "+dir);
+          }'
+      - name: 真实Sonar分析与质量门
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
 
   android:
     name: Android debug APK
@@ -60,13 +124,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-java@b6e674f4b715d2a6dd0342bdb276069bd9a457c5 # v4.5.0
+      - uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b # v4.5.0
         with:
           distribution: temurin
           java-version: "17"
       - name: 构建调试 APK
         working-directory: mobile/android
-        run: .\gradlew.bat assembleDebug --no-daemon --console=plain
+        run: .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
       - name: 校验 APK 结构
         working-directory: mobile/android
         shell: pwsh
@@ -97,7 +161,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-java@b6e674f4b715d2a6dd0342bdb276069bd9a457c5 # v4.5.0
+      - uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b # v4.5.0
         with:
           distribution: temurin
           java-version: "17"
@@ -105,7 +169,7 @@ jobs:
       - run: node bin/thu-campus.mjs browser install
       - name: 构建 Android 调试包
         working-directory: mobile/android
-        run: .\gradlew.bat assembleDebug --no-daemon --console=plain
+        run: .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
       - name: 发布门禁（CI 无 DevEco，因此只要求四项目标中的三项）
         run: node scripts/verify-clients.mjs --strict --require webui,desktop,android,runtime
       - run: npm run check

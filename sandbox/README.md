@@ -11,7 +11,20 @@ docker build -f sandbox/Dockerfile -t thu-campus-sandbox-python:1.4.0 .
 docker pull node:24-bookworm-slim
 ```
 
-Python镜像基于官方CPython，通过固定版本uv创建`/opt/venv`；直接依赖在requirements.txt固定版本，预装Noto中文字体。无Conda。Node使用独立官方镜像。本地tag只在prepare阶段解析，执行按批准的不可变`sha256:imageId`，即使tag随后变化也不切换镜像。
+Python镜像基于官方CPython，通过固定版本uv创建`/opt/venv`，预装Noto中文字体。无Conda。Node使用独立官方镜像。本地tag只在prepare阶段解析，执行按批准的不可变`sha256:imageId`，即使tag随后变化也不切换镜像。
+
+依赖分两层，安装阶段不需要任何构建工具链：
+
+- `sandbox/requirements.in`：人工维护的 14 个直接依赖；改版本只改这里。
+- `sandbox/requirements.txt`：由 `requirements.in` 编译出的**完整传递依赖锁**（61 个包、每条带 sha256），Dockerfile 只安装它。
+
+```powershell
+uv pip compile sandbox/requirements.in --generate-hashes --only-binary :all: `
+  --python-version 3.12 --python-platform x86_64-unknown-linux-gnu `
+  -o sandbox/requirements.txt
+```
+
+安装命令带 `--require-hashes --only-binary :all:`：哈希不符、或某个包只剩源码分发时构建直接失败，因此**任何 `setup.py` 都不会在镜像构建期执行**。锁文件只含 linux/amd64 + CPython 3.12 的 wheel（对应 `python:3.12.12-slim-bookworm`），换基础镜像或目标平台必须重新编译，不能沿用。`/workspace` 由镜像以 `0755`、属主 `65532:65532` 创建，不再对所有人可写；执行期该路径被 `SandboxRunner` 的 bind mount 覆盖，权限来自宿主会话目录。
 
 ## 接口与批准
 

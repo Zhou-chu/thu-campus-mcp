@@ -1,3 +1,6 @@
+import { sanitizeBaseUrl } from "./guards.js";
+import { splitInline, parseHeading, parseListItem } from "./markdown-inline.js";
+
 const SESSION = "[a-f\\d]{8}-[a-f\\d]{4}-[a-f\\d]{4}-[a-f\\d]{4}-[a-f\\d]{12}";
 const FILE_PATH = new RegExp(`^/api/workspaces/${SESSION}/files$`, "i");
 const JOB_PATH = new RegExp(`^/api/workspaces/(${SESSION})/jobs/([\\w-]{1,128})$`, "i");
@@ -22,7 +25,9 @@ export async function fetchArtifact(path, { origin, base = "", token, fetchImpl 
   const link = safeLink(path, origin);
   if (link?.kind !== "artifact") throw new Error("下载地址不合法。");
   if (!token) throw new Error("请重新配对后下载。");
-  const response = await fetchImpl(base.replace(/\/+$/, "") + link.href, {
+  const safeBase = sanitizeBaseUrl(base);
+  if (base && !safeBase) throw new Error("服务器地址不合法，已拒绝下载。");
+  const response = await fetchImpl(safeBase + link.href, {
     headers: { authorization: "Bearer " + token }, credentials: "omit", redirect: "error",
   });
   if (!response.ok) {
@@ -128,23 +133,19 @@ export function createJobPoller({ isActive, getJobs, readJob, onUpdate, onError,
 export function renderMarkdown(text, { document = globalThis.document, origin = globalThis.location?.origin, onArtifact = () => {} } = {}) {
   const node = (tag, text) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; return item; };
   const inline = (parent, text) => {
-    const tokens = String(text).split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\((?:[^()\s]|\([^()\s]*\))+\))/g);
-    for (const token of tokens) {
-      if (!token) continue;
-      if (token.startsWith("`") && token.endsWith("`")) parent.append(node("code", token.slice(1, -1)));
-      else if (token.startsWith("**") && token.endsWith("**")) parent.append(node("strong", token.slice(2, -2)));
-      else {
-        const match = /^\[([^\]]+)\]\((.*)\)$/.exec(token);
-        const link = match && safeLink(match[2], origin);
-        if (!link) { parent.append(document.createTextNode(token)); continue; }
-        const anchor = node("a", match[1]);
-        anchor.href = link.href;
-        if (link.kind === "artifact") {
-          anchor.className = "artifact-link";
-          anchor.addEventListener("click", event => { event.preventDefault(); onArtifact(link, anchor); });
-        } else { anchor.target = "_blank"; anchor.rel = "noopener noreferrer"; }
-        parent.append(anchor);
-      }
+    for (const token of splitInline(text)) {
+      if (token.kind === "code") { parent.append(node("code", token.text)); continue; }
+      if (token.kind === "strong") { parent.append(node("strong", token.text)); continue; }
+      if (token.kind !== "link") { parent.append(document.createTextNode(token.text)); continue; }
+      const link = safeLink(token.href, origin);
+      if (!link) { parent.append(document.createTextNode(`[${token.label}](${token.href})`)); continue; }
+      const anchor = node("a", token.label);
+      anchor.href = link.href;
+      if (link.kind === "artifact") {
+        anchor.className = "artifact-link";
+        anchor.addEventListener("click", event => { event.preventDefault(); onArtifact(link, anchor); });
+      } else { anchor.target = "_blank"; anchor.rel = "noopener noreferrer"; }
+      parent.append(anchor);
     }
   };
   const fragment = document.createDocumentFragment();
@@ -171,16 +172,16 @@ export function renderMarkdown(text, { document = globalThis.document, origin = 
       }
       table.append(head, body); wrap.append(table); fragment.append(wrap); continue;
     }
-    const heading = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
-    if (heading) { const h = node("h" + heading[1].length); inline(h, heading[2]); fragment.append(h); i++; continue; }
-    const listItem = /^\s*(?:(\d+)[.)]|([-+*]))\s+(.+)$/.exec(line);
+    const heading = parseHeading(line);
+    if (heading) { const h = node("h" + heading.level); inline(h, heading.text); fragment.append(h); i++; continue; }
+    const listItem = parseListItem(line);
     if (listItem) {
-      const ordered = !!listItem[1], list = node(ordered ? "ol" : "ul");
-      if (ordered) list.start = Number(listItem[1]);
+      const list = node(listItem.ordered ? "ol" : "ul");
+      if (listItem.ordered) list.start = listItem.start;
       while (i < lines.length) {
-        const item = /^\s*(?:(\d+)[.)]|([-+*]))\s+(.+)$/.exec(lines[i]);
-        if (!item || !!item[1] !== ordered) break;
-        const li = node("li"); inline(li, item[3]); list.append(li); i++;
+        const item = parseListItem(lines[i]);
+        if (!item || item.ordered !== listItem.ordered) break;
+        const li = node("li"); inline(li, item.text); list.append(li); i++;
       }
       fragment.append(list); continue;
     }

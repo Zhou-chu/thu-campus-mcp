@@ -3,6 +3,8 @@ import { mkdir, copyFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { root } from "../lib/services.mjs";
+import { systemExecutable } from "@thu-campus/browser";
+import { resolveExecutable, trustedEnv } from "./trusted-path.mjs";
 const moved = path.join(root, ".local", "relocated 校园 package", randomUUID());
 await mkdir(moved, { recursive: true });
 // Older Windows tar builds corrupt Unicode argv. ZIP extraction also needs a seekable file.
@@ -11,7 +13,8 @@ await copyFile(
   path.join(root, ".local/release/thu-campus-mcp-windows-x64.zip"),
   archive,
 );
-execFileSync("tar.exe", ["-xf", "bundle.zip"], { cwd: moved });
+const tarBin = process.platform === "win32" ? await systemExecutable(path.join("System32", "tar.exe")) : resolveExecutable("tar");
+execFileSync(tarBin, ["-xf", "bundle.zip"], { cwd: moved, env: trustedEnv() });
 await unlink(archive);
 const windows = process.env.SystemRoot || "C:\\Windows";
 const env = {

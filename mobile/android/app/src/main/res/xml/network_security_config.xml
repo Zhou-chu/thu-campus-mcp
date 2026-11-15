@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  允许明文 HTTP：本应用要连「同一局域网内的个人电脑」上运行的运行时，
-  该地址由用户在配对时手填（http://192.168.x.x:8971），没有可用证书。
-  风险与该收窄：只开放 cleartext，不降低 TLS 策略；公网部署必须换成 https。
+  明文 HTTP 的受控开口，仅用于「同一局域网 / Tailscale 内的个人电脑」：
+
+  - 运行时默认监听 127.0.0.1，用户显式授权后才在局域网暴露 http://192.168.x.x:8971，
+    没有可信证书可用，所以 cleartext 必须保留，否则整条链路不可用。
+  - 这里只放开 cleartext，不降低任何 TLS 策略：trust-anchors 仍只信任系统证书。
+  - 真正的收窄在上层：RuntimeHub.checkBase() 拒绝把明文 http 发往公网主机，
+    只允许环回 / RFC1918 / 链路本地 / Tailscale 100.64/10 与 *.ts.net。
+    公网部署必须改成 https，那时该策略会自动放行任意主机。
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">

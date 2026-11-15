@@ -7,9 +7,9 @@ import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } fro
 import { createTurnQueue } from "./turn-queue.js";
 import { createChatWidthUI } from "./chat-width-ui.js";
 import { approvalPresentation, decideApproval } from "./approval.js";
+import { buildApiUrl, sanitizeBaseUrl, sanitizePairCode, sanitizeToken, trimTrailingSlashes } from "./guards.js";
+import { CONNECTION_KEY, LEGACY_BASE_KEY, LEGACY_TOKEN_KEY, resolveStartupConnection, writeConnection } from "./connection.js";
 
-const STORAGE_TOKEN = "campus.app.token";
-const STORAGE_BASE = "campus.app.base";
 const state = {
   token: "",
   base: "",
@@ -40,6 +40,7 @@ const state = {
   workspaceStorageLoading: false,
   workspaceStorageError: "",
   deeplinkCode: "",
+  pairNotice: "",
 };
 const turnQueue = createTurnQueue({
   canRun: () => !state.busy && !state.stopping && !state.modelSaving && !state.modelsLoading && !!state.selectedModel,
@@ -98,7 +99,8 @@ async function downloadArtifact(link, anchor) {
   } finally { anchor.removeAttribute("aria-busy"); }
 }
 function endpoint(path) {
-  return (state.base || "").replace(/\/+$/, "") + path;
+  // 只有校验通过的路径与服务器地址才会进入 fetch，避免把存储/查询串里的任意值拼成请求地址。
+  return buildApiUrl(state.base, path);
 }
 async function api(path, { method = "GET", body, signal } = {}) {
   const headers = {};
@@ -109,6 +111,7 @@ async function api(path, { method = "GET", body, signal } = {}) {
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
+    credentials: "omit",
   });
   let data = {};
   try {
@@ -126,41 +129,30 @@ async function api(path, { method = "GET", body, signal } = {}) {
 function bootToken() {
   const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
   const query = new URLSearchParams(location.search);
-  const fromUrl = hash.get("token") || query.get("token");
-  const code = hash.get("code") || query.get("code");
-  const base = hash.get("base") || query.get("base");
-  if (fromUrl) {
-    state.token = fromUrl;
-    try {
-      localStorage.setItem(STORAGE_TOKEN, fromUrl);
-    } catch {}
-  } else {
-    try {
-      state.token = localStorage.getItem(STORAGE_TOKEN) || "";
-    } catch {
-      state.token = "";
-    }
-  }
+  const urlTokenRaw = hash.get("token") || query.get("token") || "";
+  const urlBaseRaw = hash.get("base") || query.get("base") || "";
+  const code = sanitizePairCode(hash.get("code") || query.get("code") || "");
+  let storedRaw = "", legacyTokenRaw = "", legacyBaseRaw = "";
   try {
-    state.base = localStorage.getItem(STORAGE_BASE) || "";
-  } catch {
-    state.base = "";
-  }
-  if (base) {
-    state.base = base;
-    try {
-      localStorage.setItem(STORAGE_BASE, base);
-    } catch {}
-  }
+    storedRaw = localStorage.getItem(CONNECTION_KEY) || "";
+    legacyTokenRaw = localStorage.getItem(LEGACY_TOKEN_KEY) || "";
+    legacyBaseRaw = localStorage.getItem(LEGACY_BASE_KEY) || "";
+  } catch {}
+  // 令牌与完整 base（含路径）绑定：链接换 base 但没有新令牌时必须重新配对。
+  const connection = resolveStartupConnection({
+    storedRaw, legacyTokenRaw, legacyBaseRaw, href: location.href, urlBaseRaw, urlTokenRaw,
+  });
+  state.base = connection.base;
+  state.token = connection.token;
+  writeConnection(localStorage, { base: connection.base, token: connection.token });
+  if (connection.cleared) state.pairNotice = "服务器地址已更换，旧令牌不会沿用，请重新配对。";
   if (code) state.deeplinkCode = code;
-  if (fromUrl || code || base || location.search || location.hash)
+  if (urlTokenRaw || code || urlBaseRaw || location.search || location.hash)
     history.replaceState(null, "", location.pathname);
 }
 function forgetToken() {
   state.token = "";
-  try {
-    localStorage.removeItem(STORAGE_TOKEN);
-  } catch {}
+  writeConnection(localStorage, { base: state.base, token: "" });
 }
 /* ---------------- 配对 ---------------- */
 function showPair(message) {
@@ -184,9 +176,14 @@ function showPair(message) {
 async function submitPair() {
   const button = $("#pair-submit");
   const errorNode = $("#pair-error");
-  const base = $("#pair-base").value.trim().replace(/\/+$/, "") || location.origin;
-  const code = $("#pair-code").value.trim();
-  if (!/^\d{6}$/.test(code)) {
+  const base = sanitizeBaseUrl($("#pair-base").value) || sanitizeBaseUrl(location.origin);
+  if (!base) {
+    errorNode.hidden = false;
+    errorNode.textContent = "服务器地址必须是 http(s) 地址。";
+    return;
+  }
+  const code = sanitizePairCode($("#pair-code").value);
+  if (!code) {
     errorNode.hidden = false;
     errorNode.textContent = "配对码是 6 位数字。";
     return;
@@ -197,6 +194,7 @@ async function submitPair() {
     const response = await fetch(base + "/api/pair/redeem", {
       method: "POST",
       headers: { "content-type": "application/json" },
+      credentials: "omit",
       body: JSON.stringify({
         code,
         deviceName: navigator.platform || "浏览器",
@@ -215,12 +213,12 @@ async function submitPair() {
         code: data?.error?.code,
       });
     }
-    state.token = data.token;
+    const issuedToken = sanitizeToken(String(data.token ?? ""));
+    if (!issuedToken) throw new Error("服务器返回的设备令牌不合法，未保存。");
+    state.token = issuedToken;
     state.base = base;
-    try {
-      localStorage.setItem(STORAGE_TOKEN, data.token);
-      localStorage.setItem(STORAGE_BASE, base);
-    } catch {}
+    // base 与新令牌一起写入同一条连接记录，避免两者不一致。
+    writeConnection(localStorage, { base, token: issuedToken });
     $("#pair").hidden = true;
     $("#app").hidden = false;
     await refreshMeta();
@@ -929,6 +927,7 @@ async function sendTurn(text) {
       method: "POST", headers,
       body: JSON.stringify({ text, sessionId: state.sessionId || undefined, model: turnModel || undefined }),
       signal: state.controller.signal,
+      credentials: "omit",
     });
     if (!response.ok || !response.body) {
       const data = await response.json().catch(() => ({}));
@@ -1488,9 +1487,12 @@ function settingsView() {
       validity.textContent = `${data.ttlSeconds}秒内有效 · 仅可使用一次`; validity.hidden = false;
       clear(linkBox);
       const urls = (data.lanUrls || []).length ? data.lanUrls : [location.origin];
+      const inviteCode = sanitizePairCode(String(data.code ?? ""));
       for (const url of urls) {
-        const web = `${url.replace(/\/+$/, "")}/#code=${data.code}`;
-        const app = `thucampus://pair?base=${encodeURIComponent(url)}&code=${data.code}`;
+        const safeUrl = sanitizeBaseUrl(url);
+        if (!inviteCode || !safeUrl) continue;
+        const web = `${trimTrailingSlashes(safeUrl)}/#code=${inviteCode}`;
+        const app = `thucampus://pair?base=${encodeURIComponent(safeUrl)}&code=${inviteCode}`;
         linkBox.append(pairLinkRow("浏览器打开", web), pairLinkRow("App深链", app));
       }
       return data;
@@ -1651,7 +1653,8 @@ async function start() {
   }, { pending: "", success: "状态已更新" }));
   if (!state.token) {
     const autoPair = !!state.deeplinkCode;
-    showPair();
+    showPair(state.pairNotice || "");
+    state.pairNotice = "";
     if (autoPair) setTimeout(() => void submitPair(), 120);
     return;
   }

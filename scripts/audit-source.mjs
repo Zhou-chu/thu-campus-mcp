@@ -3,18 +3,17 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {root} from '../lib/services.mjs';
-const git = (...args) => execFileSync('git',args,{cwd:root,maxBuffer:32*1024*1024});
+import {isPrivateOrGeneratedPath, scanText, PRIVATE_GENERATED_PATH_RULE} from './audit-patterns.mjs';
+import {resolveExecutable,trustedEnv} from './trusted-path.mjs';
+// PATH 固定到受信任目录，避免工作区/临时目录里的同名 git 被优先执行。
+const gitEnv = trustedEnv();
+const gitBin = resolveExecutable('git');
+const git = (...args) => execFileSync(gitBin,args,{cwd:root,maxBuffer:32*1024*1024,env:gitEnv});
 const names = git('ls-files','--cached','--others','--exclude-standard','-z').toString('utf8').split('\0').filter(Boolean);
-const rules = [
-  ['private-key',/-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
-  ['github-token',/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],
-  ['model-key',/\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{32,}/],
-  ['session-cookie',/\b(?:JSESSIONID|CASTGC|TGC)=[A-Za-z0-9._-]{24,}/],
-];
 const findings = [];
-function scan(text,location) { for (const [rule,regex] of rules) if (regex.test(text)) findings.push({location,rule}); }
+function scan(text,location) { for (const rule of scanText(text)) findings.push({location,rule}); }
 for (const name of names) {
-  if (/(?:^|\/)(?:node_modules|dist|downloads|\.runtime|\.local|\.superpowers)(?:\/|$)|(?:^|\/)\.env(?:$|\.)|\.dpapi$/i.test(name)) findings.push({location:name,rule:'private-or-generated-path'});
+  if (isPrivateOrGeneratedPath(name)) findings.push({location:name,rule:PRIVATE_GENERATED_PATH_RULE});
   scan(await readFile(path.join(root,name),'utf8'),name);
 }
 let blobs = 0;

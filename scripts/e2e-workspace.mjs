@@ -267,7 +267,7 @@ async function main() {
     for (const width of [390, 1280, 1536, 1920, 2560]) {
       await page.setViewportSize({ width, height: width === 390 ? 740 : 1000 });
       const fonts = await page.evaluate(() => {
-        const size = selector => parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
+        const size = selector => Number.parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
         return { body: size(".bubble.assistant"), tool: size(".tool-name"), state: size(".tool-state"), button: size("#chat-send"), overflow: document.documentElement.scrollWidth > innerWidth, reachable: document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight };
       });
       const expected = width < 900 ? [16, 16, 14, 15] : width < 1600 ? [18, 16, 15, 16] : [20, 17, 16, 17];

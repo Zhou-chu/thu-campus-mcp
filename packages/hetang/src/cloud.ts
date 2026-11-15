@@ -22,6 +22,18 @@ import {
   type DownloadManifest,
 } from "./resources.js";
 import { stableId } from "./jobs.js";
+/**
+ * 去掉末尾的斜杠。
+ *
+ * 原实现是 /\/+$/：`\/+` 在每一处起始位置吃满斜杠再回溯找 `$`，
+ * 长斜杠后缀下是超线性的（Sonar typescript:S8786）。
+ * 这里从尾部逐字符判断，O(n)，结果一致。
+ */
+export function trimTrailingSlashes(input: string): string {
+  let end = input.length;
+  while (end > 0 && input[end - 1] === "/") end--;
+  return input.slice(0, end);
+}
 export class CloudBridge {
   private mcp?: Client;
   private lease: any;
@@ -252,9 +264,8 @@ export async function archiveManifest(
       const errors: any[] = [];
       try {
         await bridge.open(options.cloudRepoId);
-        const cloudBase = String(options.cloudRoot || "/荷塘雨课堂").replace(
-          /\/+$/,
-          "",
+        const cloudBase = trimTrailingSlashes(
+          String(options.cloudRoot || "/荷塘雨课堂"),
         );
         const root =
           cloudBase +

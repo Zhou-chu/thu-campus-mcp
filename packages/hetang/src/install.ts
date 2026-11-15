@@ -83,6 +83,18 @@ export function mergeJson(
   }
   return JSON.stringify(data, null, 2) + "\n";
 }
+/**
+ * 去掉末尾空白。
+ *
+ * 原实现是 /\s*$/：`\s*` 在每一处起始位置吃满空白再回溯去找 `$`，
+ * 长空白后缀下是超线性的（Sonar typescript:S8786）。
+ * 这里从尾部逐字符判断，O(n)；逐字符的 \s 判定与 `\s*` 等价。
+ */
+function trimTrailingWhitespace(input: string): string {
+  let end = input.length;
+  while (end > 0 && /\s/.test(input[end - 1])) end--;
+  return input.slice(0, end);
+}
 export function mergeToml(
   text: string,
   entry: Entry,
@@ -116,7 +128,7 @@ export function mergeToml(
   let output = kept.join("");
   if (!uninstall) {
     output =
-      output.replace(/\s*$/, "") +
+      trimTrailingWhitespace(output) +
       "\n\n" +
       stringify({ mcp_servers: { hetang: desired } });
   }

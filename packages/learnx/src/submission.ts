@@ -15,7 +15,7 @@ const canonical = (content: string | undefined) => toMarkdown(content || '').rep
 function stateOf(hw: Homework) { return digest(JSON.stringify([hw.submitted, hw.submitTime, hw.submittedContent, hw.submittedAttachment])); }
 function deadlineMillis(date: string | number): number {
   // thu-learn-lib returns Unix milliseconds; mock/older records may contain dates.
-  if (typeof date === 'number') return Number.isFinite(date) ? date : NaN;
+  if (typeof date === 'number') return Number.isFinite(date) ? date : Number.NaN;
   const value = date.trim();
   if (/^\d+$/.test(value)) return Number(value);
   return Date.parse(/(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : value.replace(' ', 'T') + '+08:00');

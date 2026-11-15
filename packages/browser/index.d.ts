@@ -17,6 +17,14 @@ export class BrowserError extends Error {
   constructor(code: string, message: string);
 }
 export const bundleRoot: string;
+/**
+ * 解析到 %SystemRoot% 下的固定可执行文件，不经过 PATH 查找。
+ * 非 Windows、路径越界或文件不存在都会抛出 BrowserError。
+ */
+export function systemExecutable(
+  relative: string,
+  options?: { root?: string; platform?: string },
+): Promise<string>;
 export function authGuard(
   store: {
     generation(): Promise<string>;

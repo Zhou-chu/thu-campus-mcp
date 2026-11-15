@@ -12,6 +12,14 @@ import {
   questionSnapshotFingerprint,
 } from "./prepared-contract.js";
 export { preparedVault } from "./prepared.js";
+/**
+ * 默认依赖用冻结的模块常量，而不是参数里的对象字面量。
+ * 对象字面量默认值每次调用都是同一个共享可变对象，调用方一改就污染后续调用
+ * （Sonar typescript:S7737）；这里显式冻结，语义仍是"默认由真实 startJob 落盘"。
+ */
+const defaultDeps: { start: typeof startJob } = Object.freeze({
+  start: startJob,
+});
 export interface ScheduleInput {
   lessonId: string;
   questionId: string;
@@ -24,7 +32,7 @@ export async function scheduleAnswer(
   client: RainClient,
   cfg: Config,
   input: ScheduleInput,
-  deps = { start: startJob },
+  deps: { start: typeof startJob } = defaultDeps,
 ) {
   const id = input.requestId || randomUUID();
   preparedVault(cfg, id); // Validate before using an ID in any local path.

@@ -11,6 +11,8 @@ import path from "node:path";
 import { mkdtemp, readFile, rm, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { chromium } from "playwright-core";
+import { trimTrailingSlashes } from "../webui/guards.js";
+import { CONNECTION_KEY, LEGACY_BASE_KEY, LEGACY_TOKEN_KEY } from "../webui/connection.js";
 import { createAppServer } from "../lib/app/server.mjs";
 import { PairingCodes } from "../lib/app/pairing.mjs";
 import { DeviceStore } from "../lib/app/devices.mjs";
@@ -111,7 +113,7 @@ function record(name, ok, detail = "") {
 async function main() {
   let app = null;
   let stateDir = "";
-  let base = urlArg ? urlArg.replace(/\/+$/, "") : "";
+  let base = urlArg ? trimTrailingSlashes(urlArg) : "";
   if (!base) {
   stateDir = await mkdtemp(path.join(tmpdir(), "campus-e2e-"));
   const config = {
@@ -225,7 +227,7 @@ async function main() {
 
     const homeGeometry = await page.evaluate(() => {
       const box = s => document.querySelector(s).getBoundingClientRect();
-      return { title: box('.home-title').top, input: box('.composer').top, quick: box('.home-shortcuts').top, font: parseFloat(getComputedStyle(document.querySelector('.home-title')).fontSize) };
+      return { title: box('.home-title').top, input: box('.composer').top, quick: box('.home-shortcuts').top, font: Number.parseFloat(getComputedStyle(document.querySelector('.home-title')).fontSize) };
     });
     record("首页按标题输入与快捷操作分三段", homeGeometry.title < homeGeometry.input && homeGeometry.input < homeGeometry.quick && homeGeometry.font >= 32);
     record("模型云盘发送整合进输入面板", await page.locator('.composer-footer #chat-model').count() === 1 && await page.locator('.composer-footer .cloud-picker').count() === 1 && await page.locator('.composer-footer #chat-send').count() === 1);
@@ -412,7 +414,7 @@ async function main() {
       });
       record(width + '宽布局居中且输入区可见', Object.values(geometry).every(Boolean), JSON.stringify(geometry));
       const typography = await page.evaluate(() => {
-        const size = selector => parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
+        const size = selector => Number.parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);
         return { message: size(".bubble.assistant"), tool: size(".tool-name"), status: size(".tool-state"), button: size("#chat-send"), select: size("#chat-model"), table: size(".rich-table") };
       });
       const large = width >= 1600, desktop = width >= 900;
@@ -432,7 +434,7 @@ async function main() {
     if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, "readability-short.png") });
     record("窄屏矮窗口仍可输入和阅读", shortGeometry.composerBottom <= shortGeometry.viewportHeight && shortGeometry.messagesHeight > 150, JSON.stringify(shortGeometry));
     await page.click("#theme-dark");
-    record("深色带内容字号不缩水", await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".bubble.assistant")).fontSize) >= 16));
+    record("深色带内容字号不缩水", await page.evaluate(() => Number.parseFloat(getComputedStyle(document.querySelector(".bubble.assistant")).fontSize) >= 16));
     await page.click("#theme-light");
     await page.setViewportSize({ width: 1280, height: 900 });
 
@@ -463,6 +465,30 @@ async function main() {
       (await page.locator("#messages").getAttribute("aria-live")) === "polite",
     );
     record("视图容器不整块播报", (await page.locator("#view").getAttribute("aria-live")) === null);
+
+    // 10. 换址链接不能把已存令牌带去新目标（真实浏览器 + 路由拦截，无真实网络）
+    step("换址链接不得携带旧令牌");
+    const probeToken = "tc1_leak_probe_" + "x".repeat(24);
+    await page.evaluate(([connectionKey, legacyTokenKey, legacyBaseKey, token]) => {
+      localStorage.removeItem(connectionKey);
+      localStorage.setItem(legacyTokenKey, token);
+      localStorage.setItem(legacyBaseKey, location.origin);
+    }, [CONNECTION_KEY, LEGACY_TOKEN_KEY, LEGACY_BASE_KEY, probeToken]);
+    const leaked = [];
+    const evilPattern = "http://evil.invalid/**";
+    await page.route(evilPattern, async (route) => {
+      leaked.push(route.request().headers().authorization || "");
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    });
+    await page.goto(`${base}/?base=${encodeURIComponent("http://evil.invalid")}`, { waitUntil: "load" });
+    await page.waitForTimeout(300);
+    record(
+      "evil.invalid 未收到旧 Authorization",
+      leaked.every((value) => !value),
+      leaked.length ? `收到 ${leaked.length} 个请求` : "未收到请求",
+    );
+    record("换址后回到重新配对", await page.locator("#pair").isVisible());
+    await page.unroute(evilPattern);
 
     record("没有 4xx/5xx 资源请求", badResponses.length === 0, badResponses.slice(0, 4).join(" | "));
     record("控制台无报错", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));

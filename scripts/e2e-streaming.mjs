@@ -126,7 +126,7 @@ async function main() {
     await page.locator(".reasoning-block > summary").click();
     check("历史恢复完整思考而非丢弃字段", (await page.locator(".reasoning-content").innerText()).includes("追加思考"));
     await page.setViewportSize({ width: 390, height: 640 });
-    check("窄屏思考可读且不挤走输入", await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".reasoning-content")).fontSize) >= 16 && document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth));
+    check("窄屏思考可读且不挤走输入", await page.evaluate(() => Number.parseFloat(getComputedStyle(document.querySelector(".reasoning-content")).fontSize) >= 16 && document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth));
     if (process.env.CAMPUS_E2E_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CAMPUS_E2E_SCREENSHOT_DIR, "streaming-sample-390.png") });
 
     await start("停止思考验收");
@@ -283,7 +283,7 @@ async function main() {
     const resized = await page.evaluate(() => {
       const chat = document.querySelector('#view > .chat').getBoundingClientRect();
       const view = document.querySelector('#view'); const style = getComputedStyle(view); const bounds = view.getBoundingClientRect();
-      return { frame: chat.width, content: document.querySelector('#messages').clientWidth, body: document.querySelector('.bubble.assistant').getBoundingClientRect().width, tool: document.querySelector('.tool-card').getBoundingClientRect().width, input: document.querySelector('.composer').getBoundingClientRect().width, header: document.querySelector('.topbar-inner').getBoundingClientRect().width, centered: Math.abs((chat.left - bounds.left - parseFloat(style.paddingLeft)) - (bounds.right - parseFloat(style.paddingRight) - chat.right)) < 1 };
+      return { frame: chat.width, content: document.querySelector('#messages').clientWidth, body: document.querySelector('.bubble.assistant').getBoundingClientRect().width, tool: document.querySelector('.tool-card').getBoundingClientRect().width, input: document.querySelector('.composer').getBoundingClientRect().width, header: document.querySelector('.topbar-inner').getBoundingClientRect().width, centered: Math.abs((chat.left - bounds.left - Number.parseFloat(style.paddingLeft)) - (bounds.right - Number.parseFloat(style.paddingRight) - chat.right)) < 1 };
     });
     check('右柄真实拖动居中缩放且正文和工具不再锁窄栏', resized.centered && Math.abs(resized.body - resized.content) < 1 && Math.abs(resized.tool - resized.content) < 1 && resized.body > beforeReading + 100 && Math.abs(resized.input - resized.frame) < 1 && Math.abs(resized.header - resized.frame) < 1);
     check('拖动保留草稿、待发消息和用户上翻位置', await page.inputValue('#composer') === '拖动后保留的草稿' && await page.locator('.queue-row').count() === 1 && !contexts.has('宽度调整期间的待发') && await page.locator('#messages').evaluate(box => box.scrollTop < 4));

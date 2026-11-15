@@ -10,6 +10,7 @@
     <string name="pair_failed">配对失败：%1$s</string>
     <string name="pair_invalid_code">配对码必须是 6 位数字</string>
     <string name="pair_invalid_base">服务器地址必须以 http:// 或 https:// 开头</string>
+    <string name="pair_cleartext_blocked">明文 http 只允许内网或 Tailscale 地址（127.0.0.1、192.168.x.x、10.x.x.x、172.16-31.x.x、100.64-127.x.x、*.ts.net）；公网地址请改用 https</string>
     <string name="login_required">登录已失效，请重新配对</string>
     <string name="unpair">解除配对</string>
     <string name="back">返回</string>

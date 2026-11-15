@@ -13,9 +13,10 @@ import {
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { root, services } from "../lib/services.mjs";
-import { runtimeInfo, launchEphemeral } from "@thu-campus/browser";
+import { runtimeInfo, launchEphemeral, systemExecutable } from "@thu-campus/browser";
 import { request } from "playwright-core";
 import { createWindowsZip } from "./windows-zip.mjs";
+import { resolveExecutable, trustedEnv } from "./trusted-path.mjs";
 if (process.platform !== "win32")
   throw new Error("Prepared release currently targets Windows x64.");
 const runtime = await runtimeInfo();
@@ -26,10 +27,12 @@ const release = path.join(root, ".local/release"),
 await mkdir(stage, { recursive: true });
 await mkdir(release, { recursive: true });
 const source = path.join(stage, "source.zip");
-execFileSync("git", ["archive", "--format=zip", "--output", source, "HEAD"], {
+execFileSync(resolveExecutable("git"), ["archive", "--format=zip", "--output", source, "HEAD"], {
+  env: trustedEnv(),
   cwd: root,
 });
-execFileSync("tar.exe", ["-xf", source, "-C", stage]);
+const tarBin = process.platform === "win32" ? await systemExecutable(path.join("System32", "tar.exe")) : resolveExecutable("tar");
+execFileSync(tarBin, ["-xf", source, "-C", stage], { env: trustedEnv() });
 await unlink(source);
 // 独立应用的前端与桌面壳必须真的随包分发，否则便携包只能当 MCP 用。
 const requiredEntries = [
@@ -54,6 +57,7 @@ const requiredEntries = [
   "webui/workspace.js",
   "sandbox/Dockerfile",
   "sandbox/requirements.txt",
+  "sandbox/requirements.in",
   ".dockerignore",
 ];
 for (const entry of requiredEntries) {

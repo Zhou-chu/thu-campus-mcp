@@ -1,0 +1,640 @@
+import { test, after } from "node:test";
+import assert from "node:assert/strict";
+import { readFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import path from "node:path";
+import domino from "@mixmark-io/domino";
+
+// Real application module + real DOM events. No browser, server, credentials or source rewriting.
+const root = path.resolve(import.meta.dirname, "..");
+const html = await readFile(path.join(root, "webui/index.html"), "utf8");
+const tempRoot = path.join(root, ".local", "qa-temp");
+await mkdir(tempRoot, { recursive: true });
+const ownedTemp = await mkdtemp(path.join(tempRoot, "webui-app-unit-"));
+const previousTemp = { TEMP: process.env.TEMP, TMP: process.env.TMP };
+process.env.TEMP = process.env.TMP = ownedTemp;
+after(async () => {
+  for (const key of ["TEMP", "TMP"]) {
+    if (previousTemp[key] === undefined) delete process.env[key];
+    else process.env[key] = previousTemp[key];
+  }
+  assert.equal(path.dirname(ownedTemp), tempRoot);
+  assert.ok(path.basename(ownedTemp).startsWith("webui-app-unit-"));
+  await rm(ownedTemp, { recursive: true, force: true });
+});
+
+const origin = "https://webui-unit.invalid";
+const sessionId = "12345678-1234-1234-1234-123456789012";
+const connectionKey = "campus.app.connection";
+const token = "fixture-device-token";
+const checkedAt = "2026-11-14T12:00:00.000Z";
+const models = [{ id: "fixture-a", label: "模型甲" }, { id: "fixture-b", label: "模型乙" }];
+const meta = () => ({ ok: true, models, model: { name: "fixture-a", route: "fixture" }, services: {} });
+const storage = () => ({ mode: "cloud", state: "uninitialized", scope: { accountId: "fixture-account", repoId: "fixture-private", rootPath: "/Agent工作区" }, privacy: { verified: true, checkedAt } });
+const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
+const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); };
+async function until(predicate, label = "application state") {
+  for (let i = 0; i < 80; i++) { if (predicate()) return; await flush(); }
+  assert.fail("Timed out waiting for " + label);
+}
+
+// Domino predates these browser APIs. Polyfills implement platform operations only.
+function browserDOM(window) {
+  const { Node, Element, HTMLElement, HTMLSelectElement, HTMLInputElement, HTMLTextAreaElement } = window;
+  for (const collection of [window.document.querySelectorAll("*"), window.document.querySelectorAll(".tab"), window.document.body.childNodes]) {
+    const proto = Object.getPrototypeOf(collection);
+    if (!proto[Symbol.iterator]) Object.defineProperty(proto, Symbol.iterator, { value: Array.prototype[Symbol.iterator] });
+  }
+  if (!Node.prototype.append) Object.defineProperty(Node.prototype, "append", { value(...items) {
+    for (const item of items) this.appendChild(item?.nodeType ? item : this.ownerDocument.createTextNode(String(item)));
+  } });
+  if (!Node.prototype.prepend) Object.defineProperty(Node.prototype, "prepend", { value(...items) {
+    for (const item of items.reverse()) this.insertBefore(item?.nodeType ? item : this.ownerDocument.createTextNode(String(item)), this.firstChild);
+  } });
+  if (!Node.prototype.replaceChildren) Object.defineProperty(Node.prototype, "replaceChildren", { value(...items) {
+    while (this.firstChild) this.removeChild(this.firstChild);
+    this.append(...items);
+  } });
+  if (!Object.getOwnPropertyDescriptor(Element.prototype, "dataset")) Object.defineProperty(Element.prototype, "dataset", { get() {
+    const element = this;
+    const attribute = key => "data-" + String(key).replace(/[A-Z]/g, char => "-" + char.toLowerCase());
+    return new Proxy({}, { get: (_, key) => element.getAttribute(attribute(key)) ?? undefined, set: (_, key, value) => { element.setAttribute(attribute(key), String(value)); return true; }, deleteProperty: (_, key) => { element.removeAttribute(attribute(key)); return true; } });
+  } });
+  if (!Object.getOwnPropertyDescriptor(HTMLElement.prototype, "open")) Object.defineProperty(HTMLElement.prototype, "open", { get() { return this.hasAttribute("open"); }, set(value) { if (value) this.setAttribute("open", ""); else this.removeAttribute("open"); } });
+  if (!Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")) Object.defineProperty(HTMLSelectElement.prototype, "value", { get() {
+    const options = [...this.querySelectorAll("option")];
+    return (options.find(option => option.selected) || options[0])?.value || "";
+  }, set(value) { for (const option of this.querySelectorAll("option")) option.selected = option.value === String(value); } });
+  if (!Element.prototype.getBoundingClientRect) Object.defineProperty(Element.prototype, "getBoundingClientRect", { value() { return { width: 1000, height: 400, left: 0, right: 1000, top: 0, bottom: 400 }; } });
+  if (!Element.prototype.setPointerCapture) {
+    const captures = new WeakMap();
+    for (const [name, fn] of Object.entries({ setPointerCapture(id) { captures.set(this, id); }, hasPointerCapture(id) { return captures.get(this) === id; }, releasePointerCapture() { captures.delete(this); } })) Object.defineProperty(Element.prototype, name, { value: fn });
+  }
+  for (const [name, value] of [["clientWidth", 1280], ["clientHeight", 400], ["scrollHeight", 800]]) {
+    if (!Object.getOwnPropertyDescriptor(Element.prototype, name)) Object.defineProperty(Element.prototype, name, { get() { return value; }, configurable: true });
+  }
+  for (const proto of [HTMLInputElement.prototype, HTMLTextAreaElement.prototype]) {
+    if (!proto.setSelectionRange) Object.defineProperty(proto, "setSelectionRange", { value(start, end) { this.selectionStart = start; this.selectionEnd = end; } });
+    if (!proto.select) Object.defineProperty(proto, "select", { value() { this.setSelectionRange(0, this.value.length); } });
+  }
+}
+let imports = 0;
+async function app(t, { paired = true, href = origin + "/", routes: customRoutes = {}, saved = {} } = {}) {
+  const window = domino.createWindow(html, href);
+  browserDOM(window);
+  const document = window.document;
+  const savedValues = new Map(Object.entries(saved));
+  if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
+  const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
+  window.localStorage = localStorage;
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, ...customRoutes }));
+  const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
+  let timerId = 0, now = 0;
+  const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
+  const replacements = { window, document, location: window.location, history: { replaceState: (_state, _title, url) => { window.location.href = new URL(url, window.location.href).href; } }, navigator: { platform: "unit-dom", clipboard: { writeText: async text => { api.clipboard.push(text); } } }, localStorage,
+    innerWidth: 1280, getComputedStyle: () => ({ paddingLeft: "24", paddingRight: "24" }),
+    setTimeout: setTimer, clearTimeout: id => timers.delete(id),
+    requestAnimationFrame: fn => { const id = ++timerId; frames.set(id, fn); return id; }, cancelAnimationFrame: id => frames.delete(id),
+    confirm: message => { api.confirmations.push(message); return api.confirmResult; },
+    fetch: async (url, options = {}) => {
+      const parsed = new URL(url, origin), method = options.method || "GET";
+      const key = method + " " + parsed.pathname + parsed.search;
+      if (parsed.origin !== origin || !routes.has(key)) { denied.push(key + " @ " + parsed.origin); throw new Error("Unplanned fetch: " + key); }
+      const request = { url: parsed.href, method, options, body: options.body ? JSON.parse(options.body) : undefined };
+      calls.push(request);
+      const route = routes.get(key);
+      const result = typeof route === "function" ? await route(request) : route;
+      return result instanceof Response ? result : Response.json(result);
+    },
+  };
+  const previous = new Map();
+  for (const [key, value] of Object.entries(replacements)) { previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); }
+  t.after(async () => {
+    for (const stream of streams) stream.close();
+    window.dispatchEvent(new window.Event("pagehide"));
+    await flush();
+    for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
+    assert.deepEqual(denied, [], "All fetch destinations must have an explicit fixture route");
+  });
+  const api = {
+    window, document, localStorage, savedValues, routes, calls, clipboard: [], confirmations: [], confirmResult: true,
+    $: selector => document.querySelector(selector), all: selector => [...document.querySelectorAll(selector)],
+    event(target, type, props = {}) { const node = typeof target === "string" ? api.$(target) : target; assert.ok(node, `Missing target ${target}`); const event = new window.Event(type, { bubbles: true, cancelable: true }); Object.assign(event, props); node.dispatchEvent(event); return event; },
+    click(target) { return api.event(target, "click"); },
+    input(target, value, type = "input") { const node = typeof target === "string" ? api.$(target) : target; node.value = value; return api.event(node, type); },
+    button(text, scope = document) { const button = [...scope.querySelectorAll("button")].find(node => node.textContent === text); assert.ok(button, `Missing button ${text}`); return button; },
+    nav(view) { api.click(`.tab[data-view="${view}"]`); },
+    frame() { const pending = [...frames.values()]; frames.clear(); for (const fn of pending) fn(now); },
+    async tick(ms) { now += ms; const due = [...timers].filter(([, item]) => item.at <= now); for (const [id, item] of due) { timers.delete(id); item.fn(); } await flush(); api.frame(); },
+    count(route) { return calls.filter(call => call.method + " " + new URL(call.url).pathname === route).length; },
+    stream() {
+      let controller, closed = false;
+      const body = new ReadableStream({ start(value) { controller = value; } });
+      const fixture = { response: new Response(body, { headers: { "content-type": "text/event-stream" } }), emit(event, payload) { assert.equal(closed, false); controller.enqueue(new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)); }, close() { if (!closed) { closed = true; controller.close(); } } };
+      streams.push(fixture); return fixture;
+    },
+    async send(text) { api.input("#composer", text); api.click("#chat-send"); await flush(); },
+  };
+  await import(new URL(`../webui/app.js?unit=${++imports}`, import.meta.url));
+  await until(() => paired ? !!api.$("#composer") || !api.$("#pair").hidden || api.$("#account").textContent === "服务连接失败" : !api.$("#pair").hidden, "startup");
+  await flush();
+  return api;
+}
+
+// node:test runs these sequentially: each import owns its DOM/globals/timers.
+test("app: unpaired validation, mapped rejection, and successful atomic pairing", async t => {
+  const a = await app(t, { paired: false });
+  assert.equal(a.$("#app").hidden, true);
+  a.click("#pair-submit");
+  assert.match(a.$("#pair-error").textContent, /6 位数字/);
+  assert.equal(a.calls.length, 0);
+  a.input("#pair-code", "123456");
+  a.routes.set("POST /api/pair/redeem", { ok: false, error: { code: "PAIRING_EXPIRED" } });
+  a.event("#pair-code", "keydown", { key: "Enter" }); await flush();
+  assert.match(a.$("#pair-error").textContent, /无效或已过期/);
+  assert.equal(a.$("#pair-submit").disabled, false);
+  a.routes.set("POST /api/pair/redeem", { ok: true, token });
+  a.click("#pair-submit"); await until(() => !!a.$("#composer"));
+  assert.equal(a.$("#pair").hidden, true);
+  assert.deepEqual(JSON.parse(a.localStorage.getItem(connectionKey)), { version: 1, base: origin, token });
+  assert.deepEqual(a.calls.find(call => call.method === "POST").body, { code: "123456", deviceName: "unit-dom", platform: "webui" });
+  assert.equal(a.calls.at(-1).options.credentials, "omit");
+});
+
+for (const [code, expected] of [["PAIRING_LOCKED", /频繁/], ["PAIRING_INVALID", /格式/], ["PAIRING_DISABLED", /固定令牌/], ["OTHER", /fixture rejection/]]) test(`app: pairing ${code} stays recoverable`, async t => {
+  const a = await app(t, { paired: false, routes: { "POST /api/pair/redeem": { ok: false, error: { code, message: "fixture rejection" } } } });
+  a.input("#pair-code", "654321"); a.click("#pair-submit"); await flush();
+  assert.match(a.$("#pair-error").textContent, expected);
+  assert.equal(a.$("#pair-submit").disabled, false);
+  assert.equal(a.localStorage.getItem(connectionKey), null);
+});
+
+test("app: invalid issued token and non-JSON pairing replies never save credentials", async t => {
+  const a = await app(t, { paired: false, routes: { "POST /api/pair/redeem": { ok: true, token: "bad token\n" } } });
+  a.input("#pair-code", "123456"); a.click("#pair-submit"); await flush();
+  assert.match(a.$("#pair-error").textContent, /不合法/);
+  a.routes.set("POST /api/pair/redeem", new Response("not json", { status: 502 }));
+  a.click("#pair-submit"); await flush();
+  assert.match(a.$("#pair-error").textContent, /配对失败/);
+  assert.equal(a.localStorage.getItem(connectionKey), null);
+});
+
+test("app: rejected stored credential returns to pairing and removes the token", async t => {
+  const a = await app(t, { routes: { "GET /api/meta": Response.json({ ok: false, error: { code: "AUTH_REQUIRED" } }, { status: 401 }) } });
+  assert.equal(a.$("#pair").hidden, false);
+  assert.match(a.$("#pair-error").textContent, /失效/);
+  assert.equal(JSON.parse(a.localStorage.getItem(connectionKey)).token, "");
+  assert.equal(a.count("GET /api/workspace/storage"), 0);
+});
+
+test("app: connection error is not an authenticated empty application", async t => {
+  const a = await app(t, { routes: { "GET /api/meta": new Response("bad json", { status: 503 }) } });
+  assert.equal(a.$("#account").textContent, "服务连接失败");
+  assert.equal(a.$("#health-dot").className, "dot bad");
+  assert.match(a.$("#toast").textContent, /非 JSON/);
+  assert.equal(a.$("#app").hidden, true);
+  assert.equal(a.localStorage.getItem(connectionKey) !== null, true);
+  await a.tick(3200); assert.equal(a.$("#toast").hidden, true);
+});
+
+test("app: quick actions only edit drafts, themes and popovers respond to DOM events", async t => {
+  const a = await app(t);
+  a.input("#composer", "已有草稿");
+  a.click('[data-action="assignments"]');
+  assert.match(a.$("#composer").value, /已有草稿\n\n查询本学期/);
+  assert.equal(a.count("POST /api/chat"), 0);
+  const menu = a.$(".add-menu"); menu.open = true;
+  a.click(a.button("云盘文件", menu));
+  assert.equal(menu.open, false);
+  assert.match(a.$("#composer").value, /个人私有资料库/);
+  menu.open = true; a.event(a.document.body, "click"); assert.equal(menu.open, false);
+  menu.open = true; a.event(a.document, "keydown", { key: "Escape" }); assert.equal(menu.open, false);
+  a.click("#theme-dark"); assert.equal(a.document.documentElement.dataset.theme, "dark");
+  assert.equal(a.localStorage.getItem("campus.theme"), "dark");
+  a.click("#theme-light"); assert.equal(a.$("#theme-light").getAttribute("aria-pressed"), "true");
+});
+
+test("app: model save pending/rollback, refresh failure and draft retention", async t => {
+  const save = deferred();
+  const a = await app(t, { routes: { "PUT /api/settings": () => save.promise } });
+  a.input("#composer", "不能丢的草稿");
+  a.input("#chat-model", "fixture-b", "change");
+  assert.equal(a.$("#chat-model").disabled, true);
+  assert.match(a.$(".model-status").textContent, /保存/);
+  save.resolve({ ok: false, error: { message: "fixture save refused" } }); await flush();
+  assert.equal(a.$("#chat-model").value, "fixture-a");
+  assert.match(a.$(".model-status").textContent, /模型未切换.*fixture save refused/);
+  a.routes.set("GET /api/models?refresh=1", { ok: false, error: { message: "catalog unavailable" } });
+  a.click('[aria-label="刷新模型"]'); await flush();
+  assert.match(a.$(".model-status").textContent, /上次成功/);
+  assert.equal(a.$("#composer").value, "不能丢的草稿");
+  a.routes.set("GET /api/models?refresh=1", { ok: true, models, current: "fixture-b" });
+  a.click('[aria-label="刷新模型"]'); await flush();
+  assert.equal(a.$("#chat-model").value, "fixture-b");
+  assert.equal(a.$(".model-status").hidden, true);
+});
+
+test("app: missing models disable send and unavailable current model is shown explicitly", async t => {
+  const a = await app(t, { routes: { "GET /api/meta": { ...meta(), models: [], model: {} } } });
+  assert.equal(a.$("#chat-send").disabled, true);
+  assert.match(a.$(".model-status").textContent, /未获取到可用模型/);
+  a.input("#composer", "不会发送"); a.event("#composer", "keydown", { key: "Enter" });
+  assert.equal(a.count("POST /api/chat"), 0);
+  a.routes.set("GET /api/models?refresh=1", { ok: true, models, current: "fixture-absent" });
+  a.click('[aria-label="刷新模型"]'); await flush();
+  assert.match(a.$("#chat-model option").textContent, /当前目录中不可用/);
+});
+
+test("app: stream renders incremental reasoning/text before done; queued turn uses latest saved model", async t => {
+  const a = await app(t, { routes: { "PUT /api/settings": request => ({ ok: true, settings: { modelName: request.body.modelName } }) } });
+  const first = a.stream(), second = a.stream();
+  let turn = 0;
+  a.routes.set("POST /api/chat", () => (++turn === 1 ? first.response : second.response));
+  await a.send("第一轮");
+  first.emit("ready", { sessionId }); first.emit("reasoning", { text: "fixture思考" }); first.emit("token", { text: "首段" });
+  await flush(); a.frame();
+  assert.match(a.$("#messages").textContent, /fixture思考.*首段/);
+  assert.equal(a.$("#chat-stop").hidden, false);
+  a.input("#chat-model", "fixture-b", "change"); await flush();
+  await a.send("第二轮");
+  assert.match(a.$(".queue-state").textContent, /待发1条/);
+  assert.equal(a.count("POST /api/chat"), 1);
+  assert.equal(a.$("#rail-new-chat").disabled, true);
+  const unload = a.event(a.window, "beforeunload"); assert.equal(unload.defaultPrevented, true);
+  first.emit("message", { role: "assistant", content: "首段与末帧", reasoning: "fixture思考完毕" });
+  first.emit("done", { sessionId }); first.close(); await until(() => a.count("POST /api/chat") === 2);
+  assert.deepEqual(a.calls.filter(call => call.method === "POST").map(call => call.body.model), ["fixture-a", "fixture-b"]);
+  assert.deepEqual(a.calls.find(call => call.method === "PUT").body, { modelName: "fixture-b" });
+  assert.equal(a.calls.filter(call => new URL(call.url).pathname === "/api/chat")[1].body.sessionId, sessionId);
+  second.emit("token", { text: "第二轮结果" }); second.emit("done", { sessionId }); second.close(); await flush();
+  assert.match(a.$("#messages").textContent, /首段与末帧.*第二轮结果/);
+  assert.equal(a.$("#chat-stop").hidden, true);
+  assert.equal(a.$(".turn-queue").hidden, true);
+});
+
+test("app: interrupted stream preserves partial text and pauses/takes back pending drafts", async t => {
+  const a = await app(t);
+  const stream = a.stream(); a.routes.set("POST /api/chat", stream.response);
+  await a.send("第一轮"); await a.send("待发内容");
+  stream.emit("token", { text: "已收到的半段" }); stream.close(); await flush();
+  assert.match(a.$("#messages").textContent, /已收到的半段.*STREAM_INTERRUPTED/);
+  assert.match(a.$(".queue-state").textContent, /已暂停/);
+  a.input("#composer", "当前草稿"); a.click('[aria-label="取回待发消息"]');
+  assert.equal(a.$("#composer").value, "当前草稿\n\n待发内容");
+  assert.equal(a.$(".turn-queue").hidden, true);
+  a.click("#rail-new-chat"); assert.equal(a.$("#messages").textContent, "");
+});
+
+test("app: stop failure, queue clear confirmation and explicit resume remain recoverable", async t => {
+  const a = await app(t, { routes: { [`POST /api/chat/${sessionId}/abort`]: { ok: false, error: { message: "abort unavailable" } } } });
+  const stream = a.stream(); a.routes.set("POST /api/chat", stream.response);
+  await a.send("运行中"); stream.emit("ready", { sessionId }); await flush(); await a.send("待发1"); await a.send("待发2");
+  a.click("#chat-stop"); await flush();
+  assert.match(a.$(".queue-reason").textContent, /停止请求失败/);
+  assert.match(a.$("#toast").textContent, /abort unavailable/);
+  a.confirmResult = false; a.click('[aria-label="清空待发消息"]'); assert.equal(a.all(".queue-row").length, 2);
+  a.confirmResult = true; a.click('[aria-label="清空待发消息"]'); assert.equal(a.$(".turn-queue").hidden, true);
+  assert.equal(a.confirmations.length, 2);
+  stream.emit("done", { sessionId, aborted: true }); stream.close(); await flush();
+  assert.equal(a.$("#chat-stop").hidden, true);
+});
+
+test("app: HTTP chat failure presents server error without losing user content", async t => {
+  const a = await app(t, { routes: { "POST /api/chat": Response.json({ error: { code: "MODEL_REJECTED", message: "fixture model unavailable" } }, { status: 502 }) } });
+  a.input("#composer", "Shift+Enter保留草稿");
+  a.event("#composer", "keydown", { key: "Enter", shiftKey: true }); assert.equal(a.count("POST /api/chat"), 0);
+  a.event("#composer", "keydown", { key: "Enter", isComposing: true }); assert.equal(a.count("POST /api/chat"), 0);
+  a.event("#composer", "keydown", { key: "Enter" }); await flush();
+  assert.match(a.$("#messages").textContent, /Shift\+Enter保留草稿.*MODEL_REJECTED.*fixture model unavailable/);
+  assert.equal(a.$("#chat-stop").hidden, true);
+});
+
+test("app: approvals prevent duplicate decisions, preserve failures, retry and collapse only on receipt", async t => {
+  const a = await app(t);
+  const stream = a.stream(); a.routes.set("POST /api/chat", stream.response);
+  await a.send("测试审批"); stream.emit("ready", { sessionId });
+  stream.emit("confirm", { callId: "fixture-call", name: "fixture_write", args: { target: "fixture-only" }, risk: "将改动指定测试对象" }); await flush();
+  let card = a.$(".confirm-card");
+  assert.equal(card.open, true); assert.match(card.textContent, /将改动指定测试对象/);
+  assert.equal(card.querySelector(".confirm-details").open, false);
+  const decision = deferred(); a.routes.set(`POST /api/chat/${sessionId}/confirm`, () => decision.promise);
+  a.click(a.button("允许执行", card)); a.click(a.button("允许执行", card));
+  assert.equal(a.count(`POST /api/chat/${sessionId}/confirm`), 1);
+  assert.equal(card.getAttribute("aria-busy"), "true");
+  decision.resolve({ ok: true, decided: false }); await flush();
+  assert.equal(card.open, true); assert.match(card.querySelector('[role="alert"]').textContent, /失效或已处理/);
+  a.routes.set(`POST /api/chat/${sessionId}/confirm`, { ok: true, decided: true });
+  a.click(a.button("允许执行", card)); await flush();
+  assert.equal(card.dataset.state, "allowed"); assert.equal(card.open, false);
+  assert.equal(card.querySelector(".confirm-actions").hidden, true);
+  assert.deepEqual(a.calls.filter(call => new URL(call.url).pathname.endsWith("/confirm")).at(-1).body, { callId: "fixture-call", allow: true });
+  stream.emit("confirm", { callId: "fixture-deny", name: "fixture_write", args: "not-json" }); await flush();
+  card = a.all(".confirm-card")[1]; assert.match(card.textContent, /此操作会改动校园数据/);
+  a.click(a.button("拒绝", card)); await flush(); assert.equal(card.dataset.state, "denied");
+  stream.emit("done", { sessionId }); stream.close(); await flush();
+});
+
+test("app: history restores reasoning, safe Markdown and failed/raw tool results", async t => {
+  const sessions = [{ id: sessionId, title: "恢复记录", updatedAt: checkedAt, messageCount: 7 }];
+  const a = await app(t, { routes: { "GET /api/sessions": { ok: true, sessions }, [`GET /api/sessions/${sessionId}`]: { ok: true, session: { id: sessionId, messages: [
+    { role: "user", content: "原始问题" },
+    { role: "assistant", content: "# 历史答案\n[参考](https://example.invalid/ref)\n<script>fixture()</script>", reasoning: "历史思考", interrupted: true, toolCalls: [{ name: "fixture_read", arguments: { id: 1 } }] },
+    { role: "tool", content: '{"ok":false,"error":{"message":"历史失败"}}' },
+    { role: "assistant", toolCalls: [{ name: "fixture_raw", arguments: "not-json" }] },
+    { role: "tool", content: "raw output" },
+    { role: "assistant", reasoning: "已停止思考", aborted: true },
+  ] } } } });
+  a.click(".recent-session"); await until(() => a.all(".tool-card").length === 2);
+  assert.match(a.$("#messages").textContent, /原始问题.*历史思考.*历史答案/);
+  assert.equal(a.$(".reasoning-block").dataset.state, "error");
+  assert.equal(a.all(".reasoning-block")[1].dataset.state, "stopped");
+  assert.equal(a.$(".tool-card").dataset.state, "failed");
+  assert.match(a.all(".tool-card")[1].textContent, /raw output/);
+  assert.equal(a.$("#messages script"), undefined);
+  assert.equal(a.$("#messages a").rel, "noopener noreferrer");
+  a.click("#rail-new-chat"); assert.equal(a.$("#messages").textContent, "");
+  assert.equal(a.$(".chat").dataset.empty, "true");
+});
+
+test("app: sessions search, rename/save/cancel/delete and persistent refresh errors", async t => {
+  let sessions = [{ id: sessionId, title: "原会话", updatedAt: checkedAt, messageCount: 2 }];
+  const a = await app(t, { routes: { "GET /api/sessions": () => ({ ok: true, sessions }), [`PATCH /api/sessions/${sessionId}`]: request => { sessions = [{ ...sessions[0], title: request.body.title }]; return { ok: true }; }, [`DELETE /api/sessions/${sessionId}`]: () => { sessions = []; return { ok: true }; } } });
+  a.nav("sessions"); await flush();
+  a.input('[aria-label="搜索会话"]', "不存在"); assert.match(a.$(".list").textContent, /没有匹配/);
+  a.input('[aria-label="搜索会话"]', "原");
+  a.click(a.button("重命名"));
+  a.input('[aria-label="会话标题"]', "改名"); a.event('[aria-label="会话标题"]', "keydown", { key: "Enter" }); await flush();
+  assert.match(a.$(".session-row").textContent, /改名/);
+  a.click(a.button("重命名")); a.event('[aria-label="会话标题"]', "keydown", { key: "Escape" });
+  assert.equal(a.$('[aria-label="会话标题"]'), undefined);
+  a.click(a.button("删除")); await flush(); assert.match(a.$(".list").textContent, /还没有历史会话/);
+  a.routes.set("GET /api/sessions", { ok: false, error: { message: "session offline" } });
+  a.nav("sessions"); await flush(); assert.match(a.$("#recent-error").textContent, /会话刷新失败/);
+  assert.equal(a.$("#recent-retry").hidden, false);
+  a.routes.set("GET /api/sessions", { ok: true, sessions: [] }); a.click("#recent-retry"); await flush();
+  assert.equal(a.$("#recent-error").hidden, true);
+});
+
+test("app: stale session response cannot overwrite a new conversation", async t => {
+  const load = deferred();
+  const a = await app(t, { routes: { "GET /api/sessions": { ok: true, sessions: [{ id: sessionId, title: "旧记录", updatedAt: checkedAt, messageCount: 1 }] }, [`GET /api/sessions/${sessionId}`]: () => load.promise } });
+  a.click(".recent-session"); assert.equal(a.$(".recent-session").disabled, true);
+  a.click("#rail-new-chat"); a.input("#composer", "新草稿");
+  load.resolve({ ok: true, session: { id: sessionId, messages: [{ role: "assistant", content: "不应覆盖" }] } }); await flush();
+  assert.equal(a.$("#composer").value, "新草稿"); assert.equal(a.$("#messages").textContent, "");
+});
+
+test("app: tool forms coerce field types, show failures and route workspace actions into drafts", async t => {
+  const tools = [
+    { name: "fixture_read", readOnly: true, description: "类型测试", inputSchema: { required: ["query"], properties: { query: { type: "string" }, count: { type: "integer" }, enabled: { type: "boolean" }, ids: { type: "array" }, choice: { enum: ["one", "two"] } } } },
+    { name: "workspace_run", service: "workspace", description: "仅草稿", inputSchema: { properties: { script: { type: "string" } } } },
+  ];
+  const a = await app(t, { routes: { "GET /api/tools": { ok: true, tools }, "POST /api/tools/fixture_read": request => ({ ok: true, data: { received: request.body } }) } });
+  a.nav("tools"); await flush();
+  const card = a.all(".list > details")[0], form = card.querySelector("form");
+  const fields = [...form.querySelectorAll("input, select")];
+  fields[0].value = "关键词"; fields[1].value = "3"; fields[2].checked = true; fields[3].value = " a, ,b "; fields[4].value = "two";
+  a.event(form, "submit"); await flush();
+  const request = a.calls.find(call => new URL(call.url).pathname === "/api/tools/fixture_read");
+  assert.deepEqual(request.body, { query: "关键词", count: 3, enabled: true, ids: ["a", "b"], choice: "two" });
+  assert.match(card.querySelector("pre").textContent, /received/);
+  a.routes.set("POST /api/tools/fixture_read", { ok: false, error: { code: "FIXTURE_DENIED", message: "fixture rejected" } });
+  a.event(form, "submit"); await flush(); assert.match(card.querySelector("pre").textContent, /失败：FIXTURE_DENIED fixture rejected/);
+  a.input('.view input[type="search"]', "不存在"); assert.match(a.$(".list").textContent, /没有匹配/);
+  a.input('.view input[type="search"]', "workspace");
+  const workspace = a.$(".list form"); a.input(workspace.querySelector("input"), "fixture.py"); a.event(workspace, "submit");
+  assert.match(a.$("#composer").value, /workspace_run.*fixture.py.*等待我的确认/);
+  assert.equal(a.count("POST /api/chat"), 0);
+  assert.equal(a.calls.some(call => new URL(call.url).pathname === "/api/tools/workspace_run"), false);
+});
+
+test("app: tool catalog errors are visible rather than fake empty results", async t => {
+  const a = await app(t, { routes: { "GET /api/tools": { ok: false, error: { message: "fixture tools offline" } } } });
+  a.nav("tools"); await flush(); assert.match(a.$(".list").textContent, /fixture tools offline/);
+});
+
+test("app: service login does not imply verified authentication; failed checks remain recoverable", async t => {
+  const evidence = { state: "ready", verified: true, source: "protected-api:fixture", checkedAt, code: "OK" };
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true }, "GET /api/auth/status": { ok: true, services: { learnx: evidence, cloud: { state: "ready" }, hetang: { mode: "mock" } } } } });
+  a.nav("services"); await flush();
+  let cloud = a.$('[data-service="cloud"]');
+  a.click(a.button("登录", cloud)); await flush(); cloud = a.$('[data-service="cloud"]');
+  assert.match(cloud.textContent, /登录窗口已打开.*核验登录状态/);
+  assert.equal(cloud.querySelector(".state").dataset.s, "unverified");
+  a.click(a.button("核验登录状态")); await flush();
+  assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "ready");
+  assert.equal(a.$('[data-service="cloud"] .state').dataset.s, "unverified");
+  assert.equal(a.$('[data-service="hetang"] .state').dataset.s, "mock");
+  assert.match(a.$('[data-service="learnx"] .auth-evidence').textContent, /protected-api:fixture.*OK/);
+  a.routes.set("GET /api/auth/status", { ok: true }); a.click(a.button("核验登录状态")); await flush();
+  assert.match(a.$(".auth-panel > .error").textContent, /认证状态响应无效/);
+  assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unknown");
+  a.routes.set("POST /api/auth/login", { ok: false, error: { message: "fixture window unavailable" } });
+  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /未打开.*fixture window unavailable/);
+});
+
+test("app: workspace status recovery and initialize action never issue writes", async t => {
+  const a = await app(t, { routes: { "GET /api/service": { ok: true, supported: false } } });
+  a.click("#rail-storage"); await flush();
+  assert.match(a.$(".workspace-storage-card").textContent, /Agent工作区.*待初始化/);
+  a.routes.set("GET /api/workspace/storage", { ok: true }); a.click(a.button("刷新工作区状态")); await flush();
+  assert.match(a.$(".workspace-storage-card").textContent, /工作区状态响应无效/);
+  a.routes.set("GET /api/workspace/storage", { ok: true, storage: storage() }); a.click(a.button("刷新工作区状态")); await flush();
+  a.click(a.button("在对话中初始化"));
+  assert.match(a.$("#composer").value, /workspace_initialize.*fixture-private.*等待我授权/s);
+  assert.equal(a.calls.some(call => call.method !== "GET"), false);
+});
+
+test("app: settings invites validate links, copy/fallback, diagnostics and local logout", async t => {
+  const a = await app(t, { routes: { "GET /api/service": { ok: true, supported: true, mode: "scheduled-task", installed: true, task: { installed: true, state: "ready" }, startup: { installed: true, entryPath: "fixture-startup" }, logFile: "fixture-log", installHint: "fixture-install" }, "POST /api/pair/invite": { ok: true, code: "123456", ttlSeconds: 120, lanUrls: [origin, "javascript:bad"] } } });
+  a.nav("settings"); await flush();
+  assert.match(a.$(".settings-page").textContent, /登录计划任务.*fixture-startup.*fixture-log/);
+  a.click(a.button("生成配对码")); await flush();
+  assert.equal(a.$(".pair-code").textContent, "123456");
+  assert.equal(a.all(".pair-links input").length, 2);
+  assert.equal(a.$(".pair-links input").value, origin + "/#code=123456");
+  a.click(a.all(".pair-links button")[0]); await flush(); assert.deepEqual(a.clipboard, [origin + "/#code=123456"]);
+  navigator.clipboard.writeText = async () => { throw new Error("fixture denied clipboard"); };
+  a.click(a.all(".pair-links button")[1]); await flush(); assert.match(a.$("#toast").textContent, /手动复制/);
+  a.routes.set("POST /api/pair/invite", { ok: false, error: { message: "fixture invite failed" } });
+  a.click(a.button("生成配对码")); await flush(); assert.match(a.$(".settings-page").textContent, /fixture invite failed/);
+  a.click(a.button("清除本地令牌并退出")); assert.equal(a.$("#app").hidden, true);
+  assert.equal(JSON.parse(a.localStorage.getItem(connectionKey)).token, "");
+});
+
+test("app: width keyboard/range/drag persist without losing draft, narrow view preserves preference", async t => {
+  const a = await app(t);
+  a.input("#composer", "宽度不能清掉的草稿");
+  const right = a.$('.chat-resize-handle[data-edge="right"]');
+  const min = Number(a.$("#chat-width-range").min), max = Number(a.$("#chat-width-range").max);
+  assert.ok(max > min && min === 640);
+  a.event(right, "keydown", { key: "Home" }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), String(min));
+  a.event(right, "keydown", { key: "ArrowRight", shiftKey: true }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), String(min + 128));
+  a.input("#chat-width-range", "900"); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), String(min + 128));
+  a.event("#chat-width-range", "change"); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "900");
+  a.event(right, "pointerdown", { button: 0, pointerId: 1, clientX: 100 });
+  a.event(a.document, "pointermove", { pointerId: 1, clientX: 120 });
+  a.event(a.document, "pointerup", { pointerId: 1 }); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "1040");
+  assert.equal(a.$("#composer").value, "宽度不能清掉的草稿");
+  globalThis.innerWidth = 390; a.event(a.window, "resize");
+  assert.equal(a.document.body.dataset.chatCustomWidth, "false");
+  assert.equal(a.localStorage.getItem("campus.app.chatWidth"), "1040");
+  globalThis.innerWidth = 1280; a.event(a.window, "resize");
+  assert.equal(a.document.body.dataset.chatCustomWidth, "true");
+  a.event(right, "pointerdown", { button: 0, pointerId: 2, clientX: 100 });
+  a.event(a.document, "pointermove", { pointerId: 2, clientX: 150 });
+  a.event(a.document, "pointercancel", { pointerId: 2 }); assert.equal(a.$("#chat-width-range").value, "1040");
+  a.event(right, "dblclick"); assert.equal(a.localStorage.getItem("campus.app.chatWidth"), null);
+  assert.equal(a.document.body.dataset.chatCustomWidth, "false");
+});
+
+test("app: running workspace job polls real receipts, separates sync failure and fills recovery draft", async t => {
+  const a = await app(t);
+  const stream = a.stream(), statusUrl = `/api/workspaces/${sessionId}/jobs/fixture-job`;
+  const job = { jobId: "fixture-job", state: "running", statusUrl, runtime: "python", scriptPath: "fixture.py", stdout: "first output", stderr: "", storage: { mode: "cloud", state: "pending" } };
+  a.routes.set("POST /api/chat", stream.response);
+  a.routes.set("GET " + statusUrl, { ok: true, job: { ...job, state: "succeeded", stdout: "finished output", storage: { mode: "cloud", state: "failed", message: "fixture sync failed" } } });
+  await a.send("测试作业卡"); stream.emit("ready", { sessionId });
+  stream.emit("tool", { phase: "start", name: "workspace_run", args: { script: "fixture.py" } });
+  await flush(); assert.match(a.$(".tool-card").textContent, /执行中/);
+  stream.emit("tool", { phase: "end", name: "workspace_run", ok: true, result: { ok: true, data: { job } } });
+  await flush(); assert.match(a.$(".tool-state").textContent, /作业运行中/);
+  assert.equal(a.$(".job-storage-state").dataset.s, "pending");
+  assert.match(a.$(".job-logs").textContent, /first output/);
+  await a.tick(1500);
+  assert.equal(a.$(".tool-card").dataset.state, "done");
+  assert.equal(a.$(".tool-state").textContent, "计算完成");
+  assert.equal(a.$(".job-storage-state").textContent, "云盘同步失败");
+  assert.match(a.$(".job-sync-message").textContent, /fixture sync failed/);
+  assert.match(a.$(".job-logs").textContent, /finished output/);
+  stream.emit("done", { sessionId }); stream.close(); await flush();
+  a.click(a.button("在对话中恢复同步"));
+  assert.match(a.$("#composer").value, /workspace_sync.*不要重新运行计算/);
+  assert.equal(a.count("GET " + statusUrl), 1);
+});
+
+test("app: job query/stop failures preserve last running state and require valid stop receipt", async t => {
+  const statusUrl = `/api/workspaces/${sessionId}/jobs/fixture-stop`;
+  const job = { jobId: "fixture-stop", state: "running", statusUrl, stdout: "saved output", stderr: "fixture stderr" };
+  const a = await app(t, { routes: { ["GET " + statusUrl]: { ok: false, error: { message: "fixture query failed" } } } });
+  const stream = a.stream(); a.routes.set("POST /api/chat", stream.response);
+  await a.send("停止作业"); stream.emit("ready", { sessionId });
+  stream.emit("tool", { phase: "start", name: "workspace_run", args: {} });
+  stream.emit("tool", { phase: "end", name: "workspace_run", ok: true, result: job }); await flush();
+  await a.tick(1500); assert.match(a.$(".workspace-job").textContent, /查询失败.*fixture query failed/);
+  assert.equal(a.$(".tool-card").dataset.state, "running");
+  a.routes.set("GET " + statusUrl, { ok: true, job });
+  a.click(a.button("重试查询")); await a.tick(1500); assert.equal(a.count("GET " + statusUrl), 2);
+  a.routes.set("POST " + statusUrl + "/stop", { ok: true });
+  a.click(a.button("停止作业")); await flush();
+  assert.match(a.$(".workspace-job").textContent, /停止失败.*停止响应无效/);
+  assert.equal(a.$(".tool-card").dataset.state, "running");
+  a.routes.set("POST " + statusUrl + "/stop", { ok: true, job: { ...job, state: "interrupted", error: { message: "fixture interrupted" } } });
+  a.click(a.button("停止作业")); await flush();
+  assert.equal(a.$(".tool-card").dataset.state, "failed"); assert.match(a.$(".job-logs").textContent, /fixture interrupted/);
+  stream.emit("done", { sessionId }); stream.close(); await flush();
+  a.click(a.button("在对话中处理")); assert.match(a.$("#composer").value, /fixture-stop.*再次执行前先确认/);
+});
+
+test("app: streamed notices/errors/tools preserve honest state and pending queue resumes explicitly", async t => {
+  const a = await app(t);
+  const first = a.stream(), resumed = a.stream(); let request = 0;
+  a.routes.set("POST /api/chat", () => ++request === 1 ? first.response : resumed.response);
+  await a.send("带工具轮次"); await a.send("稍后继续");
+  first.emit("ready", { sessionId });
+  first.emit("token", { text: 123 }); first.emit("reasoning", { text: "" }); first.emit("message", { role: "user", content: "不应渲染" });
+  first.emit("tool", { phase: "start", name: "fixture_fail", args: "raw argument" });
+  first.emit("tool", { phase: "end", name: "fixture_fail", ok: false, error: { code: "FIXTURE_FAILED" } });
+  first.emit("tool", { phase: "end", name: "unmatched", ok: true, result: {} });
+  first.emit("notice", { code: "FIXTURE_NOTICE" });
+  first.emit("error", { code: "FIXTURE_ERROR", message: "fixture turn failed" });
+  first.emit("done", { sessionId }); first.close(); await flush();
+  assert.equal(a.$(".tool-card").dataset.state, "failed");
+  assert.match(a.$(".tool-card").textContent, /FIXTURE_FAILED/);
+  assert.match(a.$(".bubble.notice").textContent, /FIXTURE_NOTICE/);
+  assert.match(a.$(".bubble.err").textContent, /FIXTURE_ERROR.*fixture turn failed/);
+  assert.doesNotMatch(a.$("#messages").textContent, /不应渲染/);
+  assert.equal(a.$(".reasoning-block"), undefined);
+  assert.match(a.$(".queue-reason").textContent, /fixture turn failed/);
+  a.click(a.button("继续队列")); await until(() => a.count("POST /api/chat") === 2);
+  resumed.emit("message", { role: "assistant", content: "恢复成功" }); resumed.emit("done", { sessionId }); resumed.close(); await flush();
+  assert.match(a.$("#messages").textContent, /恢复成功/); assert.equal(a.$(".turn-queue").hidden, true);
+});
+
+test("app: authorized artifact fetch handles pending/retry/download and revokes only created Blob URL", async t => {
+  const artifact = `/api/workspaces/${sessionId}/files?path=fixture.txt`;
+  const a = await app(t, { routes: { "GET /api/sessions": { ok: true, sessions: [{ id: sessionId, title: "产物", updatedAt: checkedAt, messageCount: 1 }] }, [`GET /api/sessions/${sessionId}`]: { ok: true, session: { id: sessionId, messages: [{ role: "assistant", content: `[下载](${artifact})` }] } }, ["GET " + artifact]: Response.json({ error: { message: "fixture unavailable" } }, { status: 404 }) } });
+  a.click(".recent-session"); await until(() => !!a.$(".artifact-link"));
+  const link = a.$(".artifact-link"); a.click(link); await flush();
+  assert.match(a.$(".download-error").textContent, /fixture unavailable.*重试/);
+  assert.equal(link.hasAttribute("aria-busy"), false);
+  const download = deferred(); a.routes.set("GET " + artifact, () => download.promise);
+  const urls = [], revoked = [];
+  t.mock.method(URL, "createObjectURL", blob => { urls.push(blob); return "blob:fixture-only"; });
+  t.mock.method(URL, "revokeObjectURL", url => revoked.push(url));
+  a.click(link); a.click(link); assert.equal(a.count("GET " + new URL(artifact, origin).pathname), 2);
+  assert.equal(link.getAttribute("aria-busy"), "true");
+  download.resolve(new Response("fixture file", { headers: { "content-type": "text/plain" } })); await flush();
+  assert.equal(a.$(".download-error"), undefined); assert.equal(await urls[0].text(), "fixture file");
+  const fetchCall = a.calls.filter(call => call.url.endsWith(artifact)).at(-1);
+  assert.equal(fetchCall.options.headers.authorization, "Bearer " + token);
+  assert.equal(fetchCall.options.redirect, "error"); assert.equal(fetchCall.options.credentials, "omit");
+  assert.equal(a.$('[download="fixture.txt"]'), undefined);
+  await a.tick(1000); assert.deepEqual(revoked, ["blob:fixture-only"]);
+});
+
+test("app: keepalive evidence/time/actions and failed manual run are not claimed authenticated", async t => {
+  const now = Date.parse("2026-11-14T12:00:00.000Z"); t.mock.method(Date, "now", () => now);
+  const evidence = { state: "ready", verified: true, source: "protected-api:fixture", checkedAt };
+  const offsets = [-1000, 0, 120000, 7200000, 172800000];
+  const history = offsets.map((offset, index) => ({ at: new Date(now - offset).toISOString(), trigger: ["startup", "timer", "api", "fixture", "api"][index], durationMs: 4, services: { learnx: "ready" }, serviceEvidence: index === 0 ? { learnx: evidence } : {}, actions: [{ action: "skipped", service: "cloud" }, { action: "restore", service: "learnx", ok: true }, { action: "restore", service: "hetang", ok: false, code: "FIXTURE_TIMEOUT" }] }));
+  history.push({ at: "invalid", services: {}, actions: [] });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: true, intervalMs: 60000, restoreExpired: true, lastRunAt: checkedAt, nextRunAt: checkedAt, history }, "POST /api/keepalive/run": { ok: false, error: { message: "fixture keepalive failed" } } } });
+  a.nav("services"); await flush();
+  assert.equal(a.all(".timeline-item").length, 6);
+  assert.equal(a.$(".timeline-item").dataset.ok, "good"); assert.equal(a.all(".timeline-item")[1].dataset.ok, "bad");
+  for (const text of ["刚刚", "2 分钟前", "2 小时前", "2 天前", "时间未知", "过期但未恢复", "恢复请求已完成", "FIXTURE_TIMEOUT", "无服务状态"]) assert.ok(a.$(".timeline").textContent.includes(text), text);
+  a.click(a.button("立即自检")); await flush(); assert.match(a.$("#toast").textContent, /fixture keepalive failed/);
+  assert.equal(a.button("立即自检").disabled, false);
+  a.routes.set("POST /api/keepalive/run", { ok: true, enabled: true, intervalMs: 60000, restoreExpired: false, history: [] });
+  a.click(a.button("立即自检")); await flush(); assert.match(a.$(".card").textContent, /只记录不恢复.*还没有自检记录/);
+  assert.match(a.$("#toast").textContent, /自检已完成/);
+});
+
+test("app: pairing deeplink strips URL secrets, waits fake clock then redeems code", async t => {
+  const a = await app(t, { paired: false, href: origin + "/?code=123456&unrelated=removed", routes: { "POST /api/pair/redeem": { ok: true, token } } });
+  assert.equal(a.window.location.search, ""); assert.equal(a.$("#pair-code").value, "123456");
+  assert.equal(a.count("POST /api/pair/redeem"), 0);
+  await a.tick(119); assert.equal(a.count("POST /api/pair/redeem"), 0);
+  await a.tick(1); await until(() => !!a.$("#composer")); assert.equal(a.count("POST /api/pair/redeem"), 1);
+});
+
+test("app: refresh state exposes connection failure and successful retry restores service controls", async t => {
+  const a = await app(t);
+  a.routes.set("GET /api/meta", { ok: false, error: { message: "fixture refresh offline" } });
+  a.click("#refresh"); await flush();
+  assert.equal(a.$("#account").textContent, "服务连接失败");
+  assert.match(a.$(".topbar-meta .action-feedback").textContent, /状态刷新失败.*fixture refresh offline/);
+  a.routes.set("GET /api/meta", meta()); a.click("#refresh"); await flush();
+  assert.equal(a.$("#account").textContent, "服务运行中");
+  assert.match(a.$(".topbar-meta .action-feedback").textContent, /状态已更新/);
+  assert.equal(a.$("#refresh").disabled, false);
+  await a.tick(1600); assert.equal(a.$(".topbar-meta .action-feedback"), undefined);
+});
+
+test("app: width storage failure and Escape/blur pointer recovery keep controls usable", async t => {
+  const a = await app(t);
+  const handle = a.$('.chat-resize-handle[data-edge="left"]');
+  a.localStorage.setItem = () => { throw new Error("fixture quota"); };
+  a.input("#chat-width-range", "900"); a.event("#chat-width-range", "change");
+  assert.match(a.$("#chat-width-error").textContent, /保存会话宽度失败/);
+  a.event(handle, "pointerdown", { button: 0, pointerId: 3, clientX: 200 });
+  a.event(a.document, "pointermove", { pointerId: 3, clientX: 180 });
+  a.event(a.document, "keydown", { key: "Escape" });
+  assert.equal(a.$("#chat-width-range").value, "900");
+  assert.equal(a.document.body.classList.contains("chat-resizing"), false);
+  a.event(handle, "pointerdown", { button: 0, pointerId: 4, clientX: 200 });
+  a.event(a.document, "pointermove", { pointerId: 4, clientX: 190 });
+  a.event(a.window, "blur"); assert.equal(a.document.body.classList.contains("chat-resizing"), false);
+  a.click("#chat-width-reset"); assert.equal(a.$("#chat-width-reset").disabled, true);
+});

@@ -78,14 +78,17 @@ cd mobile/harmony
 
 编译通过后仍有 15 条 WARN，主要是 `Function may throw exceptions`（`preferences` 调用未包 try/catch）与 `getContext` 已废弃。它们不阻塞构建，但真机验收前建议改用 `this.getUIContext()` 并把偏好读写包进 try/catch。
 
-## 真机验证：当前被硬阻塞
+## 真机验证：设备已连通，开发签名暂缓
 
-```
-> hdc list targets
-[Empty]
-```
+2026-11-15 经用户授权，通过 SSH 连接 ZC_LAPTOP，使用笔记本 DevEco Studio 的 HDC 3.2.0f 连接 USB 华为 Mate 60 Pro：
 
-没有任何 HarmonyOS 设备连接，也没有创建过模拟器实例（`%USERPROFILE%\.Huawei\Emulator` 不存在，`tools\emulator` 只是 QEMU 可执行文件，无系统镜像）。要真正验证 ArkWeb 渲染与深链唤起，需要：
+- `hdc list targets -v` 返回 USB Connected，Windows HDC Interface 状态正常。
+- 设备报告 API 26、`OpenHarmony-7.0.0.111`；这些是设备参数回读，不等同于应用运行验收。
+- 将本机现有未签名 HAP（48,530 字节）传到笔记本独立目录；两端 SHA-256 均为 `84da57f7c9fbfb813571bce9f1c9a5f96fddc65cf27cebcffaae3159ff2e79b8`。
+- 对明确的该设备执行一次标准 `hdc install -r`，返回 **`9568320 — no signature file`**。尚未安装应用，未进行配对、ArkWeb、深链或持久化运行测试。
+- 已在笔记本 `D:\code\thu-campus-mcp\.local\harmony-device-20261115\project` 准备独立工程（未覆盖其旧仓库，也未读取个人应用数据）。需在 DevEco 的 Signing Configs 中配置开发签名；用户本轮选择暂时无法完成签名，因此实机测试暂停在这里。
+
+完成开发签名后才能继续实际运行验证。此前本机也没有创建过模拟器实例；不把浏览器窄屏测试当作手机测试。后续可采用：
 
 1. 一台真机开启「开发者模式 + USB 调试」，或
 2. 在 DevEco Studio 里创建模拟器并下载系统镜像（需登录华为账号，且依赖 Hyper-V/WHPX）。

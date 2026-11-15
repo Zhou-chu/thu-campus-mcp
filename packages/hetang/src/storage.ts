@@ -13,12 +13,25 @@ import lockfile from "proper-lockfile";
 import { RainError } from "./types.js";
 export const digest = (data: string | Uint8Array) =>
   createHash("sha256").update(data).digest("hex");
+/**
+ * 去掉首尾的点与空格。
+ *
+ * 原实现是 /^[. ]+|[. ]+$/g：尾部那段 `[. ]+$` 在长后缀上会逐字符回溯，
+ * 输入变长时是超线性的（Sonar typescript:S8786）。
+ * 这里改成两端各扫一遍，O(n)，结果与正则完全一致。
+ */
+function stripEdgeDotsAndSpaces(input: string): string {
+  let start = 0;
+  let end = input.length;
+  while (start < end && (input[start] === "." || input[start] === " ")) start++;
+  while (end > start && (input[end - 1] === "." || input[end - 1] === " "))
+    end--;
+  return input.slice(start, end);
+}
 export function safeSegment(input: string): string {
-  let value = input
-    .normalize("NFC")
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
-    .replace(/^[. ]+|[. ]+$/g, "")
-    .replace(/^_+/, "_");
+  let value = stripEdgeDotsAndSpaces(
+    input.normalize("NFC").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_"),
+  ).replace(/^_+/, "_");
   if (!value) value = "_";
   if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value))
     value = "_" + value;

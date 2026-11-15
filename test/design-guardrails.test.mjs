@@ -23,11 +23,24 @@ test("样式表里没有脱离变量的硬编码颜色", () => {
   assert.deepEqual(leftovers, [], `发现硬编码色值：${leftovers.join(", ")}`);
 });
 
-test("每个用到的 CSS 变量都有定义", () => {
-  const defined = new Set([...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
-  const used = new Set([...css.matchAll(/var\((--[a-z0-9-]+)/g)].map((m) => m[1]));
-  const missing = [...used].filter((name) => !defined.has(name));
-  assert.deepEqual(missing, [], `未定义的变量：${missing.join(", ")}`);
+function missingVariables(source) {
+  const defined = new Set([...source.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+  // CSS var()允许未定义变量具有fallback，包括空fallback；嵌套引用仍须逐一检查。
+  const missing = [...source.matchAll(/var\(\s*(--[a-z0-9-]+)\s*([,)])/g)]
+    .filter(([, name, separator]) => !defined.has(name) && separator !== ",")
+    .map(([, name]) => name);
+  return [...new Set(missing)];
+}
+
+test("每个用到的 CSS 变量都有定义或合法fallback", () => {
+  const missing = missingVariables(css);
+  assert.deepEqual(missing, [], `未定义且无fallback的变量：${missing.join(", ")}`);
+});
+
+test("CSS变量守卫支持fallback但不放过缺失的嵌套引用", () => {
+  assert.deepEqual(missingVariables(":root { --width: 1440px; } .chat { width: var(--dynamic, var(--width)); color: var(--optional,); }"), []);
+  assert.deepEqual(missingVariables(".chat { width: var(--dynamic, var(--missing)); color: var(--typo); }"), ["--missing", "--typo"]);
+  assert.deepEqual(missingVariables(".chat { width: var( --dynamic , calc(100% - 2px)); }"), []);
 });
 
 test("间距阶与断点是完整的一套", () => {
@@ -54,7 +67,13 @@ test("静态资源版本号来自单一占位符，不硬编码", async () => {
   assert.match(sw, /__ASSET_VERSION__/, "service worker 的资源列表也要走占位符");
   for (const [name, content] of [["index.html", html], ["preview.html", preview], ["sw.js", sw]])
     assert.ok(!/\?v=\d+\.\d+\.\d+/.test(content), `${name} 里不应再写死版本号`);
-  assert.match(html, /content="#f4f3f0"/, "主题色应跟纸色一致");
+  for (const [mode, selector] of [["light", /:root\s*\{([^}]+)\}/], ["dark", /:root\[data-theme="dark"\]\s*\{([^}]+)\}/]]) {
+    const paper = css.match(selector)?.[1].match(/--paper:\s*(#[0-9a-f]+)\s*;/i)?.[1];
+    const meta = [...html.matchAll(/<meta\b[^>]*name="theme-color"[^>]*>/g)]
+      .find(([tag]) => tag.includes(`prefers-color-scheme: ${mode}`))?.[0];
+    assert.ok(paper, `${mode}主题缺少纸色令牌`);
+    assert.equal(meta?.match(/content="([^"]+)"/)?.[1], paper, `${mode}主题色应跟当前纸色一致`);
+  }
 });
 
 test("设计目录页与主应用同源、无内联脚本", () => {

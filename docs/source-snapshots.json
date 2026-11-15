@@ -68,16 +68,16 @@
         "reason": "Bundle module guide"
       },
       "src/storage.ts": {
-        "sha256": "3e592c0d2a0a7e330af93c2be3c5f6901d97a332d6ba3427fe9842a29d8be2e9",
-        "reason": "Bounded Windows atomic rename recovery for concurrent status readers exposed by Node22 CI"
+        "sha256": "2e0bc27b8b00eefcf54c69e082e0afa79de6e0e8b1e53ddc5fc383de8e2ea436",
+        "reason": "Bounded Windows atomic rename recovery for concurrent status readers exposed by Node22 CI；Sonar S8786：线性文件名清理，保留Windows保留名与目录行为"
       },
       "package.json": {
         "sha256": "b433baad2ba3ef8f73945d663c039ee21701c16398386a2d7cb6f65a238bafc4",
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/auth.ts": {
-        "sha256": "951a3eac632fedd3dc37927666a966c04953b7a495434b04641069ecab801ff6",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "d4107533b40698771515ef8dce86ee18ccf0ce6880fc5b303e497f8a3a0bbdf1",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；Sonar S4036：改用共享固定绝对路径的系统程序解析，保留原生登录及DPAPI契约"
       },
       "src/browser-auth.ts": {
         "sha256": "d6d14fdf9563c76a9a6dd6a7fa1532b7de6d380d3b067e4a179a6427f3a85f0f",
@@ -98,6 +98,18 @@
       "src/server.ts": {
         "sha256": "15564d90b95762dadb159a324b947bebd61f57014b446697e2586f39cf86e132",
         "reason": "1.5：受保护网络学堂认证探针，不把配置当登录证据"
+      },
+      "src/install.ts": {
+        "sha256": "0cc4dbc2a322bc69b1bff0591e3759bea44900938c18eb52253d96ab5f75b95d",
+        "reason": "Sonar S8786：线性trimEnd替换尾空白回溯正则，保留TOML合并行为"
+      },
+      "src/submission.ts": {
+        "sha256": "d9b65d1a626018e40081e7cd3827648ffffd037610cf64468f66fb4c4e1a86f5",
+        "reason": "Sonar S7773：使用标准Number.NaN，不改变提交数据契约"
+      },
+      "vitest.config.ts": {
+        "sha256": "062e63dcb3d20576748d4cd956c78445b3d1eabd58acecebb5a154726e709517",
+        "reason": "真实V8覆盖率采集全部src/**/*.ts，输出可映回源码的JSON与LCOV；不筛除未测生产源码"
       }
     }
   },
@@ -154,8 +166,8 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；1.5：注册私有工作区后端实例与状态支持"
       },
       "src/auth.ts": {
-        "sha256": "9ef06de5989984cccc18ebd7ee24dcdcf9ea56a8f7ab2febab78b5c45996c12e",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "29a12922d55cb0714cb0584fcceedc606a900dd12a555f7b223342f38aaf6b8c",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；Sonar S4036：改用共享固定绝对路径的系统程序解析，保留原生登录及DPAPI契约"
       },
       "src/server.ts": {
         "sha256": "2e012c7f348cd0dff0d60a41cbe4ff2bab753e26d1c4a1b22e4255dfb2eb7dae",
@@ -168,6 +180,18 @@
       "test/smoke.mjs": {
         "sha256": "e94482305d6a0962d6e0afb12d7c2700fa3259869a2290ce4fd9c1307fdda386",
         "reason": "1.5：验证20项云盘工具及受限工作区注册"
+      },
+      "src/install.ts": {
+        "sha256": "46196659e710e1d000d09fb5ebcc55a34bd1669d3b7883b9e83c862703b11dbf",
+        "reason": "Sonar S8786：线性trimEnd替换尾空白回溯正则，保留TOML合并行为"
+      },
+      "src/storage.ts": {
+        "sha256": "9fb9bde04abc7a6b361fd0aedb8c048b4b0bc2238411a6278f43a1840bf9084e",
+        "reason": "Sonar S8786：线性文件名清理，保留Windows保留名与目录行为"
+      },
+      "vitest.config.ts": {
+        "sha256": "ae0bc36b785655836cd53c606e8cd0c9e7d90db176e9a33ab8a562b8c8774bc5",
+        "reason": "真实V8覆盖率采集全部src/**/*.ts，输出可映回源码的JSON与LCOV；不筛除未测生产源码"
       }
     }
   },
@@ -220,8 +244,8 @@
         "reason": "Resolve bundled cloud CLI relative to workspace"
       },
       "src/install.ts": {
-        "sha256": "198182de3134d334db4654a608cb87065d4fcacc87a763b48883c15c2a090a86",
-        "reason": "Preserve selected cloud state directory in installed rain configuration"
+        "sha256": "1facb7a3014ca45953876e0cad80822984a218d5c104f080bb99b6a82b938b85",
+        "reason": "Preserve selected cloud state directory in installed rain configuration；Sonar S8786：线性trimEnd替换尾空白回溯正则，保留TOML合并行为"
       },
       "package.json": {
         "sha256": "8d24c48f2f1a30a446c70e764814f983506f1ad0a677229038d5484a17189f8c",
@@ -240,12 +264,12 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/auth.ts": {
-        "sha256": "f48cb2626b1772f49ea2f078605c227641d4ab9598c9266b9c6384fcc9575cf0",
-        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
+        "sha256": "dd2255a444f819c6a75d78fe2424efa9c241cbc514a509853387458b55db553a",
+        "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；Sonar S4036：改用共享固定绝对路径的系统程序解析，保留原生登录及DPAPI契约"
       },
       "src/classroom.ts": {
-        "sha256": "d730d24c76a1c655a4d37384aa5a0e50398d1a8dc7e1113d412bf2659701cf45",
-        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+        "sha256": "11f9a34d30f8c5b146f08963896b2dcf6e9e09b8c9da87bb6c11d2bd2d15f919",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage.；Sonar S2871：显式UTF-16码元比较器，保持原字符串排序与摘要字节不变"
       },
       "src/client.ts": {
         "sha256": "20a212ab09a4f01d7a2ae6c0b3531e1f96a874af18900a48b4ebb829dbb4b9aa",
@@ -276,20 +300,32 @@
         "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/jobs.ts": {
-        "sha256": "3583ce5484ddcb481bbd719f2a7e9ed4574ed7993d664be5028a3a77c6a4919a",
-        "reason": "Prepared-answer scheduling and reviewed cancellation preservation/post-intent auth and lesson revalidation."
+        "sha256": "1c5484effdcf0780c32228f03a1eb7ec4f26977cfb85cbb7467bcbc906821ea1",
+        "reason": "Prepared-answer scheduling and reviewed cancellation preservation/post-intent auth and lesson revalidation.；Sonar S2871：显式UTF-16码元比较器，保持监听器缓存键顺序不变"
       },
       "src/mock.ts": {
         "sha256": "18a2b1fede277d5f358fb2592f96ac821135eb474a7d4961cd8d15eb19f961ce",
         "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/storage.ts": {
-        "sha256": "d1d417d440eef9fb2c26f4fda8b568dd995a5ccb1ad3f91ebf3c46232e7136dc",
-        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+        "sha256": "5cf2799afb85dba2b434b25864ae1e28a0a0b47f7c0243b32efd4c0b2c9cc6e1",
+        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage.；Sonar S8786：线性文件名清理，保留Windows保留名与目录行为"
       },
       "test/smoke.mjs": {
         "sha256": "6e9a10980bf56d2d21e3071c65ced4988a1acce7d44a09e79e8074f3a1fa03de",
         "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
+      },
+      "src/cloud.ts": {
+        "sha256": "3d0606d141070992a97869cbe26e51f957951c0d50f003a2889d6671485a8c48",
+        "reason": "Sonar S8786：线性清理末尾斜杠，保留URL内部路径"
+      },
+      "src/resources.ts": {
+        "sha256": "507ce442f66754f3b09464564dfff95456384fdbccb71d4075e0dff262f0af05",
+        "reason": "Sonar S7773：标准Number解析；说明仅mock分支公网判定夹具不发起DNS或网络请求"
+      },
+      "vitest.config.ts": {
+        "sha256": "db98bd0a2e222d0fd6d19142130e41f042aafbd5c16041659b7fa6b1ef746c5f",
+        "reason": "真实V8覆盖率采集全部src/**/*.ts，输出可映回源码的JSON与LCOV；不筛除未测生产源码"
       }
     }
   }

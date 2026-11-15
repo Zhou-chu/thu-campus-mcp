@@ -19,7 +19,7 @@ export function createChatWidthUI() {
   function available() {
     const view = $("#view");
     const style = getComputedStyle(view);
-    return Math.max(0, view.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+    return Math.max(0, view.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight));
   }
   function refresh() {
     const desktop = innerWidth >= 900;

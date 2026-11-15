@@ -1,0 +1,20 @@
+# 直接依赖（人工维护）。改这里，然后用下面命令重新生成带哈希的完整锁文件：
+#   uv pip compile sandbox/requirements.in --generate-hashes --only-binary :all: \
+#       --python-version 3.12 --python-platform x86_64-unknown-linux-gnu \
+#       -o sandbox/requirements.txt
+# 目标平台必须与镜像一致（python:3.12.12-slim-bookworm = CPython 3.12 / linux amd64），
+# 否则会解析出不匹配的 wheel 哈希。安装阶段只允许 wheel，不执行任何 setup 脚本。
+numpy==2.3.5
+scipy==1.16.3
+pandas==2.3.3
+scikit-learn==1.7.2
+matplotlib==3.10.7
+reportlab==4.4.5
+pypdf==6.3.0
+nbformat==5.10.4
+nbclient==0.10.2
+ipykernel==7.1.0
+openpyxl==3.1.5
+python-docx==1.2.0
+python-pptx==1.0.2
+pillow==12.0.0

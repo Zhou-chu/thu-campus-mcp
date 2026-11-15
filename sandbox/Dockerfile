@@ -16,11 +16,16 @@ ENV UV_LINK_MODE=copy \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends fonts-noto-cjk fonts-dejavu-core libgomp1 \
     && rm -rf /var/lib/apt/lists/*
+# 依赖安装走 requirements.txt：它由 requirements.in 编译而来，逐条锁定完整传递依赖并带 sha256。
+#   --only-binary :all:  禁止源码分发包，任何 setup.py 都不会在构建期执行；
+#   --require-hashes     强制校验每个 wheel 的哈希，索引被投毒或版本漂移会让构建直接失败。
+# 锁文件只含 linux/amd64 + CPython 3.12 的 wheel，与基础镜像一致；换基础镜像必须重新编译。
 COPY sandbox/requirements.txt /opt/sandbox/requirements.txt
 RUN uv venv --python /usr/local/bin/python /opt/venv \
-    && uv pip install --python /opt/venv/bin/python --no-cache -r /opt/sandbox/requirements.txt \
-    && mkdir /workspace \
-    && chmod 1777 /workspace
+    && uv pip install --python /opt/venv/bin/python --no-cache \
+        --require-hashes --only-binary :all: \
+        -r /opt/sandbox/requirements.txt \
+    && install -d -o 65532 -g 65532 -m 0755 /workspace
 WORKDIR /workspace
 USER 65532:65532
 ENTRYPOINT ["/opt/venv/bin/python"]

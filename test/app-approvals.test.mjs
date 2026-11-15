@@ -20,9 +20,14 @@ test("拒绝会给出 denied 原因", async () => {
   assert.deepEqual(await pending.promise, { allow: false, reason: "denied" });
 });
 
-test("超时自动拒绝，不把回合吊死", async () => {
+test("超时自动拒绝，不把回合吊死", async (t) => {
+  // 生产定时器会 unref；用可控时钟验证边界，不依赖测试进程恰好有其他存活句柄。
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const approvals = createApprovals({ timeoutMs: 30 });
   const pending = approvals.register("call_3", { name: "rain_submit_answer" });
+  t.mock.timers.tick(29);
+  assert.equal(approvals.list().length, 1);
+  t.mock.timers.tick(1);
   const decision = await pending.promise;
   assert.equal(decision.allow, false);
   assert.equal(decision.reason, "timeout");

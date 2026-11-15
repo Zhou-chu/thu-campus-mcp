@@ -2,11 +2,23 @@ import type { Page } from "playwright-core";
 
 export type AutofillStep = "clicked" | "waiting" | "verification-required" | "none";
 
+/**
+ * 自动填充的默认限流参数。
+ *
+ * 原来直接写成参数默认值里的对象字面量：那个对象是跨调用共享的可变实例，
+ * 任一次调用改了它就会影响后续调用（Sonar typescript:S7737）。
+ * 这里提成冻结常量，默认行为不变。
+ */
+const defaultLimits: { maxSubmits: number; minGapMs: number } = Object.freeze({
+  maxSubmits: 2,
+  minGapMs: 2000,
+});
+
 /** Use only browser-saved credentials; return no password data to Node. */
 export async function tryBrowserAutofillLogin(
   page: Page,
   state: { submits: number; lastClick: Map<string, number> },
-  limits = { maxSubmits: 2, minGapMs: 2000 },
+  limits: { maxSubmits: number; minGapMs: number } = defaultLimits,
   expectedAccount = "",
 ): Promise<AutofillStep> {
   let url: URL;

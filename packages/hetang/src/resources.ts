@@ -84,7 +84,7 @@ function publicAddress(address: string) {
     );
   }
   if (isIP(address) === 6) {
-    const first = parseInt(address.split(":")[0], 16);
+    const first = Number.parseInt(address.split(":")[0], 16);
     return (
       (first & 0xe000) === 0x2000 &&
       !address.toLowerCase().startsWith("2001:db8:")
@@ -469,6 +469,9 @@ export async function downloadLesson(
               check,
               cfg.mock
                 ? {
+                    // 仅 mock 分支：这个地址只交给 SSRF 守卫做"是否公网"判定，
+                    // 同一分支的 fetcher 也被替换成内存里的一张 1x1 PNG，
+                    // 不会真的解析 DNS 或对外发起连接（Sonar typescript:S1313 的边界证据）。
                     resolve: async () => [{ address: "8.8.8.8", family: 4 }],
                     fetcher: async () =>
                       new Response(

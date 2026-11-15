@@ -66,6 +66,31 @@
 
 文档提交之后的最新状态以 [CI 工作流](https://github.com/Zhou-chu/thu-campus-mcp/actions/workflows/ci.yml) 为准。旧失败运行保留，修复后的提交不通过重跑旧代码来掩盖问题。
 
+## SonarQube 与统一覆盖率接线（2026-11-15）
+
+- CI 新增 main 专用 `sonar` job（`needs: verify`，仅 `refs/heads/main` 的 `push` 或 `workflow_dispatch`），令牌只存 GitHub Actions Secret，且只注入扫描那一个 step；job 权限只有 `contents: read`、`actions: read`。本批切换 Sonar 侧 Automatic analysis 为关闭，待对应提交的真实 CI 分析复核，不将本地测试或旧 analysis 当作新扫描结果。机制与入口见 [SonarQube 接入](sonarqube.md)。
+- 覆盖率改为一次运行产出两套报告：`coverage/unit/`（Node `node:test` 单测快照 + 3 个 SDK 的 vitest）与 `coverage/`（再叠加 4 个真实浏览器 E2E 与 `webui` 浏览器侧命中）。两套都按 8 个源码根统计，未被命中的生产文件由 `zeroFile` 补 0，没有删分母；`npm run coverage:check` 对两套分别校验 lines / statements / branches / functions ≥ 90。
+- 首轮实测（本机 `npm run test:coverage`）：unit 115 个文件、行 11,359/17,112 = 66.38%、语句 64.09%、函数 70.79%、分支 72.45%；combined 行 13,189/17,112 = 77.07%、语句 73.59%、函数 71.64%、分支 74.59%。**四项全部低于 90%，门槛未达成**，两套 manifest 均为 `collectionComplete: false`。
+- 不完整的原因：`test/design-guardrails.test.mjs` 有 3 个设计守卫用例失败，分别是 CSS 六色硬编码、`--chat-width` fallback、metaTheme 旧期待；因此这批产物会被 CI 的完整性校验拒绝，不会进入 Sonar 扫描。本轮源码冻结，修守卫与新补单测放另一批，首轮数字按原样留档，不用重跑结果替换。
+- 同轮通过项：3 个 SDK 的 vitest 共 178 项通过；4 个真实浏览器 E2E 全过（`e2e-web`、`e2e-streaming`、`e2e-workspace`、`e2e-auth-workspace`），其中 `e2e-web` 用 `http://evil.invalid` 验证页面不会把旧 `Authorization` 发往外部地址。
+- 静态检查（本机，不是 Sonar 口径）：源码审计 373 个文件、738 个历史 blob，findings 为空；项目自定义 smell 门槛固定在 11 个模块、272 个函数，其中 265 个函数无阈值违规、评分 97.43、无硬上限违规。两者都只覆盖各自写死的范围，不替代 SonarQube 评分或人工审查。
+- 历史各批的单批模块 V8 覆盖率（审批卡 60/60、侧栏 52/52 等）口径为单批纯逻辑模块，与本次 runtime+SDK 全范围**不可比**，不作为整体覆盖率或达标证据。
+- 依赖：许可记录 264 条（[dependency-licenses.json](dependency-licenses.json)）；依赖审计由维护者执行并报告 0 漏洞，本文档未复跑该项网络审计。
+
+## 移动端（Android 已构建，HarmonyOS 不在 CI 门禁内）
+
+- Android 纯 JVM 单测 29 个用例 / 0 失败（`HostPolicyTest`，不联网、不做 DNS 解析、不需要模拟器），debug 与 release 构建均真实通过，release 包 `apksigner verify` 通过；证据与产物尺寸见 [Android 工程说明](../mobile/android/README.md)。**未做真机验证**，手机实机验收仍暂停。
+- CI 的 `android` job 跑 `:app:testDebugUnitTest :app:assembleDebug`，远端结果未取；发布门禁 `verify-clients --strict --require webui,desktop,android,runtime` 不含 HarmonyOS，因为 CI 无 DevEco 工具链，四端中的 HarmonyOS 只能在本机验证。
+
+## 2026-11-15 最终补测批（本机）
+
+- `test:coverage` 与原 `coverage:check 90` 均退出 0。unit：行 92.83%、语句 90.76%、函数 92.26%、分支 90.58%；combined：93.20% / 91.08% / 92.32% / 91.60%。统计范围仍为 115 个 runtime+SDK 文件，不等于 Sonar 全源码范围。
+- 两套 manifest 完整、errors 为空，均保留 resources.ts 的一个 V8 负计数保守归零警告。归并不修改原始共享输入；构建、SDK 全量、原生单测、4 个真实浏览器 E2E 全部阶段退出 0。
+- HTTP/前端/审批时钟/采集器分组 71/71 通过；`typecheck`、264 条许可、来源审计、`npm audit`（0 漏洞）通过。固定 11 核心模块的自定义 smell 为 97.43（265/272，无硬违规），不是 Sonar 评分。
+- 隔离模拟预览的桌面 1707×876 与窄屏 398×806 无横向溢出；审批从待审批到允许并得到模拟工具完成回执。不接真实账号、不调用计费模型。
+- 鸿蒙手机通过笔记本 SSH/HDC 已连接，但安装未签名包返回 `9568320: no signature file`；用户暂缓开发签名，因此尚无应用运行验收。详见 [Harmony 工程说明](../mobile/harmony/README.md)。
+- Sonar Automatic analysis 已关闭；本地通过不等于远端 CI 或 Sonar 通过，本批提交后的结果以精确 revision 为准。
+
 ## 当前限制
 
 真实认证只支持 Windows DPAPI，新机器需要本机登录。CI 不包含学校凭据。

@@ -9,6 +9,15 @@ import { makeClient } from "./factory.js";
 import type { RainClient } from "./client.js";
 import { connectLesson } from "./live.js";
 import { joinOnce } from "./classroom.js";
+/**
+ * 按 UTF-16 码元比较，等价于不带比较器的 Array#sort。
+ *
+ * 这两个 id 数组只用来拼监听器的缓存键（digest(JSON.stringify(...)))，
+ * 换成本地化比较或数字比较都会改变 key、让既有 monitor-catalog 全部失效，
+ * 所以这里显式声明码元序（Sonar typescript:S2871），行为保持不变。
+ */
+const compareCodeUnits = (a: string, b: string): number =>
+  a < b ? -1 : a > b ? 1 : 0;
 export type JobKind = "monitor" | "download" | "archive" | "scheduled-answer";
 export interface Job {
   id: string;
@@ -358,8 +367,8 @@ export async function startMonitor(
   const key = digest(
     JSON.stringify([
       generation,
-      [...(options.lessonIds || [])].sort(),
-      [...(options.classroomIds || [])].sort(),
+      [...(options.lessonIds || [])].sort(compareCodeUnits),
+      [...(options.classroomIds || [])].sort(compareCodeUnits),
       Boolean(options.autoJoin),
     ]),
   );

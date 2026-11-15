@@ -162,7 +162,7 @@ async function main() {
     for (const width of [390, 1280, 1536, 1920, 2560]) {
       await page.setViewportSize({ width, height: width === 390 ? 640 : 1000 });
       await page.locator(".rich h2").scrollIntoViewIfNeeded();
-      const actual = await page.evaluate(() => { const font = selector => parseFloat(getComputedStyle(document.querySelector(selector)).fontSize); const r = document.querySelector("#composer").getBoundingClientRect(); return { width: innerWidth, body: font(".rich p"), tool: font(".tool-name"), state: font(".tool-state"), sync: font(".job-storage-state"), button: font("#chat-send"), overflow: document.documentElement.scrollWidth > innerWidth, reachable: r.top >= 0 && r.bottom <= innerHeight }; });
+      const actual = await page.evaluate(() => { const font = selector => Number.parseFloat(getComputedStyle(document.querySelector(selector)).fontSize); const r = document.querySelector("#composer").getBoundingClientRect(); return { width: innerWidth, body: font(".rich p"), tool: font(".tool-name"), state: font(".tool-state"), sync: font(".job-storage-state"), button: font("#chat-send"), overflow: document.documentElement.scrollWidth > innerWidth, reachable: r.top >= 0 && r.bottom <= innerHeight }; });
       const expected = width < 900 ? [16,16,14,15] : width < 1600 ? [18,16,15,16] : [20,17,16,17];
       check(width + "px真实长消息、双状态与输入区字号可达", [actual.body,actual.tool,actual.state,actual.button].every((value, index) => value === expected[index]) && actual.sync === expected[2] && !actual.overflow && actual.reachable);
       sizes.push(actual); await page.screenshot({ path: path.join(screenshotDir, `cloud-light-${width}.png`) });

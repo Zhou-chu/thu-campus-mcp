@@ -3,6 +3,13 @@ import { RainClient, type RequestGate } from "./client.js";
 import type { Config } from "./config.js";
 import { scopedWrite } from "./scoped-write.js";
 import { id, milliseconds } from "./protocol.js";
+/**
+ * 按 UTF-16 码元比较，等价于不带比较器的 Array#sort。
+ * 显式写出比较器是为了说明这里要的是字符串序、不是数字序（Sonar typescript:S2871），
+ * 同时保持既有顺序不变——答案选项顺序会影响回填与卡片展示。
+ */
+const compareCodeUnits = (a: string, b: string): number =>
+  a < b ? -1 : a > b ? 1 : 0;
 export function normalizeAnswer(q: Question, value: unknown): unknown {
   if (q.type === "unknown")
     throw new RainError("UNSUPPORTED_QUESTION", "无法识别题型，未提交。");
@@ -25,7 +32,9 @@ export function normalizeAnswer(q: Question, value: unknown): unknown {
   )
     throw new RainError("ANSWER_FORMAT", "答案需要非空字符串数组。");
   if (q.type === "blank") return raw.map((v) => v.trim());
-  const values = [...new Set(raw.map((v) => v.trim().toUpperCase()))].sort();
+  const values = [
+    ...new Set(raw.map((v) => v.trim().toUpperCase())),
+  ].sort(compareCodeUnits);
   if (
     (q.type === "single" && values.length !== 1) ||
     values.some((v) => !q.options.some((o) => o.key === v))

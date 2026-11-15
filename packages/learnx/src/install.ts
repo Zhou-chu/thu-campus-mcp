@@ -29,6 +29,18 @@ export function mergeJson(text: string, entry: Entry, format: 'json' | 'harness'
   }
   return JSON.stringify(data, null, 2) + '\n';
 }
+/**
+ * 去掉末尾空白。
+ *
+ * 原实现是 /\s*$/：`\s*` 在每一处起始位置吃满空白再回溯去找 `$`，
+ * 长空白后缀下是超线性的（Sonar typescript:S8786）。
+ * 这里从尾部逐字符判断，O(n)；逐字符的 \s 判定与 `\s*` 等价。
+ */
+function trimTrailingWhitespace(input: string): string {
+  let end = input.length;
+  while (end > 0 && /\s/.test(input[end - 1])) end--;
+  return input.slice(0, end);
+}
 export function mergeToml(text: string, entry: Entry, uninstall: boolean): string {
   const data = parse(text) as any; const old = data.mcp_servers?.learnx; assertOwner(old, entry);
   const desired = { ...old, ...entry, env: { ...old?.env, ...entry.env }, startup_timeout_sec: old?.startup_timeout_sec ?? 30, tool_timeout_sec: old?.tool_timeout_sec ?? 120 };
@@ -42,7 +54,7 @@ export function mergeToml(text: string, entry: Entry, uninstall: boolean): strin
   }
   let output = kept.join('');
   if (!uninstall) {
-    output = output.replace(/\s*$/, '') + '\n\n' + stringify({ mcp_servers: { learnx: desired } });
+    output = trimTrailingWhitespace(output) + '\n\n' + stringify({ mcp_servers: { learnx: desired } });
   }
   const parsed = parse(output) as any;
   if (!uninstall && !parsed.mcp_servers?.learnx) throw new LearnError('INVALID_CONFIG', '生成的 TOML 未通过校验。');

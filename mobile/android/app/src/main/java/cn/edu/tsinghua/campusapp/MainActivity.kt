@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -16,6 +17,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -53,7 +55,13 @@ class MainActivity : Activity() {
         val savedToken = store.token
         if (savedBase.isNotEmpty() && savedToken.isNotEmpty()) {
             baseInput.setText(savedBase)
-            verifyAndShow(savedBase, savedToken)
+            // 旧版本可能存过公网 http 地址：升级后按新策略重新校验，不放行。
+            if (RuntimeHub.checkBase(savedBase) == null) {
+                verifyAndShow(savedBase, savedToken)
+            } else {
+                store.clear()
+                showPair(getString(R.string.pair_cleartext_blocked))
+            }
         } else {
             showPair()
         }
@@ -88,11 +96,19 @@ class MainActivity : Activity() {
     }
 
     private fun startPair() {
-        val base = baseInput.text.toString().trim().trimEnd('/')
+        val base = RuntimeHub.normalize(baseInput.text.toString())
         val code = codeInput.text.toString().trim()
-        if (!base.startsWith("http://") && !base.startsWith("https://")) {
-            showError(getString(R.string.pair_invalid_base))
-            return
+        // 地址策略统一在 RuntimeHub 判定：https 放行，http 只允许内网/隧道地址。
+        when (RuntimeHub.checkBase(base)) {
+            HostPolicy.BaseProblem.MALFORMED -> {
+                showError(getString(R.string.pair_invalid_base))
+                return
+            }
+            HostPolicy.BaseProblem.CLEARTEXT_NOT_PRIVATE -> {
+                showError(getString(R.string.pair_cleartext_blocked))
+                return
+            }
+            null -> Unit
         }
         if (!Regex("^\\d{6}$").matches(code)) {
             showError(getString(R.string.pair_invalid_code))
@@ -166,14 +182,26 @@ class MainActivity : Activity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
         }
-        val host = runCatching { Uri.parse(base).host }.getOrNull()
         web.webViewClient = object : WebViewClient() {
+            // 主框架导航：同源留在应用内，其它交给系统浏览器。
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val target = request.url.host
-                // 只允许加载配对时记录的主机，其它链接交给系统浏览器。
-                if (target != null && host != null && target == host) return false
-                runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                if (RuntimeHub.requestAllowed(base, request.url)) return false
+                val scheme = request.url.scheme?.lowercase()
+                if (scheme == "http" || scheme == "https") {
+                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                }
                 return true
+            }
+
+            // 子资源请求（XHR / fetch / SSE / img / script）不会被 shouldOverrideUrlLoading 拦住，
+            // 所以这里补同一道白名单：非配对主机的请求直接返回空响应，
+            // 页面脚本无法把令牌或数据发到本机运行时之外的地址。
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest,
+            ): WebResourceResponse? {
+                if (RuntimeHub.requestAllowed(base, request.url)) return null
+                return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
         }
         web.loadUrl("$base/#token=" + Uri.encode(token))

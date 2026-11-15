@@ -5,6 +5,7 @@
  * 不触碰任何真实账号。
  */
 import { spawn } from "node:child_process";
+import { randomInt } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,7 +18,7 @@ function fail(message, detail) {
 }
 async function main() {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-app-smoke-"));
-  const port = 18000 + Math.floor(Math.random() * 2000);
+  const port = randomInt(18000, 20000);
   const env = {
     ...process.env,
     THU_CAMPUS_MOCK: "1",

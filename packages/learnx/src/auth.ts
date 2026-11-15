@@ -1,9 +1,17 @@
 import { spawn } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { systemExecutable } from "@thu-campus/browser";
 import { atomicWrite, digest, withLock } from "./storage.js";
 import { LearnError } from "./types.js";
 import { randomUUID } from "node:crypto";
+/** Windows 自带 PowerShell 相对 %SystemRoot% 的固定位置；不交给 PATH 解析。 */
+const POWERSHELL = path.join(
+  "System32",
+  "WindowsPowerShell",
+  "v1.0",
+  "powershell.exe",
+);
 export interface AuthData {
   account: string;
   username?: string;
@@ -14,16 +22,19 @@ export interface AuthData {
   cookieJar?: Record<string, any>;
   csrfToken?: string;
 }
-function dpapi(input: string, decrypt: boolean): Promise<string> {
+async function dpapi(input: string, decrypt: boolean): Promise<string> {
   if (process.platform !== "win32")
     throw new LearnError(
       "AUTH_PLATFORM",
       "本版本的持久认证使用 Windows DPAPI；请在 Windows 本机执行登录。",
     );
   const script = `Add-Type -AssemblyName System.Security; $s=[Console]::In.ReadToEnd(); $b=[Convert]::FromBase64String($s); $r=[System.Security.Cryptography.ProtectedData]::${decrypt ? "Unprotect" : "Protect"}($b,$null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Convert]::ToBase64String($r))`;
+  const executable = await systemExecutable(POWERSHELL).catch(() => {
+    throw new LearnError("AUTH_STORAGE", "无法启动本机凭据保护组件。");
+  });
   return new Promise((resolve, reject) => {
     const child = spawn(
-      "powershell.exe",
+      executable,
       ["-NoProfile", "-NonInteractive", "-Command", script],
       { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
     );
