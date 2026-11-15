@@ -50,7 +50,9 @@ export function instrumentChromium(chromium, { save, problem = () => { process.e
       return page;
     })();
     replaceMethod(page, "close", original => async (...args) => {
-      try { await stopPage(page); } finally { return original(...args); }
+      let result;
+      try { await stopPage(page); } finally { result = await original(...args); }
+      return result;
     });
     page.on?.("close", () => { if (!state.stopped) void stopPage(page).catch(() => reportProblem("BROWSER_CLOSED_WITHOUT_FLUSH")); });
     return state.ready;
@@ -76,7 +78,9 @@ export function instrumentChromium(chromium, { save, problem = () => { process.e
         const page = await original(...args); await preparePage(page); return page;
       });
       replaceMethod(context, "close", original => async (...args) => {
-        try { await Promise.all(context.pages().map(stopPage)); } finally { return original(...args); }
+        let result;
+        try { await Promise.all(context.pages().map(stopPage)); } finally { result = await original(...args); }
+        return result;
       });
       context.on?.("page", page => { void preparePage(page).catch(() => reportProblem("BROWSER_PAGE_CAPTURE_FAILED")); });
     }
@@ -92,7 +96,9 @@ export function instrumentChromium(chromium, { save, problem = () => { process.e
       await prepareContext(page.context()); await preparePage(page); return page;
     });
     replaceMethod(browser, "close", original => async (...args) => {
-      try { await Promise.all(browser.contexts().flatMap(context => context.pages()).map(stopPage)); } finally { return original(...args); }
+      let result;
+      try { await Promise.all(browser.contexts().flatMap(context => context.pages()).map(stopPage)); } finally { result = await original(...args); }
+      return result;
     });
     await Promise.all(browser.contexts().map(prepareContext));
     return browser;
@@ -100,11 +106,11 @@ export function instrumentChromium(chromium, { save, problem = () => { process.e
   replaceMethod(chromium, "launch", original => async (...args) => prepareBrowser(await original(...args)));
   replaceMethod(chromium, "launchPersistentContext", original => async (...args) => prepareContext(await original(...args)));
 }
-export async function installBrowserCoverage(env = process.env) {
+export async function installBrowserCoverage(env = process.env, loadChromium = async () => (await import("playwright-core")).chromium) {
   const root = env.CAMPUS_COVERAGE_ROOT, directory = env.CAMPUS_COVERAGE_BROWSER_DIR;
   if (!root || !directory || !env.CAMPUS_COVERAGE_MANIFEST) throw new Error("BROWSER_COVERAGE_ENV_REQUIRED");
   const manifest = JSON.parse(await readFile(env.CAMPUS_COVERAGE_MANIFEST, "utf8"));
-  const { chromium } = await import("playwright-core");
+  const chromium = await loadChromium();
   const problem = async code => {
     process.exitCode = 1;
     await mkdir(directory, { recursive: true });

@@ -91,6 +91,15 @@
 - 鸿蒙手机通过笔记本 SSH/HDC 已连接，但安装未签名包返回 `9568320: no signature file`；用户暂缓开发签名，因此尚无应用运行验收。详见 [Harmony 工程说明](../mobile/harmony/README.md)。
 - Sonar Automatic analysis 已关闭；本地通过不等于远端 CI 或 Sonar 通过，本批提交后的结果以精确 revision 为准。
 
+## 2026-11-15 CI实扫与第二批整改
+
+- [CI 43688282359](https://github.com/Zhou-chu/thu-campus-mcp/actions/runs/43688282359)对应943e20e；Node 24全job通过（含原90%门禁、4个真实浏览器E2E、smoke与便携包搬迁验证）。该run的整体结论仍是failure，不写成CI已通过。
+- Node 22失败集中于浏览器测试夹具的原路径/realpath比较；现夹具使用仓库QA目录及精确规范路径，普通浏览器/CLI入口复测退出0；后端排序及关闭通知分组31/31通过。未运行真实PowerShell、Chromium或外部校园请求。
+- Android缺JUnit BOM 5.9.2/5.9.3的.module校验，已按Maven Central原文件、官方SHA256及缓存三方核对后精确补齐。隔离Gradle缓存严格模式debug构建与强制刷新classpath解析均退出0；单测当次为UP-TO-DATE，不冒称29例重新运行。锁文件未变。
+- 首轮Sonar analysis `82a3b79a-c03a-4f9a-9adc-9353bea5306d`精确匹配943e20e，LCOV被真实导入，整体覆盖85.9%、新代码65.3%，CODE_SMELL为0、可维护性A。质量门因新可靠性/安全/覆盖而红；四条误报已分别留证并回读。
+- 扫描器忽略旧sources/tests/test.inclusions参数，首轮测试排除造成分析遗漏。第二批恢复测试分析、额外生成19个scripts文件的真实tooling LCOV；原115个runtime+SDK文件的unit/combined范围及四指标90%阈值不变。测试分类及恢复后的发现必须由下一次实扫确认。
+- 四套报告均加入源码/报告哈希、LCOV清单、结构和重新计算摘要校验；tooling的unit raw快照带逐文件哈希并验证为combined raw的未修改子集。采集器两文件窄测22/22通过；仅三个采集脚本的c8窄测行/语句99.81%、函数98.21%、分支91.52%，不能当19脚本或115文件整体验收。
+
 ## 当前限制
 
 真实认证只支持 Windows DPAPI，新机器需要本机登录。CI 不包含学校凭据。

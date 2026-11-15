@@ -1,20 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from "node:fs/promises";
 import {
-  ROOT, SOURCE_ROOTS, E2E_SCRIPTS, isProductionPath, relativeSource, snapshotSources, sourceChanges,
+  ROOT, SOURCE_ROOTS, TOOLING_ROOTS, E2E_SCRIPTS, isProductionPath, relativeSource, snapshotSources, sourceChanges,
   hashSource, zeroFile, convertBrowserRecord, combineCoverage, writeReports, checkThreshold,
-  coverageMain, collectCoverage, nativeCoverageArgs, localCli, npmCli, runNode,
+  coverageMain, collectCoverage, collectToolingCoverage, verifyReports, nativeCoverageArgs, localCli, npmCli, runNode,
 } from "../scripts/coverage.mjs";
 import { nativePlan, nativeMain, nativeTestFiles, snapshotNativeUnit } from "../scripts/coverage-native.mjs";
 import { webSourceForUrl, saveBrowserEntries, instrumentChromium, installBrowserCoverage } from "../scripts/coverage-browser.mjs";
 
 async function fixture(t) {
-  const root = await mkdtemp(path.join(tmpdir(), "campus-coverage-fixture-"));
+  const temporary = path.join(ROOT, ".local/qa-temp"); await mkdir(temporary, { recursive: true });
+  const root = await mkdtemp(path.join(temporary, "campus-coverage-fixture-"));
   assert.equal(path.isAbsolute(root), true); assert.match(path.basename(root), /^campus-coverage-fixture-/);
   t.after(() => rm(root, { recursive: true, force: true }));
   return root;
@@ -36,7 +36,7 @@ test("全生产范围包含八个根，排除的仅为构建/第三方/测试与
   const wanted = SOURCE_ROOTS.map((directory, index) => `${directory}/entry${index}.${directory.endsWith("/src") ? "ts" : "mjs"}`);
   for (const file of wanted) await put(root, file, "export const value = 1;\n");
   for (const file of ["runtime/x.mjs", "lib/vendor/x.js", "lib/runtime/x.js", "webui/node_modules/x.js", "desktop/test/x.test.mjs", "packages/browser/test/x.mjs", "packages/learnx/dist/x.js", "packages/hetang/src/x.d.ts", "packages/thu-cloud/src/x.test.ts", "scripts/e2e-web.mjs"]) { await put(root, file, "fixture"); assert.equal(isProductionPath(file), false); }
-  const manifest = await snapshotSources(root); assert.deepEqual(Object.keys(manifest.files), wanted.sort());
+  const manifest = await snapshotSources(root); assert.deepEqual(Object.keys(manifest.files), wanted.sort((a, b) => a.localeCompare(b)));
   assert.equal(relativeSource(root, pathToFileURL(path.join(root, wanted[0])).href), wanted[0]);
   assert.equal(relativeSource(root, path.resolve(root, "../outside.mjs")), null); assert.equal(relativeSource(root, "\0"), null);
   assert.equal(isProductionPath("lib/../private.js"), false); assert.equal(isProductionPath("C:/private.js"), false);
@@ -56,9 +56,9 @@ test("原生+三Vitest+浏览器可合并；未执行生产代码始终保留0�
   const summary = await writeReports(root, result, { collectionComplete: true });
   await writeReports(root, result, { collectionComplete: true }, "unit");
   const lcov = await readFile(path.join(root, "coverage/lcov.info"), "utf8");
-  const paths = [...lcov.matchAll(/^SF:(.+)$/gm)].map(match => match[1]); assert.deepEqual(paths.sort(), Object.keys(manifest.files).sort());
+  const paths = [...lcov.matchAll(/^SF:(.+)$/gm)].map(match => match[1]); assert.deepEqual(paths.sort((a, b) => a.localeCompare(b)), Object.keys(manifest.files).sort((a, b) => a.localeCompare(b)));
   assert.ok(paths.every(file => !file.includes("\\") && !file.includes(":") && !file.includes("dist/") && !file.startsWith("/")));
-  const json = JSON.parse(await readFile(path.join(root, "coverage/coverage-final.json"), "utf8")); assert.deepEqual(Object.keys(json).sort(), paths.sort());
+  const json = JSON.parse(await readFile(path.join(root, "coverage/coverage-final.json"), "utf8")); assert.deepEqual(Object.keys(json).sort((a, b) => a.localeCompare(b)), paths.sort((a, b) => a.localeCompare(b)));
   assert.ok((await readFile(path.join(root, "coverage/html/index.html"), "utf8")).includes("coverage"));
   assert.ok(checkThreshold(summary, 90).includes("lines")); assert.equal(await coverageMain(["--check", "90"], root), 1);
   assert.equal(await readFile(path.join(root, "coverage/lcov.info"), "utf8"), lcov);
@@ -161,6 +161,30 @@ test("hook采集错误不阻止原始关闭，但留下明确失败", async () =
     const browser = await chromium.launch(); await browser.newPage(); await browser.close(); assert.ok(events.includes("browser-close")); assert.equal(problems.length, 1);
   }
 });
+test("安装hook真实执行保存与失败落盘，不启动浏览器或网络", async t => {
+  const root = await fixture(t), manifest = await snapshotSources(root);
+  const file = await put(root, "manifest.json", JSON.stringify(manifest)), previous = process.exitCode;
+  try {
+    for (const [index, options] of [{ failStart: true }, { failStop: true }, {}].entries()) {
+      const directory = path.join(root, `browser-${index}`), { chromium } = fakeChromium([], options);
+      await installBrowserCoverage({ CAMPUS_COVERAGE_ROOT: root, CAMPUS_COVERAGE_BROWSER_DIR: directory, CAMPUS_COVERAGE_MANIFEST: file }, async () => chromium);
+      const browser = await chromium.launch(); await browser.newPage(); await browser.close();
+      const outputs = await readdir(directory); assert.equal(outputs.length, 1);
+      const output = JSON.parse(await readFile(path.join(directory, outputs[0]), "utf8"));
+      assert.equal(output.errors.length, index < 2 ? 1 : 0);
+    }
+    await installBrowserCoverage({ CAMPUS_COVERAGE_ROOT: root, CAMPUS_COVERAGE_BROWSER_DIR: path.join(root, "unused"), CAMPUS_COVERAGE_MANIFEST: file });
+  } finally { process.exitCode = previous; }
+});
+test("关闭包装在finally执行真实关闭但保留原始采集异常", async () => {
+  for (const close of ["page", "context", "browser"]) {
+    const events = [], failure = new Error(`original-${close}`), { chromium } = fakeChromium(events, { failStop: true });
+    instrumentChromium(chromium, { save: async () => ({ errors: [] }), problem: () => { throw failure; } });
+    const browser = await chromium.launch(), context = await browser.newContext(), page = await context.newPage();
+    await assert.rejects((close === "page" ? page : close === "context" ? context : browser).close(), error => error === failure);
+    assert.ok(events.includes(`${close}-close`));
+  }
+});
 test("原生计划覆盖四组测试和四个E2E，NODE_V8_COVERAGE跨子进程原样保留", async t => {
   const root = await fixture(t);
   for (const file of ["test/root.test.mjs", "test/coverage.test.mjs", "desktop/test/desktop.test.mjs", "packages/browser/test/browser.test.mjs", "packages/thu-cloud/test/workspace-storage.test.mjs", "packages/browser/test/manual-close.mjs"]) await put(root, file, "// fixture");
@@ -185,35 +209,47 @@ test("spawn始终是绝对Node与inherit stdio，不使用shell/PATH，并记录
     } }); assert.equal(result.code, outcome.code === 0 ? 0 : 1);
   }
 });
-test("完整汇总顺序可用fake runner窄测，单c8且不会合并旧run；报告先于90%失败落盘", async t => {
+test("完整汇总只采集一次c8，独立tooling转换不改变原两套门禁和分母", async t => {
   const root = await fixture(t), source = "const value = 1;\n";
-  await put(root, "lib/untested.mjs", source); await put(root, "webui/app.js", source);
+  await put(root, "lib/untested.mjs", source); await put(root, "webui/app.js", source); await put(root, "scripts/tool.mjs", source);
   await put(root, "coverage/vitest/hetang/coverage-final.json", "old report must not be loaded");
   const calls = [];
   const run = async (args, options) => {
     calls.push(args);
     const reportArg = args.find(arg => arg.startsWith("--coverage.reportsDirectory="));
-    if (reportArg) { const directory = reportArg.split("=")[1]; await mkdir(directory, { recursive: true }); await writeFile(path.join(directory, "coverage-final.json"), "{}"); }
+    if (reportArg) await put(root, path.relative(root, reportArg.split("=")[1]) + "/coverage-final.json", "{}");
     const native = args.find(arg => arg.startsWith("--reports-dir="));
-    if (native) {
+    if (native && args[1] !== "report") {
       const directory = native.split("=")[1]; await mkdir(directory, { recursive: true }); await writeFile(path.join(directory, "coverage-final.json"), JSON.stringify(await hit(root, "lib/untested.mjs")));
       const runDirectory = options.env.CAMPUS_COVERAGE_RUN_DIR;
       await put(runDirectory, "unit/native/coverage-final.json", "{}");
+      const raw = JSON.stringify({ result: [{ url: pathToFileURL(path.join(root, "scripts/tool.mjs")).href, functions: browserRecord("scripts/tool.mjs", source).functions }] });
+      for (const directory of ["unit/raw", "native/raw"]) await put(runDirectory, `${directory}/fixture.json`, raw);
+      await put(runDirectory, "unit/snapshot.json", JSON.stringify({ beforeE2E: true, files: ["fixture.json"], hashes: { "fixture.json": hashSource(raw) } }));
       await put(runDirectory, "native-stages.json", JSON.stringify(["node-tests", "unit-report", ...E2E_SCRIPTS].map(name => ({ name, code: 0 }))));
       assert.equal(options.env.TEMP, path.join(runDirectory, "tmp")); assert.equal(options.env.TMP, options.env.TEMP);
-      const browser = path.join(runDirectory, "browser"); await mkdir(browser); await writeFile(path.join(browser, "fixture.json"), JSON.stringify({ records: [browserRecord("webui/app.js", source)], errors: [] }));
+      await put(runDirectory, "browser/fixture.json", JSON.stringify({ records: [browserRecord("webui/app.js", source)], errors: [] }));
+    } else if (native) {
+      const data = await zeroFile(root, "scripts/tool.mjs", TOOLING_ROOTS);
+      for (const entry of Object.values(data)) { delete entry.all; for (const key of Object.keys(entry.s)) entry.s[key] = 1; }
+      const directory = native.split("=")[1]; await mkdir(directory, { recursive: true });
+      await writeFile(path.join(directory, "coverage-final.json"), JSON.stringify(data));
     }
     return { code: 0 };
   };
   const code = await collectCoverage(root, { run, resolveCli: (_root, name) => path.join(root, name + ".mjs"), resolveNpm: () => path.join(root, "npm-cli.js") });
-  assert.equal(code, 0); assert.equal(calls.length, 5); assert.equal(calls.filter(args => args.some(arg => arg.startsWith("--reports-dir="))).length, 1);
+  assert.equal(code, 0); assert.equal(calls.length, 7);
+  assert.equal(calls.filter(args => args.includes("--clean=true")).length, 1);
+  assert.equal(calls.filter(args => args[1] === "report").length, 2);
   assert.deepEqual(calls[0].slice(1), ["run", "build", "--workspaces"]); assert.equal(await coverageMain(["--check", "90"], root), 1);
-  assert.ok((await readFile(path.join(root, "coverage/lcov.info"), "utf8")).includes("SF:lib/untested.mjs"));
-  const metadata = JSON.parse(await readFile(path.join(root, "coverage/coverage-manifest.json"), "utf8")); assert.equal(metadata.collectionComplete, true);
+  assert.equal(await coverageMain(["--verify-reports"], root), 0);
   const unitSummary = JSON.parse(await readFile(path.join(root, "coverage/unit/coverage-summary.json"), "utf8"));
   const combinedSummary = JSON.parse(await readFile(path.join(root, "coverage/coverage-summary.json"), "utf8"));
   assert.equal(unitSummary.total.lines.covered, 0); assert.equal(combinedSummary.total.lines.pct, 100);
-  assert.equal(JSON.parse(await readFile(path.join(root, "coverage/unit/coverage-manifest.json"), "utf8")).collectionComplete, true);
+  assert.equal(Object.keys(combinedSummary).length, 3); assert.equal(Object.hasOwn(combinedSummary, "scripts/tool.mjs"), false);
+  const tooling = JSON.parse(await readFile(path.join(root, "coverage/tooling/coverage-manifest.json"), "utf8"));
+  assert.equal(tooling.collectionComplete, true); assert.deepEqual(tooling.scope, TOOLING_ROOTS);
+  assert.deepEqual(Object.keys(tooling.files), ["scripts/tool.mjs"]);
 });
 test("本地c8实际tiny fixture验证一次采集、unit快照report与TS重映射，不运行项目套件", async t => {
   const root = await fixture(t), runDirectory = path.join(root, "coverage-run"); await mkdir(runDirectory);
@@ -222,7 +258,9 @@ test("本地c8实际tiny fixture验证一次采集、unit快照report与TS重映
   await put(root, "packages/learnx/src/example.ts", "export const value: number = 1;\n");
   await put(root, "packages/learnx/dist/example.js", "export const value = 1;\n//# sourceMappingURL=example.js.map\n");
   await put(root, "packages/learnx/dist/example.js.map", JSON.stringify({ version: 3, file: "example.js", sources: ["../src/example.ts"], sourcesContent: ["export const value: number = 1;\n"], names: [], mappings: "AAAA" }));
-  await put(root, "scripts/coverage-native.mjs", 'import "../lib/example.mjs"; import "../packages/learnx/dist/example.js";\n');
+  await put(root, "scripts/tool.mjs", "export function increment(value) { return value + 1; }\n");
+  await put(root, "scripts/coverage-native.mjs", 'import "../lib/example.mjs"; import "../packages/learnx/dist/example.js"; import { increment } from "./tool.mjs"; increment(1);\n');
+  const toolingManifest = await snapshotSources(root, TOOLING_ROOTS);
   const cli = localCli(ROOT, "c8", "bin/c8.js");
   assert.equal((await runNode(nativeCoverageArgs(root, runDirectory, cli), { cwd: root })).code, 0);
   const combined = JSON.parse(await readFile(path.join(runDirectory, "native/coverage-final.json"), "utf8"));
@@ -230,7 +268,15 @@ test("本地c8实际tiny fixture验证一次采集、unit快照report与TS重映
   const env = { ...process.env, NODE_V8_COVERAGE: path.join(runDirectory, "native/raw"), CAMPUS_COVERAGE_RUN_DIR: runDirectory };
   assert.equal((await snapshotNativeUnit(root, env)).code, 0);
   const snapshot = JSON.parse(await readFile(path.join(runDirectory, "unit/snapshot.json"), "utf8")); assert.equal(snapshot.beforeE2E, true); assert.ok(snapshot.files.length > 0);
-  assert.deepEqual(Object.keys(JSON.parse(await readFile(path.join(runDirectory, "unit/native/coverage-final.json"), "utf8"))).sort(), Object.keys(combined).sort());
+  assert.deepEqual(Object.keys(JSON.parse(await readFile(path.join(runDirectory, "unit/native/coverage-final.json"), "utf8"))).sort((a, b) => a.localeCompare(b)), Object.keys(combined).sort((a, b) => a.localeCompare(b)));
+  const tooling = await collectToolingCoverage(root, runDirectory, toolingManifest, { cli });
+  for (const result of [tooling.unit, tooling.combined]) {
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.map.fileCoverageFor(path.join(root, "scripts/tool.mjs")).toSummary().functions.covered > 0);
+  }
+  await writeReports(root, tooling.combined, { collectionComplete: true }, "tooling");
+  assert.deepEqual(await verifyReports(root, "tooling"), []);
+  assert.match(await readFile(path.join(root, "coverage/tooling/lcov.info"), "utf8"), /SF:scripts\/tool\.mjs/);
 });
 test("构建/测试失败仍输出全分母LCOV，缺报告不能伪装采集完整", async t => {
   const root = await fixture(t); await put(root, "lib/untested.mjs", "const value = 1;\n");

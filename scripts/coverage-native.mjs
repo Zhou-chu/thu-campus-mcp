@@ -2,13 +2,13 @@
 /** One collector under c8. Unit reporting reads a snapshot; original raw survives E2E. */
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { readdir, writeFile, stat, mkdir, copyFile } from "node:fs/promises";
-import { ROOT, E2E_SCRIPTS, isMain, runNode, unitCoverageArgs, localCli } from "./coverage.mjs";
+import { readdir, readFile, writeFile, stat, mkdir, copyFile } from "node:fs/promises";
+import { ROOT, E2E_SCRIPTS, hashSource, isMain, runNode, unitCoverageArgs, localCli } from "./coverage.mjs";
 
 export async function nativeTestFiles(root = ROOT) {
   const files = [];
   for (const directory of ["test", "desktop/test", "packages/browser/test"]) {
-    const matches = (await readdir(path.join(root, directory))).filter(name => name.endsWith(".test.mjs")).sort();
+    const matches = (await readdir(path.join(root, directory))).filter(name => name.endsWith(".test.mjs")).sort((a, b) => a.localeCompare(b));
     if (!matches.length) throw new Error(`EMPTY_NATIVE_TEST_SUITE:${directory}`);
     files.push(...matches.map(name => path.join(root, directory, name)));
   }
@@ -28,9 +28,13 @@ export async function snapshotNativeUnit(root, env, runner = runNode) {
   const runDirectory = env.CAMPUS_COVERAGE_RUN_DIR, raw = path.resolve(env.NODE_V8_COVERAGE);
   if (raw !== path.join(runDirectory, "native/raw")) throw new Error("C8_RAW_DIRECTORY_MISMATCH");
   const snapshot = path.join(runDirectory, "unit/raw"); await mkdir(snapshot, { recursive: true });
-  const files = (await readdir(raw, { withFileTypes: true })).filter(entry => entry.isFile()).map(entry => entry.name).sort();
-  for (const file of files) await copyFile(path.join(raw, file), path.join(snapshot, file));
-  await writeFile(path.join(runDirectory, "unit/snapshot.json"), JSON.stringify({ beforeE2E: true, files }));
+  const files = (await readdir(raw, { withFileTypes: true })).filter(entry => entry.isFile()).map(entry => entry.name).sort((a, b) => a.localeCompare(b));
+  const hashes = {};
+  for (const file of files) {
+    await copyFile(path.join(raw, file), path.join(snapshot, file));
+    hashes[file] = hashSource(await readFile(path.join(snapshot, file), "utf8"));
+  }
+  await writeFile(path.join(runDirectory, "unit/snapshot.json"), JSON.stringify({ beforeE2E: true, files, hashes }));
   return runner(unitCoverageArgs(root, runDirectory, localCli(ROOT, "c8", "bin/c8.js")), { cwd: root, env });
 }
 export async function nativeMain(root = process.env.CAMPUS_COVERAGE_ROOT || ROOT, env = process.env, runner = runNode) {

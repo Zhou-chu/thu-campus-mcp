@@ -35,6 +35,9 @@ jobs:
       - name: 完整测试与LCOV（含真实浏览器）
         if: matrix.node == 24
         run: npm run test:coverage
+      - name: 校验四份完整源码与报告
+        if: always() && matrix.node == 24
+        run: node scripts/coverage.mjs --verify-reports
       - name: 上传真实覆盖率报告
         if: always() && matrix.node == 24
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -42,9 +45,11 @@ jobs:
           name: sonar-lcov
           path: |
             coverage/lcov.info
+            coverage/coverage-final.json
             coverage/coverage-summary.json
             coverage/coverage-manifest.json
             coverage/unit/
+            coverage/tooling/
             coverage/html/
           retention-days: 14
           if-no-files-found: error
@@ -100,13 +105,7 @@ jobs:
           name: sonar-lcov
           path: coverage
       - name: 验证覆盖率报告完整性
-        run: >-
-          node --input-type=module -e 'import {readFileSync} from "node:fs";
-          for (const dir of ["coverage","coverage/unit"]) {
-          const m=JSON.parse(readFileSync(dir+"/coverage-manifest.json","utf8"));
-          if (!m.collectionComplete || m.errors?.length) throw new Error("Incomplete coverage: "+dir);
-          if (!readFileSync(dir+"/lcov.info","utf8").includes("SF:")) throw new Error("Empty LCOV: "+dir);
-          }'
+        run: node scripts/coverage.mjs --verify-reports
       - name: 真实Sonar分析与质量门
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:

@@ -1,5 +1,29 @@
 # SonarQube Cloud：公开项目接入
 
+## 2026-11-15 首轮CI实扫证据（当前远端结果）
+
+- 提交 `943e20e624b680da8482f5c5d7da4b8877f4d42d`，对应 [CI run 43688282359](https://github.com/Zhou-chu/thu-campus-mcp/actions/runs/43688282359)，Sonar analysis `82a3b79a-c03a-4f9a-9adc-9353bea5306d` 的 revision 精确匹配。Automatic analysis 已关闭；CI确实读取同一run的combined LCOV，未报路径解析失败。
+- Node 24全job成功，包括覆盖门禁、4个真实浏览器E2E、smoke、源码/预备便携包与搬迁校验。远端unit行/语句/函数/分支为92.78% / 90.71% / 92.20% / 90.51%，combined为93.14% / 91.03% / 92.26% / 91.54%，两套完整且errors为空。
+- workflow整体失败：Node 22普通测试入口中浏览器夹具原路径与规范路径比较失败；Android严格依赖校验缺JUnit BOM 5.9.2/5.9.3的.module记录；Sonar质量门失败（新可靠性D、安全B、新覆盖65.3%）。本地修正必须经下一提交的CI复验，不把这些失败写成通过。
+- Sonar实际指标：整体覆盖85.9%，CODE_SMELL=0、可维护性A（非数值评分）；11个BUG，安全问题另逐项复核。自定义smell评分仍单独注明工具、固定模块范围与公式，不冒充Sonar分数。
+- **范围警告**：扫描器明确说新analysis scope UX忽略`sonar.sources`、`sonar.tests`和`sonar.test.inclusions`；因此首轮配置中的测试排除造成了分析遗漏。下一批必须去掉测试排除、恢复测试分析，并确认实际索引后再比较问题闭合数量。不能用首轮计数缩小当作全范围闭合。
+- 下一批另从同次真实V8 raw生成工具脚本LCOV，不缩runtime+SDK原两阶段范围、不放宽90%门禁、不调整Sonar质量门或Previous version基线。
+
+### 第二批本地整批复验（2026-11-15，待对应提交远端复扫）
+
+`test:coverage`、原`coverage:check 90`、新增`--verify-reports`均退出0。四套manifest完整、errors为空，unit/combined仍各保留一个V8负计数保守归零警告；tooling无警告。
+
+| 阶段与明确范围 | 行 | 语句 | 函数 | 分支 |
+| --- | --- | --- | --- | --- |
+| unit，原115个runtime+SDK文件 | 92.83% | 90.76% | 92.26% | 90.58% |
+| combined，同115文件 | 93.20% | 91.08% | 92.32% | 91.61% |
+| tooling/unit，额外19个scripts文件 | 39.26% | 39.26% | 86.13% | 88.33% |
+| tooling，额外19文件单元+真实E2E | 77.22% | 77.22% | 86.97% | 88.65% |
+
+原八项90%门禁全部通过；新增tooling报告不冒充90%，未执行脚本保留零覆盖分母，不拿三脚本99.81%的窄测替代19文件结果。四套报告校验源码、LCOV全清单、raw快照/子集与机器报告哈希，且重新计算摘要一致。类型、264项许可、395文件/845历史对象来源审计通过；固定11模块自定义smell实测97.44，无硬违规。
+
+下方接入准备及本地历史记录保留作审计；其中“未实扫”等历史描述不代表本节已发生的CI结果。
+
 ## 已核实的实际配置
 
 | 项目 | 值 |
@@ -140,6 +164,19 @@
 | `AaHZoLPuSajQlY95-Qjv` | typescript:S1313 | `packages/hetang/src/resources.ts:472` | `8.8.8.8` 只在 `HETANG_MOCK=1` 离线模拟分支作假 `resolve()` 结果交给 SSRF 守卫，同分支 fetcher 是内存 PNG，不做 DNS 也不出站；生产分支仍执行真实公网校验 |
 
 其余开放项属于代码已改、待新 analysis 复算的发现，不作误报处理，也不以本地结果替代 Sonar 判定。
+
+### 2026-11-15 首轮CI后的四项独立复核
+
+以下每一项均在Sonar UI单独附评论、单独改状态，并经不带令牌的公开API回读为`RESOLVED / FALSE-POSITIVE`；未改规则、质量门或排除项。
+
+| issue key | 规则 | 独立证据 |
+| --- | --- | --- |
+| `AaHeDZRq07pFJPuue4ZF` | javascript:S5332 | `e2e-web.mjs:478`是`.invalid`保留域名的Playwright路由模式，不是生产传输；479–482在导航前安装全量内存fulfill，没有continue或出站。CI 43688282359真实浏览器验证旧Authorization不泄漏。 |
+| `AaHeDZRq07pFJPuue4ZG` | javascript:S5332 | 483行HTTP字面量经encodeURIComponent作为本地测试URL的query输入，不是直接导航；目标请求由前述路由拦截。485–490断言无旧令牌并返回配对页。 |
+| `AaHeDZSC07pFJPuue4ZH` | jssecurity:S8475 | 固定键存储版本化JSON而非HTML或代码；URL限http(s)、无userinfo/query/hash/控制字符，令牌限长度和可打印ASCII；读取再校验。完整base绑定、目标改变清旧令牌、新记录不与旧字段混拼，单次setItem保持原子性。 |
+| `AaHZoLQuSajQlY95-QkS` | jssecurity:S8476 | `buildApiUrl`限制单斜杠相对API路径，拒绝协议相对、反斜杠、父目录及编码点；base经URL校验，凭据绑定完整目标且不随换址，fetch明确credentials:omit。远程运行时是显式配对功能，真实E2E已验证注入新目标不收到旧Authorization。 |
+
+这些状态处置只说明逐条误报复核完成，不代表整批源码质量门通过；恢复测试分析后的实际发现仍须处理。
 
 ## 官方依据
 

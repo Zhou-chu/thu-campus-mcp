@@ -1,12 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { tmpdir } from "node:os";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, symlink, realpath } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright-core";
 import * as runtime from "../packages/browser/runtime.mjs";
@@ -30,8 +29,12 @@ function child() {
   return c;
 }
 async function fixture(t) {
-  const root = await mkdtemp(path.join(tmpdir(), "browser-runtime-owned-")), undos = [], cleanups = [];
-  assert.ok(path.isAbsolute(root)); assert.match(path.basename(root), /^browser-runtime-owned-/);
+  const qa = path.resolve(import.meta.dirname, "../.local/qa-temp");
+  await mkdir(qa, { recursive: true });
+  // Hosted-runner TEMP can be an alias; compare the same canonical paths as systemExecutable.
+  const parent = await realpath(qa);
+  const root = await mkdtemp(path.join(parent, "browser-runtime-owned-")), undos = [], cleanups = [];
+  assert.equal(path.dirname(root), parent); assert.match(path.basename(root), /^browser-runtime-owned-/);
   const f = { root, contexts: [], calls: [], intervals: [], cookies: baseCookies(), cryptoFail: false, launches: [], gotoCalls: [] };
   f.path = relative => { const target = path.resolve(root, relative); assert.ok(target.startsWith(root + path.sep)); return target; };
   f.put = async (relative, data) => { const file = f.path(relative); await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, typeof data === "string" ? data : json(data)); return file; };
@@ -49,7 +52,7 @@ async function fixture(t) {
   for (const [key, relative] of Object.entries({ THU_BROWSER_STATE_DIR: "state", THU_BROWSER_RUNTIME_DIR: "runtime", LEARNX_STATE_DIR: "learnx", LEARNX_OUTPUT_DIR: "learnx-output", THU_CLOUD_STATE_DIR: "cloud", THU_CLOUD_OUTPUT_DIR: "cloud-output", HETANG_STATE_DIR: "hetang", HETANG_OUTPUT_DIR: "hetang-output", MADMODEL_STATE_DIR: "madmodel", SystemRoot: "fake-windows" })) f.env(key, f.path(relative));
   for (const key of ["THU_CAMPUS_MOCK", "LEARNX_MOCK", "THU_CLOUD_MOCK", "HETANG_MOCK", "THU_CAMPUS_AUTOFILL_LOGIN"]) f.env(key, "0");
   f.patch(process, "platform", "win32");
-  f.powershell = await f.put("fake-windows/System32/WindowsPowerShell/v1.0/powershell.exe", "never executed: fixture only");
+  f.powershell = await realpath(await f.put("fake-windows/System32/WindowsPowerShell/v1.0/powershell.exe", "never executed: fixture only"));
   f.patch(childProcess, "spawn", (executable, args, options) => {
     f.calls.push({ executable, args, options });
     if (executable === f.powershell) {

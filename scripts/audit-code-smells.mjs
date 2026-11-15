@@ -186,7 +186,7 @@ export class AuditError extends Error {
 
 /**
  * 加载仓库里已有的 TypeScript（不新增依赖）。
- * 默认从 packages/thu-cloud 的解析作用域取，因为它在本�� workspace 里声明了 typescript。
+ * 默认从 packages/thu-cloud 的解析作用域取，因为它在本仓workspace里声明了typescript。
  * @param {(id: string) => any} [requireImpl] 便于测试替换
  * @returns {any}
  */
