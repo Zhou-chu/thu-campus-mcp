@@ -23,8 +23,10 @@ test("timetable: parses single, paired and week-limited slots with locations", (
   assert.equal(parseSchedule("")[0], undefined);
   assert.deepEqual(parseSchedule(null), []);
   assert.deepEqual(parseSchedule("未排课"), []);
+  assert.deepEqual(parseSchedule("星期一第7节(全周)"), [], "清华每天只有 6 大节，第7节不成立");
   assert.deepEqual(parseSchedule("星期一第13节(全周)"), [], "超出节次上限的条目丢弃");
   assert.deepEqual(parseSchedule("星期一第5-3节(全周)"), [], "倒序节次丢弃");
+  assert.equal(parseSchedule("星期一第6节(全周)")[0].from, 6, "第6大节保留");
 });
 
 test("timetable: builds a grid-ready table and counts courses without time", () => {

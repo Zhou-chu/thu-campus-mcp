@@ -1,5 +1,5 @@
 export const DAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-export const PERIODS = 12;
+export const PERIODS = 6;
 
 /** 同一格重叠的课程并排显示，而不是互相盖住。 */
 export function assignLanes(slots) {

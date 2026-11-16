@@ -636,7 +636,7 @@ test("app: timetable renders the weekly grid, today marker and course detail", a
   a.nav("timetable");
   await until(() => a.all(".course-block").length === 1, "timetable grid");
   assert.equal(a.$("#view-context").textContent, "课表");
-  assert.equal(a.all(".timetable-cell").length, 84, "7 天 × 12 节");
+  assert.equal(a.all(".timetable-cell").length, 42, "7 天 × 6 大节");
   assert.equal(a.all(".timetable-day").length, 7);
   assert.match(a.$(".course-block").textContent, /甲课/);
   assert.match(a.$(".course-block").textContent, /第1-2节/);
