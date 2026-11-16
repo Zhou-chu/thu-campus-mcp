@@ -209,6 +209,9 @@ test("worker errors store only allowlisted codes and scrub navigation messages",
 test("real service login adapters save synthetic bindings and stable-cookie recovery", async t => {
   const f = await fixture(t); await f.installed(); f.cloudFetch();
   await assert.rejects(jobs.loginService("learnx", { headless: true }), { code: "BROWSER_ACCOUNT_REQUIRED" });
+  // 场馆与座位只借持久资料手动登录，不伪装成可校验的会话。
+  await assert.rejects(jobs.loginService("sports", { headless: false }), { code: "BROWSER_MANUAL_LOGIN" });
+  await assert.rejects(jobs.loginService("seat", { headless: false }), { code: "BROWSER_MANUAL_LOGIN" });
   // First enrollment uses the interactive API path; headless recovery below requires an existing matching identity.
   const accountIds = {};
   for (const [name, directory, prefix] of [["learnx", "learnx", "LEARNX"], ["cloud", "thu-cloud", "THU_CLOUD"], ["hetang", "hetang", "HETANG"]]) {
