@@ -12,7 +12,7 @@ const statusText = session => {
 };
 
 export function createSportsView({ el, api }) {
-  const state = { sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false };
+  const state = { sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false };
 
   return function sportsPage() {
     const wrap = el("div", { class: "stack sports-page" });
@@ -82,7 +82,12 @@ export function createSportsView({ el, api }) {
       panel.replaceChildren(
         el("h3", { class: "sports-label", text: "运动项目" }),
         state.sports.length ? chipGroup(state.sports, state.sport, item => { state.sport = item; void loadVenues(); }, "运动项目")
-          : el("p", { class: "sports-empty", text: state.loading ? "正在读取…" : state.error || "暂无运动项目。" }),
+          : state.loginRequired
+            ? el("div", { class: "sports-login-required" }, [
+              el("p", { class: "sports-empty", text: state.error }),
+              el("button", { class: "sports-login", type: "button", text: "打开体育登录窗口", onclick: () => { void openLogin(); } }),
+            ])
+            : el("p", { class: "sports-empty", text: state.loading ? "正在读取…" : state.error || "暂无运动项目。" }),
         el("h3", { class: "sports-label", text: "场馆" }),
         state.venues.length ? chipGroup(state.venues, state.venue, item => { state.venue = item; void loadSlots(); }, "场馆")
           : el("p", { class: "sports-empty", text: state.sport ? "该运动暂无场馆。" : "先选一个运动项目。" }),
@@ -101,10 +106,12 @@ export function createSportsView({ el, api }) {
         const data = await api("/api/sports/sports");
         state.sports = Array.isArray(data.sports) ? data.sports : [];
         if (!state.sports.length) state.error = "接口没有返回运动项目。";
+        state.loginRequired = false;
         state.sport = state.sports.includes(state.sport) ? state.sport : state.sports[0] || "";
       } catch (error) {
         state.sports = [];
-        state.error = error?.code === "SPORTS_LOGIN_REQUIRED" ? "需要先登录体育场馆：打开体育窗口完成登录后再回来。" : "暂时读不到运动项目。";
+        state.loginRequired = error?.code === "SPORTS_LOGIN_REQUIRED";
+        state.error = state.loginRequired ? "需要先登录体育场馆：登录完成后回到这里点刷新。" : "暂时读不到运动项目。";
       } finally {
         state.loading = false;
         state.loaded = true;
@@ -129,6 +136,16 @@ export function createSportsView({ el, api }) {
       }
       render();
       if (state.venue) await loadSlots();
+    }
+
+    async function openLogin() {
+      try {
+        await api("/api/tools/campus_browser_open", { method: "POST", body: { service: "sports" } });
+        state.error = "登录窗口已打开，完成登录后回到这里点刷新。";
+      } catch {
+        state.error = "打不开登录窗口，稍后再试。";
+      }
+      render();
     }
 
     async function loadSlots() {

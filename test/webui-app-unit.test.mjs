@@ -899,5 +899,7 @@ test("app: sports view asks for login instead of pretending there is no data", a
   a.nav("sports");
   await until(() => /登录/.test(document.body.textContent), "login hint");
   assert.match(a.$(".sports-panel").textContent, /需要先登录体育场馆/);
+  assert.ok(a.$(".sports-login"), "提供去登录的入口");
+  assert.match(a.$(".sports-login").textContent, /打开体育登录窗口/);
   assert.equal(a.all(".sports-site").length, 0, "没有数据时不画场地");
 });
