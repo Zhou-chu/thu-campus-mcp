@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -167,4 +167,19 @@ test("seat: 归一函数覆盖缺字段与非法输入", () => {
   assert.equal(floors[0].free, null, "缺占用记为 null");
 
   assert.deepEqual(normalizeDays({ list: [null, { day: null }, { day: "bad" }] }), []);
+});
+
+test("seat: 分区扫描结果按 TTL 复用", () => {
+  let clock = 1_000_000;
+  const cache = createTtlCache({ ttlMs: 60_000, now: () => clock });
+  assert.equal(cache.get("k"), null);
+  cache.set("k", { value: 1 });
+  assert.deepEqual(cache.get("k"), { value: 1 });
+  clock += 59_000;
+  assert.deepEqual(cache.get("k"), { value: 1 }, "未过期仍命中");
+  clock += 2_000;
+  assert.equal(cache.get("k"), null, "过期后失效");
+  cache.set("k", 2);
+  cache.clear();
+  assert.equal(cache.get("k"), null, "清理后为空");
 });
