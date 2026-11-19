@@ -378,6 +378,46 @@
       "location": "node_modules/accepts"
     },
     {
+      "name": "acorn",
+      "version": "8.19.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/acorn"
+    },
+    {
+      "name": "acorn-jsx",
+      "version": "5.3.2",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/acorn-jsx"
+    },
+    {
+      "name": "acorn-jsx-walk",
+      "version": "2.0.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/acorn-jsx-walk"
+    },
+    {
+      "name": "acorn-loose",
+      "version": "8.5.2",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/acorn-loose"
+    },
+    {
+      "name": "acorn-walk",
+      "version": "8.3.5",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/acorn-walk"
+    },
+    {
       "name": "ajv",
       "version": "8.20.0",
       "license": "MIT",
@@ -506,6 +546,22 @@
       "location": "node_modules/chai"
     },
     {
+      "name": "chalk",
+      "version": "4.1.2",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/chalk"
+    },
+    {
+      "name": "ansi-styles",
+      "version": "4.3.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/chalk/node_modules/ansi-styles"
+    },
+    {
       "name": "cheerio",
       "version": "1.0.0-rc.12",
       "license": "MIT",
@@ -536,6 +592,30 @@
       "development": true,
       "optional": false,
       "location": "node_modules/cliui/node_modules/string-width"
+    },
+    {
+      "name": "color-convert",
+      "version": "2.0.1",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/color-convert"
+    },
+    {
+      "name": "color-name",
+      "version": "1.1.4",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/color-name"
+    },
+    {
+      "name": "commander",
+      "version": "15.1.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/commander"
     },
     {
       "name": "content-disposition",
@@ -626,6 +706,14 @@
       "location": "node_modules/depd"
     },
     {
+      "name": "dependency-cruiser",
+      "version": "18.8.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/dependency-cruiser"
+    },
+    {
       "name": "detect-libc",
       "version": "2.1.2",
       "license": "Apache-2.0",
@@ -704,6 +792,14 @@
       "development": false,
       "optional": false,
       "location": "node_modules/encodeurl"
+    },
+    {
+      "name": "enhanced-resolve",
+      "version": "5.27.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/enhanced-resolve"
     },
     {
       "name": "entities",
@@ -962,6 +1058,14 @@
       "location": "node_modules/glob"
     },
     {
+      "name": "global-directory",
+      "version": "4.0.1",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/global-directory"
+    },
+    {
       "name": "gopd",
       "version": "1.2.0",
       "license": "MIT",
@@ -1050,12 +1154,36 @@
       "location": "node_modules/iconv-lite"
     },
     {
+      "name": "ignore",
+      "version": "7.0.14",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/ignore"
+    },
+    {
       "name": "inherits",
       "version": "2.0.4",
       "license": "ISC",
       "development": false,
       "optional": false,
       "location": "node_modules/inherits"
+    },
+    {
+      "name": "ini",
+      "version": "4.1.1",
+      "license": "ISC",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/ini"
+    },
+    {
+      "name": "interpret",
+      "version": "3.1.1",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/interpret"
     },
     {
       "name": "ip-address",
@@ -1072,6 +1200,30 @@
       "development": false,
       "optional": false,
       "location": "node_modules/ipaddr.js"
+    },
+    {
+      "name": "is-core-module",
+      "version": "2.18.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/is-core-module"
+    },
+    {
+      "name": "is-installed-globally",
+      "version": "1.0.1",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/is-installed-globally"
+    },
+    {
+      "name": "is-path-inside",
+      "version": "4.0.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/is-path-inside"
     },
     {
       "name": "is-promise",
@@ -1160,6 +1312,22 @@
       "development": false,
       "optional": false,
       "location": "node_modules/json-schema-typed"
+    },
+    {
+      "name": "json5",
+      "version": "2.2.3",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/json5"
+    },
+    {
+      "name": "kleur",
+      "version": "3.0.3",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/kleur"
     },
     {
       "name": "lightningcss",
@@ -1346,6 +1514,14 @@
       "location": "node_modules/minimatch"
     },
     {
+      "name": "minimist",
+      "version": "1.2.8",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/minimist"
+    },
+    {
       "name": "minipass",
       "version": "7.1.3",
       "license": "BlueOak-1.0.0",
@@ -1514,6 +1690,14 @@
       "location": "node_modules/path-key"
     },
     {
+      "name": "path-parse",
+      "version": "1.0.7",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/path-parse"
+    },
+    {
       "name": "path-scurry",
       "version": "3.0.0",
       "license": "BlueOak-1.0.0",
@@ -1586,6 +1770,14 @@
       "location": "node_modules/prettier"
     },
     {
+      "name": "prompts",
+      "version": "2.4.2",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/prompts"
+    },
+    {
       "name": "proper-lockfile",
       "version": "4.1.2",
       "license": "MIT",
@@ -1650,6 +1842,22 @@
       "location": "node_modules/raw-body"
     },
     {
+      "name": "rechoir",
+      "version": "0.8.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/rechoir"
+    },
+    {
+      "name": "regexp-tree",
+      "version": "0.1.27",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/regexp-tree"
+    },
+    {
       "name": "require-from-string",
       "version": "2.0.2",
       "license": "MIT",
@@ -1664,6 +1872,14 @@
       "development": false,
       "optional": false,
       "location": "node_modules/requires-port"
+    },
+    {
+      "name": "resolve",
+      "version": "1.22.14",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/resolve"
     },
     {
       "name": "retry",
@@ -1688,6 +1904,14 @@
       "development": false,
       "optional": false,
       "location": "node_modules/router"
+    },
+    {
+      "name": "safe-regex",
+      "version": "2.1.1",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/safe-regex"
     },
     {
       "name": "safer-buffer",
@@ -1794,6 +2018,14 @@
       "location": "node_modules/signal-exit"
     },
     {
+      "name": "sisteransi",
+      "version": "1.0.5",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/sisteransi"
+    },
+    {
       "name": "sm-crypto",
       "version": "0.5.7",
       "license": "MIT",
@@ -1850,12 +2082,36 @@
       "location": "node_modules/strip-ansi"
     },
     {
+      "name": "strip-bom",
+      "version": "3.0.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/strip-bom"
+    },
+    {
       "name": "supports-color",
       "version": "7.2.0",
       "license": "MIT",
       "development": true,
       "optional": false,
       "location": "node_modules/supports-color"
+    },
+    {
+      "name": "supports-preserve-symlinks-flag",
+      "version": "1.0.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/supports-preserve-symlinks-flag"
+    },
+    {
+      "name": "tapable",
+      "version": "2.3.4",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/tapable"
     },
     {
       "name": "test-exclude",
@@ -1912,6 +2168,22 @@
       "development": false,
       "optional": false,
       "location": "node_modules/tough-cookie"
+    },
+    {
+      "name": "tsconfig-paths",
+      "version": "4.2.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/tsconfig-paths"
+    },
+    {
+      "name": "tsconfig-paths-webpack-plugin",
+      "version": "4.2.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/tsconfig-paths-webpack-plugin"
     },
     {
       "name": "tslib",
@@ -2016,6 +2288,14 @@
       "development": true,
       "optional": false,
       "location": "node_modules/vitest"
+    },
+    {
+      "name": "watskeburt",
+      "version": "6.0.0",
+      "license": "MIT",
+      "development": true,
+      "optional": false,
+      "location": "node_modules/watskeburt"
     },
     {
       "name": "which",

@@ -51,6 +51,11 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | @vitest/mocker | 5.0.5 | MIT | development |
 | @vitest/spy | 5.0.5 | MIT | development |
 | accepts | 2.0.0 | MIT | runtime |
+| acorn | 8.19.0 | MIT | development |
+| acorn-jsx | 5.3.2 | MIT | development |
+| acorn-jsx-walk | 2.0.0 | MIT | development |
+| acorn-loose | 8.5.2 | MIT | development |
+| acorn-walk | 8.3.5 | MIT | development |
 | ajv | 8.20.0 | MIT | runtime |
 | ajv-formats | 3.0.1 | MIT | runtime |
 | ansi-regex | 6.6.0 | MIT | development |
@@ -67,10 +72,15 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | call-bind-apply-helpers | 1.0.2 | MIT | runtime |
 | call-bound | 1.0.4 | MIT | runtime |
 | chai | 6.3.0 | MIT | development |
+| chalk | 4.1.2 | MIT | development |
+| ansi-styles | 4.3.0 | MIT | development |
 | cheerio | 1.0.0-rc.12 | MIT | runtime |
 | cheerio-select | 2.1.0 | BSD-2-Clause | runtime |
 | cliui | 9.0.1 | ISC | development |
 | string-width | 7.2.0 | MIT | development |
+| color-convert | 2.0.1 | MIT | development |
+| color-name | 1.1.4 | MIT | development |
+| commander | 15.1.0 | MIT | development |
 | content-disposition | 2.0.1 | MIT | runtime |
 | content-type | 1.0.5 | MIT | runtime |
 | convert-source-map | 2.0.0 | MIT | development |
@@ -82,6 +92,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | css-what | 6.2.2 | BSD-2-Clause | runtime |
 | debug | 4.4.3 | MIT | runtime |
 | depd | 2.0.0 | MIT | runtime |
+| dependency-cruiser | 18.8.0 | MIT | development |
 | detect-libc | 2.1.2 | Apache-2.0 | development |
 | dom-serializer | 2.0.0 | MIT | runtime |
 | entities | 4.5.0 | BSD-2-Clause | runtime |
@@ -92,6 +103,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | ee-first | 1.1.1 | MIT | runtime |
 | emoji-regex | 10.6.0 | MIT | development |
 | encodeurl | 2.0.0 | MIT | runtime |
+| enhanced-resolve | 5.27.0 | MIT | development |
 | entities | 8.1.0 | BSD-2-Clause | runtime |
 | es-define-property | 1.0.1 | MIT | runtime |
 | es-errors | 1.3.0 | MIT | runtime |
@@ -124,6 +136,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | get-intrinsic | 1.3.0 | MIT | runtime |
 | get-proto | 1.0.1 | MIT | runtime |
 | glob | 14.0.6 | BlueOak-1.0.0 | development |
+| global-directory | 4.0.1 | MIT | development |
 | gopd | 1.2.0 | MIT | runtime |
 | graceful-fs | 4.2.11 | ISC | runtime |
 | has-flag | 4.0.0 | MIT | development |
@@ -135,9 +148,15 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | entities | 4.5.0 | BSD-2-Clause | runtime |
 | http-errors | 2.0.1 | MIT | runtime |
 | iconv-lite | 0.7.3 | MIT | runtime |
+| ignore | 7.0.14 | MIT | development |
 | inherits | 2.0.4 | ISC | runtime |
+| ini | 4.1.1 | ISC | development |
+| interpret | 3.1.1 | MIT | development |
 | ip-address | 10.7.5 | MIT | runtime |
 | ipaddr.js | 1.9.1 | MIT | runtime |
+| is-core-module | 2.18.0 | MIT | development |
+| is-installed-globally | 1.0.1 | MIT | development |
+| is-path-inside | 4.0.0 | MIT | development |
 | is-promise | 4.0.0 | MIT | runtime |
 | isexe | 2.0.0 | ISC | runtime |
 | istanbul-lib-coverage | 3.2.2 | BSD-3-Clause | development |
@@ -149,6 +168,8 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | jsbn | 1.1.0 | MIT | runtime |
 | json-schema-traverse | 1.0.0 | MIT | runtime |
 | json-schema-typed | 8.0.2 | BSD-2-Clause | runtime |
+| json5 | 2.2.3 | MIT | development |
+| kleur | 3.0.3 | MIT | development |
 | lightningcss | 1.33.0 | MPL-2.0 | development |
 | lightningcss-android-arm64 | 1.33.0 | MPL-2.0 | development, optional |
 | lightningcss-darwin-arm64 | 1.33.0 | MPL-2.0 | development, optional |
@@ -172,6 +193,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | mime-db | 1.54.0 | MIT | runtime |
 | mime-types | 3.0.2 | MIT | runtime |
 | minimatch | 11.0.8 | BlueOak-1.0.0 | development |
+| minimist | 1.2.8 | MIT | development |
 | minipass | 7.1.3 | BlueOak-1.0.0 | development |
 | ms | 2.1.3 | MIT | runtime |
 | nanoid | 3.3.20 | MIT | development |
@@ -193,6 +215,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | parseurl | 1.3.3 | MIT | runtime |
 | path-exists | 4.0.0 | MIT | development |
 | path-key | 3.1.1 | MIT | runtime |
+| path-parse | 1.0.7 | MIT | development |
 | path-scurry | 3.0.0 | BlueOak-1.0.0 | development |
 | path-to-regexp | 8.4.2 | MIT | runtime |
 | pdf-lib | 1.17.1 | MIT | runtime |
@@ -202,6 +225,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | playwright-core | 1.64.1 | Apache-2.0 | runtime |
 | postcss | 8.5.31 | MIT | development |
 | prettier | 3.6.2 | MIT | development |
+| prompts | 2.4.2 | MIT | development |
 | proper-lockfile | 4.1.2 | MIT | runtime |
 | proxy-addr | 2.0.8 | MIT | runtime |
 | psl | 1.15.0 | MIT | runtime |
@@ -210,11 +234,15 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | querystringify | 2.2.0 | MIT | runtime |
 | range-parser | 1.3.0 | MIT | runtime |
 | raw-body | 3.0.2 | MIT | runtime |
+| rechoir | 0.8.0 | MIT | development |
+| regexp-tree | 0.1.27 | MIT | development |
 | require-from-string | 2.0.2 | MIT | runtime |
 | requires-port | 1.0.0 | MIT | runtime |
+| resolve | 1.22.14 | MIT | development |
 | retry | 0.12.0 | MIT | runtime |
 | rolldown | 1.2.15 | MIT | development |
 | router | 2.2.0 | MIT | runtime |
+| safe-regex | 2.1.1 | MIT | development |
 | safer-buffer | 2.1.2 | MIT | runtime |
 | semver | 7.8.6 | ISC | development |
 | send | 1.2.1 | MIT | runtime |
@@ -228,6 +256,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | side-channel-map | 1.0.1 | MIT | runtime |
 | side-channel-weakmap | 1.0.2 | MIT | runtime |
 | signal-exit | 3.0.7 | ISC | runtime |
+| sisteransi | 1.0.5 | MIT | development |
 | sm-crypto | 0.5.7 | MIT | runtime |
 | smol-toml | 1.9.1 | BSD-3-Clause | runtime |
 | source-map-js | 1.2.2 | BSD-3-Clause | development |
@@ -235,7 +264,10 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | std-env | 4.3.0 | MIT | development |
 | string-width | 8.3.0 | MIT | development |
 | strip-ansi | 7.2.0 | MIT | development |
+| strip-bom | 3.0.0 | MIT | development |
 | supports-color | 7.2.0 | MIT | development |
+| supports-preserve-symlinks-flag | 1.0.0 | MIT | development |
+| tapable | 2.3.4 | MIT | development |
 | test-exclude | 8.0.0 | ISC | development |
 | tinybench | 6.2.2 | MIT | development |
 | tinyexec | 1.3.1 | MIT | development |
@@ -243,6 +275,8 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | tinyrainbow | 3.2.0 | MIT | development |
 | toidentifier | 1.0.1 | MIT | runtime |
 | tough-cookie | 4.1.4 | BSD-3-Clause | runtime |
+| tsconfig-paths | 4.2.0 | MIT | development |
+| tsconfig-paths-webpack-plugin | 4.2.0 | MIT | development |
 | tslib | 1.14.1 | 0BSD | runtime |
 | turndown | 7.2.4 | MIT | runtime |
 | type-is | 2.1.0 | MIT | runtime |
@@ -256,6 +290,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | vary | 1.1.2 | MIT | runtime |
 | vite | 8.3.5 | MIT | development |
 | vitest | 5.0.5 | MIT | development |
+| watskeburt | 6.0.0 | MIT | development |
 | which | 2.0.2 | ISC | runtime |
 | why-is-node-running | 3.2.1 | MIT | development |
 | wrap-ansi | 9.0.2 | MIT | development |
