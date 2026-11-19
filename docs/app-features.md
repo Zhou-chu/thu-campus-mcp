@@ -99,3 +99,14 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
   - `GET /api.php/v3areadays/<areaId>` → `data.list[]` 含 `day`
 - 已知区域 id：35、64、89、6、19、29、39；另有 `研讨间`、`入馆预约 /home/book/index`。
 - **未解决**：座位列表与预约提交接口尚未定位——区域页主体只渲染了步骤条与日期切换，座位图可能由楼层选择后动态加载或在 iframe 内。
+
+### 探测记录续（2026-11-19 晚）
+
+- **座位图由 ZRender 绘制在 canvas 上**，DOM 中不存在座位元素；此前按 `[class*=seat]` 查找为空是方向错误，不是选择器问题。
+- 页面脚本暴露的接口清单（同源、带 cookie、无签名）：
+  - `/api.php/space_days`（需参数，缺参返回 `msg:"参数有误"`）
+  - `/api.php/space_time_buckets`（返回 `data.list`，提示「获取可预约时间段」）
+  - `/api.php/spaces`（返回 `data.list`，提示「获取空间预约信息」）
+  - `/api.php/v3areas/<id>`、`/api.php/v3areadays/<id>`、`/api.php/users`、`/api.php/login`、`/api.php/logout`
+- 参考项目 `thu-info-community/thu-info-app` 走 webvpn + 旧接口：`spaces_old`、`areas/1/tree/1`、`spaces/<id>/book`；可作参数语义与预约链路的参考，但本站点用新版 `space_*` 接口。
+- **未解决**：`space_*` 的必填参数名与预约提交端点。参数由页面外部 JS 组装，需继续定位该脚本或在真实点击时抓请求。
