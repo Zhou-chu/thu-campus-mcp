@@ -1,4 +1,4 @@
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date().toLocaleDateString("sv-SE");
 
 export function createSeatView({ el, api }) {
   const state = {
@@ -157,13 +157,20 @@ export function createSeatView({ el, api }) {
       render();
       if (!state.library) return;
       try {
-        const data = await api(`/api/seat/floors?library=${state.library.id}&date=${state.date}`);
-        state.floors = (Array.isArray(data.floors) ? data.floors : []).filter(item => !/已停用|停用区域/.test(item.name));
-        state.retry = 0;
-        state.date = state.date || new Date().toISOString().slice(0, 10);
-        state.floor = state.floors.find(item => (item.free ?? 0) > 0) ?? state.floors[0] ?? null;
+        const data = await api(`/api/seat/sections?library=${state.library.id}`);
+        state.floors = (Array.isArray(data.sections) ? data.sections : []).map(item => ({
+          id: item.id,
+          name: item.name,
+          free: item.free,
+          total: item.total,
+          days: Array.isArray(item.days) ? item.days : [],
+        }));
+        const pick = state.floors[0] ?? null;
+        state.floor = pick;
+        state.days = pick?.days ?? [];
+        if (state.days.length && !state.days.includes(state.date)) state.date = state.days[0];
       } catch {
-        state.error = "暂时读不到楼层。";
+        state.error = "暂时读不到可预约分区。";
       }
       render();
       if (state.floor) await loadSegments();
@@ -179,7 +186,7 @@ export function createSeatView({ el, api }) {
       try {
         const data = await api(`/api/seat/segments?section=${state.floor.id}`);
         state.segments = Array.isArray(data.segments) ? data.segments : [];
-        state.days = [...new Set(state.segments.map(item => item.day))];
+        state.days = [...new Set(state.segments.map(item => item.day))].filter(day => day >= today());
         if (state.days.length && !state.days.includes(state.date)) state.date = state.days[0];
         state.segment = state.segments.find(item => item.day === state.date) ?? state.segments[0] ?? null;
       } catch {

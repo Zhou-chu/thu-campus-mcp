@@ -131,3 +131,14 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
   - `/api.php/v3areas/<id>`、`/api.php/v3areadays/<id>`、`/api.php/users`、`/api.php/login`、`/api.php/logout`
 - 参考项目 `thu-info-community/thu-info-app` 走 webvpn + 旧接口：`spaces_old`、`areas/1/tree/1`、`spaces/<id>/book`；可作参数语义与预约链路的参考，但本站点用新版 `space_*` 接口。
 - **未解决**：`space_*` 的必填参数名与预约提交端点。参数由页面外部 JS 组装，需继续定位该脚本或在真实点击时抓请求。
+
+
+### 时间窗与接口行为（2026-11-20 实测）
+
+- 官网规则原文：`系统开放时间为每日的 6：00-23：00`、`可预约当日或次日的座位`。
+- 时间窗外访问座位页，页面直接显示「系统开放预约时间 06:00~23:00 请在开放时间段进行预约」，且不发起任何座位请求；因此时段外读不到座位是官网行为，不是接口缺失。
+- `v3areas/<馆区>` 与 `space_time_buckets?area=` 都**忽略参数**，返回全局数据（93 个分区、4265 条桶）；因此不能用它们做馆区过滤。
+- 新增 `GET /api/seat/sections?library=`：在**同一浏览器会话**内批量查询 93 个分区的 `areadays`，返回可约分区与日期（一次约 1 分钟），供界面直接使用。
+- `seats()` 用 `areadays` 的 segment + `spaces_old` 取座位；关闭时间窗外由 `bookingWindowOpen()` 直接拒绝，不启动浏览器。
+- 预约失败原因归类为稳定错误码：`SEAT_WINDOW_CLOSED`、`SEAT_ALREADY_BOOKED`、`SEAT_TAKEN`、`SEAT_SEGMENT_INVALID`、`SEAT_LOGIN_REQUIRED`。
+
