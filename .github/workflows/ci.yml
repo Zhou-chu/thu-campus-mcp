@@ -53,6 +53,8 @@ jobs:
             coverage/html/
           retention-days: 14
           if-no-files-found: error
+      - name: 结构健康门禁（dependency-cruiser）
+        run: npm run arch:check
       - name: WebUI 端到端（真实 Chromium）
         if: matrix.node == 22
         run: npm run e2e:web
@@ -172,6 +174,8 @@ jobs:
       - name: 发布门禁（CI 无 DevEco，因此只要求四项目标中的三项）
         run: node scripts/verify-clients.mjs --strict --require webui,desktop,android,runtime
       - run: npm run check
+      - name: 结构健康门禁（dependency-cruiser）
+        run: npm run arch:check
       - name: WebUI 端到端（真实 Chromium）
         run: npm run e2e:web
       - run: npm run bundle

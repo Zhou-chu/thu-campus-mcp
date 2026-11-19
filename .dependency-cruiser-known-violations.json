@@ -1,0 +1,670 @@
+[
+  {
+    "type": "cycle",
+    "from": "packages/hetang/src/cloud.ts",
+    "to": "packages/hetang/src/jobs.ts",
+    "unresolvedTo": "./jobs.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "packages/hetang/src/jobs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/hetang/src/resources.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      },
+      {
+        "name": "packages/hetang/src/cloud.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/hetang/src/cloud.ts",
+    "to": "packages/hetang/src/resources.ts",
+    "unresolvedTo": "./resources.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "packages/hetang/src/resources.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/hetang/src/cloud.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/hetang/src/jobs.ts",
+    "to": "packages/hetang/src/prepared.ts",
+    "unresolvedTo": "./prepared.js",
+    "dependencyTypes": [
+      "local",
+      "dynamic-import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "packages/hetang/src/prepared.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      },
+      {
+        "name": "packages/hetang/src/jobs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/hetang/src/jobs.ts",
+    "to": "packages/hetang/src/resources.ts",
+    "unresolvedTo": "./resources.js",
+    "dependencyTypes": [
+      "local",
+      "dynamic-import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "packages/hetang/src/resources.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      },
+      {
+        "name": "packages/hetang/src/jobs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "dependency",
+    "from": "lib/app/host.mjs",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "lib/app/host.mjs",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "lib/gateway.mjs",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "lib/gateway.mjs",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "lib/gateway.mjs",
+    "to": "@modelcontextprotocol/sdk/server/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "lib/gateway.mjs",
+    "to": "@modelcontextprotocol/sdk/server/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "lib/gateway.mjs",
+    "to": "@modelcontextprotocol/sdk/types.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/types.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/src/cloud.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/src/cloud.ts",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/src/server.ts",
+    "to": "@modelcontextprotocol/sdk/server/mcp.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/mcp.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/src/server.ts",
+    "to": "@modelcontextprotocol/sdk/server/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/coverage-edges-2-server.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/coverage-edges-2-server.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/prepared-smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/prepared-smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/server.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/server.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/status.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/hetang/test/status.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/src/server.ts",
+    "to": "@modelcontextprotocol/sdk/server/mcp.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/mcp.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/src/server.ts",
+    "to": "@modelcontextprotocol/sdk/server/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/test/server.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/test/server.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/test/smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/test/smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/test/status.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/learnx/test/status.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/src/server.ts",
+    "to": "@modelcontextprotocol/sdk/server/mcp.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/mcp.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/src/server.ts",
+    "to": "@modelcontextprotocol/sdk/server/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/coverage-edges.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/coverage-edges.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/coverage-edges.test.ts",
+    "to": "@modelcontextprotocol/sdk/server/mcp.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/server/mcp.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/server.test.ts",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/server.test.ts",
+    "to": "@modelcontextprotocol/sdk/inMemory.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/inMemory.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/index.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/index.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/thu-cloud/test/smoke.mjs",
+    "to": "@modelcontextprotocol/sdk/client/stdio.js",
+    "unresolvedTo": "@modelcontextprotocol/sdk/client/stdio.js",
+    "dependencyTypes": [
+      "unknown"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "not-to-unresolvable"
+    }
+  },
+  {
+    "type": "module",
+    "from": "packages/hetang/vitest.config.ts",
+    "to": "packages/hetang/vitest.config.ts",
+    "rule": {
+      "severity": "warn",
+      "name": "no-orphans"
+    }
+  },
+  {
+    "type": "module",
+    "from": "packages/learnx/vitest.config.ts",
+    "to": "packages/learnx/vitest.config.ts",
+    "rule": {
+      "severity": "warn",
+      "name": "no-orphans"
+    }
+  },
+  {
+    "type": "module",
+    "from": "packages/thu-cloud/vitest.config.ts",
+    "to": "packages/thu-cloud/vitest.config.ts",
+    "rule": {
+      "severity": "warn",
+      "name": "no-orphans"
+    }
+  },
+  {
+    "type": "module",
+    "from": "webui/sw.js",
+    "to": "webui/sw.js",
+    "rule": {
+      "severity": "warn",
+      "name": "no-orphans"
+    }
+  },
+  {
+    "type": "module",
+    "from": "webui/theme.js",
+    "to": "webui/theme.js",
+    "rule": {
+      "severity": "warn",
+      "name": "no-orphans"
+    }
+  }
+]
