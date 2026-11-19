@@ -942,6 +942,7 @@ test("app: library seat view asks for login instead of showing empty grids", asy
   a.nav("seat");
   await until(() => /需要先登录图书馆座位系统/.test(a.$(".seat-panel").textContent), "seat login hint");
   assert.equal(a.all(".seat").length, 0);
+  assert.ok(a.all(".seat-panel .seat-chip").some(chip => /打开登录窗口/.test(chip.textContent)), "登录态缺失时提供打开登录窗口的入口");
 });
 
 test("app: library seat view states an empty seat list honestly", async t => {

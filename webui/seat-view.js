@@ -39,7 +39,13 @@ export function createSeatView({ el, api }) {
 
     const seatGrid = () => {
       if (state.loading) return el("p", { class: "seat-empty", text: "正在读取座位…" });
-      if (state.error) return el("p", { class: "seat-empty", text: state.error });
+      if (state.error) {
+        const box = el("div", { class: "seat-empty" }, [el("span", { text: state.error })]);
+        if (/登录/.test(state.error)) {
+          box.append(el("button", { class: "seat-chip", type: "button", text: "打开登录窗口", onclick: () => { void openLogin(); } }));
+        }
+        return box;
+      }
 
       if (!state.seats.length) return el("p", { class: "seat-empty", text: "该时段没有座位数据。" });
       const grid = el("div", { class: "seat-grid" });
@@ -109,6 +115,16 @@ export function createSeatView({ el, api }) {
       if (block) children.push(block);
       if (state.notice) children.push(el("p", { class: "seat-notice", text: state.notice }));
       panel.replaceChildren(...children);
+    }
+
+    async function openLogin() {
+      try {
+        await api("/api/tools/campus_browser_open", { method: "POST", body: { service: "seat" } });
+        state.notice = "已打开登录窗口，登录后回来点刷新。";
+      } catch {
+        state.notice = "打开登录窗口失败，请稍后重试。";
+      }
+      render();
     }
 
     async function loadLibraries() {
