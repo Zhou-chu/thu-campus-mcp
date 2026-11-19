@@ -903,3 +903,58 @@ test("app: sports view asks for login instead of pretending there is no data", a
   assert.match(a.$(".sports-login").textContent, /打开体育登录窗口/);
   assert.equal(a.all(".sports-site").length, 0, "没有数据时不画场地");
 });
+
+test("app: library seat view lists seats and surfaces the real booking error", async t => {
+  const day = new Date().toISOString().slice(0, 10);
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      [`GET /api/seat/floors?library=35&date=${day}`]: { ok: true, floors: [{ id: 113, name: "二层", free: 10, total: 20, valid: true }] },
+      [`GET /api/seat/seats?section=113&date=${day}`]: {
+        ok: true,
+        seats: [
+          { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true },
+          { id: 5123, name: "A002", segment: 1586205, begin: "08:00", end: "22:00", status: 0, available: false },
+        ],
+        available: 1,
+      },
+      "GET /api/seat/segments?section=113": { ok: false, error: { code: "SEAT_EMPTY", message: "该区域没有可选时段。" } },
+      "POST /api/seat/reserve/prepare": { ok: true, token: "unit-token" },
+      "POST /api/seat/reserve": { ok: false, error: { code: "SEAT_BOOK_FAILED", message: "当前用户在该时段已存在预约。" } },
+    },
+  });
+  a.nav("seat");
+  await until(() => a.all(".seat").length >= 2, "seat grid");
+  assert.equal(a.$("#view-context").textContent, "图书馆");
+  assert.equal(a.all(".seat").length, 2);
+  assert.equal(a.all('.seat[data-open="true"]').length, 1, "不可约座位标为不可用");
+  assert.match(a.$(".seat-panel").textContent, /北馆\(李文正馆\)/);
+  a.click(a.$('.seat[data-open="true"]'));
+  assert.match(a.$(".seat-confirm-line").textContent, /A001/);
+  assert.match(a.$(".seat-confirm-line").textContent, /08:00-22:00/);
+  a.click(a.$(".seat-confirm-button"));
+  await until(() => !!a.$(".seat-notice"), "booking notice");
+  assert.match(a.$(".seat-notice").textContent, /当前用户在该时段已存在预约/);
+});
+
+test("app: library seat view asks for login instead of showing empty grids", async t => {
+  const a = await app(t, { routes: { "GET /api/seat/libraries": { ok: false, error: { code: "SEAT_LOGIN_REQUIRED", message: "需要登录" } } } });
+  a.nav("seat");
+  await until(() => /需要先登录图书馆座位系统/.test(a.$(".seat-panel").textContent), "seat login hint");
+  assert.equal(a.all(".seat").length, 0);
+});
+
+test("app: library seat view states an empty seat list honestly", async t => {
+  const day = new Date().toISOString().slice(0, 10);
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      [`GET /api/seat/floors?library=35&date=${day}`]: { ok: true, floors: [{ id: 113, name: "二层", free: 0, total: 0, valid: true }] },
+      "GET /api/seat/segments?section=113": { ok: false, error: { code: "SEAT_EMPTY", message: "该区域没有可选时段。" } },
+      [`GET /api/seat/seats?section=113&date=${day}`]: { ok: true, seats: [], available: 0 },
+    },
+  });
+  a.nav("seat");
+  await until(() => /该时段没有座位数据/.test(a.$(".seat-panel").textContent), "empty seats");
+  assert.equal(a.all(".seat").length, 0, "没有数据时不画座位");
+});

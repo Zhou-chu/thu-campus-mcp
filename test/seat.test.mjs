@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDays, normalizeFloors, normalizeLibraries, normalizeBuckets, normalizeReserve, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -106,4 +106,17 @@ test("seat: 场次桶统一两类分区，并去掉重复与空名", () => {
   assert.equal(buckets[0].available, true);
   assert.equal(buckets[1].available, false);
   assert.equal(buckets[0].bookTimeId, 1634673);
+});
+
+test("seat: 边界输入不产生假数据", () => {
+  assert.deepEqual(normalizeSections({ list: [{ seatinfo: null }] }), []);
+  assert.deepEqual(normalizeSections({ list: [{ seatinfo: [{ id: 1, name: "", TotalCount: 5 }] }] }), [], "无名字的区域丢弃");
+  assert.deepEqual(normalizeSections({ list: [{ seatinfo: [{ id: 2, name: "待定", TotalCount: 0 }] }] }), [], "容量为 0 的区域丢弃");
+  assert.equal(normalizeSections({ list: [{ seatinfo: [{ id: 3, name: "三层", TotalCount: 10, UnavailableSpace: 10 }] }] })[0].free, 0);
+  assert.deepEqual(normalizeBuckets({ list: [{ spaceId: null, spaceName: "x" }] }), []);
+  assert.deepEqual(normalizeBuckets({ list: [{ spaceId: 1, spaceName: "A", bookTimeId: null }] }), [], "缺 bookTimeId 丢弃");
+  const missingStatus = normalizeBuckets({ list: [{ spaceId: 1, spaceName: "A", bookTimeId: 9 }] })[0];
+  assert.equal(missingStatus.status, null);
+  assert.equal(missingStatus.available, false, "缺 status 不算可用");
+  assert.equal(normalizeBuckets({ list: [{ spaceId: 1, spaceName: "A", bookTimeId: 9, day: "not-a-day" }] })[0].day, null);
 });
