@@ -9,7 +9,7 @@
 | SECURITY-APPROVAL-MODE | 明确、可选择且由服务端强制执行的审批模式 | **待实现**，不是现有启动开关或单次允许/拒绝 |
 | TIMETABLE | 同级的“课表”视图：周视图（7 天 × 6 大节）、窄屏日程、课程详情 | 已实现，验收见[课表验证](#timetable课表视图) |
 | SPORTS-BOOKING | 清华体育场馆预约：运动 → 场馆 → 日期 → 场次，一键登录 | **部分实现**：只读链路已上线，下单与支付未做 |
-| LIBRARY-SEAT | 图书馆座位预约：区域 → 座位 → 时段 → 预约 | **进行中**：登录窗口可打开，接口与界面待做 |
+| LIBRARY-SEAT | 图书馆座位预约：分区 → 座位 → 预约 / 取消 | **可用**：读取、预约、取消、界面与工具均已打通 |
 
 ## UI-APPROVAL-CARD：审批卡与生命周期
 
@@ -90,6 +90,27 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 1. 登录后读取区域、座位与时段，展示真实空位；无数据时如实说明。
 2. 预约需二次确认，且只镜像官方系统的订单状态；支付/超时/取消等状态以官方返回为准。
 3. 未实现前不得在界面宣称可预约。
+
+### 实现（2026-11-19 完成）
+
+- 读取：`GET /api.php/v3areas/<馆区>` 取分区（`seatinfo` 含 `TotalCount/UnavailableSpace`），`GET /api.php/space_time_buckets?day=&area=` 取座位与场次桶（`spaceId/spaceName/bookTimeId/beginTime/endTime/status`）。该桶接口对「时段型」与「整日型」分区都适用，是唯一入口。
+- 预约：`POST /api.php/spaces/<座位id>/book`，表单 `access_token/userid/segment(=bookTimeId)/type=1/operateChannel=2`。
+- 取消：`POST /api.php/profile/books/<id>`，表单 `_method=delete&id&userid&access_token&operateChannel=2`。
+- 模块：`lib/app/seat.mjs`（`libraries/floors/segments/days/seats/bookings/reserve/cancel` + 纯函数归一）。
+- 路由：`/api/seat/libraries|floors|segments|days|seats` 只读；写操作两步——`/api/seat/reserve/prepare` 签发绑定参数的确认令牌，`/api/seat/reserve` 必须带令牌否则 428。
+- 工具：`seat_libraries/floors/segments/seats/bookings` 只读，`seat_reserve/seat_cancel` 标记 destructive，需 `/api/tool-approvals` 令牌。
+- 界面：导航「图书馆」标签，馆区 → 分区 → 日期 → 座位网格 → 「预约此座位」，失败原因原样回传。
+
+### 已真实验证
+
+- 预约 `M1-2`（2026-11-20，segment 1634674）→ `预约成功`，座位状态由 1 变 2；随后取消 → `预约取消成功`。
+- 界面在真实实例加载 4265 个座位、2723 个可约，点击座位出现确认条。
+- 同一时段重复预约时服务端返回「当前用户在该时段已存在预约，不可重复预约」，界面如实展示。
+
+### 注意
+
+- 座位系统登录会话约 1 小时后失效，需重新用 `campus_browser_open(service="seat")` 登录；过期时接口返回 `没有登录或登录已超时`，模块抛 `SEAT_LOGIN_REQUIRED`。
+- 取消有每日次数限制，测试预约后应立即取消。
 
 ### 探测记录（截至 2026-11-19）
 
