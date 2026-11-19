@@ -90,3 +90,12 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 1. 登录后读取区域、座位与时段，展示真实空位；无数据时如实说明。
 2. 预约需二次确认，且只镜像官方系统的订单状态；支付/超时/取消等状态以官方返回为准。
 3. 未实现前不得在界面宣称可预约。
+
+### 探测记录（截至 2026-11-19）
+
+- 页面路由：`/home/web/seat/area/<areaId>/day/<YYYY-MM-DD>`；主流程「选择楼层 → 选择区域和日期 → 选择座位」。
+- 同源 JSON 接口（带 cookie 即可，无需签名）：
+  - `GET /api.php/v3areas/<areaId>` → `data.list[]` 含 `areaInfo/parentInfo/childArea/seatinfo`
+  - `GET /api.php/v3areadays/<areaId>` → `data.list[]` 含 `day`
+- 已知区域 id：35、64、89、6、19、29、39；另有 `研讨间`、`入馆预约 /home/book/index`。
+- **未解决**：座位列表与预约提交接口尚未定位——区域页主体只渲染了步骤条与日期切换，座位图可能由楼层选择后动态加载或在 iframe 内。
