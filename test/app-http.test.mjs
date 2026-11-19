@@ -833,3 +833,28 @@ test("超过12轮后HTTP停止仍生效，模型取消不误报失败且释放�
   const stopped = await fetch(url + `/api/chat/${session.id}/abort`, { method: "POST", headers, body: "{}" });
   assert.equal((await stopped.json()).aborted, false);
 });
+
+test("座位接口对缺参与未确认分别返回 400/428，未知子路径保持 404", async t => {
+  const { url, pairing } = await boot(t);
+  const paired = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + paired.body.token };
+  const json = { "content-type": "application/json" };
+
+  const floors = await fetch(url + "/api/seat/floors", { headers });
+  assert.equal(floors.status, 400);
+  assert.equal((await floors.json()).error.code, "ARGUMENT_REQUIRED");
+
+  const segments = await fetch(url + "/api/seat/segments", { headers });
+  assert.equal(segments.status, 400);
+
+  const prepare = await fetch(url + "/api/seat/reserve/prepare", { method: "POST", headers: { ...headers, ...json }, body: "{}" });
+  assert.equal(prepare.status, 400);
+  assert.equal((await prepare.json()).error.code, "ARGUMENT_REQUIRED");
+
+  const reserve = await fetch(url + "/api/seat/reserve", { method: "POST", headers: { ...headers, ...json }, body: "{}" });
+  assert.equal(reserve.status, 428);
+  assert.equal((await reserve.json()).error.code, "APPROVAL_REQUIRED");
+
+  const unknown = await fetch(url + "/api/seat/unknown", { headers });
+  assert.equal(unknown.status, 404);
+});
