@@ -94,7 +94,7 @@ export function createSeatView({ el, api }) {
         el("h3", { class: "seat-label", text: "楼层" }),
         state.floors.length
           ? chips(state.floors, state.floor, "楼层", item => { state.floor = item; void loadSegments(); })
-          : el("p", { class: "seat-empty", text: state.library ? "该馆区暂无可用楼层。" : "先选择馆区。" }),
+          : el("p", { class: "seat-empty", text: state.library ? state.error || "该馆区暂无可用楼层。" : "先选择馆区。" }),
         el("h3", { class: "seat-label", text: "日期" }),
         (() => {
           const strip = el("div", { class: "seat-dates", role: "group", "aria-label": "日期" });
@@ -169,8 +169,8 @@ export function createSeatView({ el, api }) {
         state.floor = pick;
         state.days = pick?.days ?? [];
         if (state.days.length && !state.days.includes(state.date)) state.date = state.days[0];
-      } catch {
-        state.error = "暂时读不到可预约分区。";
+      } catch (error) {
+        state.error = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "暂时读不到可预约分区。";
       }
       render();
       if (state.floor) await loadSegments();
