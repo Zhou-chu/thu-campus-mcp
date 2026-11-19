@@ -214,7 +214,7 @@ async function main() {
     await page.goto(`${base}/?e2e=1#token=${TOKEN}`, { waitUntil: "load" });
     await page.waitForSelector("#app .tab", { state: "visible", timeout: 10000 });
     record("主应用可见", await page.locator("#app").isVisible());
-    record("六个导航标签", (await page.locator(".tabbar .tab").count()) === 6);
+    record("七个导航标签", (await page.locator(".tabbar .tab").count()) === 7);
     await page.click('button[data-view="timetable"]');
     await page.waitForSelector(".timetable-page");
     record("课表视图可打开且无横向溢出", (await page.locator("#view-context").innerText()) === "课表" && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

@@ -865,3 +865,39 @@ test("app: width storage failure surfaces once and Escape/blur pointer recovery 
   a.event(a.window, "blur"); assert.equal(a.document.body.classList.contains("chat-resizing"), false);
   a.event(handle, "dblclick"); assert.equal(a.document.body.dataset.chatCustomWidth, "false");
 });
+
+test("app: sports view lists sports, venues and dates from the real routes", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/sports/sports": { ok: true, sports: ["羽毛球", "游泳"] },
+      "GET /api/sports/venues?sport=%E7%BE%BD%E6%AF%9B%E7%90%83": { ok: true, sport: "羽毛球", venues: ["气膜馆羽毛球", "综体羽毛球"] },
+      [`GET /api/sports/slots?sport=%E7%BE%BD%E6%AF%9B%E7%90%83&venue=%E6%B0%94%E8%86%9C%E9%A6%86%E7%BE%BD%E6%AF%9B%E7%90%83&date=${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`]: {
+        ok: true,
+        sessions: [
+          { site: "羽01", begin: "07:00", end: "08:00", capacity: 1, reserved: 1, status: "N", statusReason: "当前场次预约人数已满", price: 0 },
+          { site: "羽02", begin: "07:00", end: "08:00", capacity: 1, reserved: 0, status: "Y", price: 0 },
+        ],
+      },
+    },
+  });
+  a.nav("sports");
+  await until(() => a.all(".sports-chip").length >= 4, "sports chips");
+  assert.equal(a.$("#view-context").textContent, "体育");
+  assert.match(a.$(".sports-panel").textContent, /羽毛球/);
+  assert.equal(a.all(".sports-date").length, 7, "默认展示七天");
+  await until(() => /气膜馆羽毛球/.test(a.$(".sports-panel").textContent), "venue chips");
+  const text = a.$(".sports-panel").textContent;
+  assert.match(text, /气膜馆羽毛球/);
+  assert.match(text, /综体羽毛球/);
+  await until(() => a.all(".sports-site").length >= 2, "sessions");
+  assert.match(a.$(".sports-panel").textContent, /1\/2 可约/, "按可约数量统计");
+  assert.equal(a.$('.sports-site[data-open="true"]').textContent, "羽02", "满场标为不可约");
+});
+
+test("app: sports view asks for login instead of pretending there is no data", async t => {
+  const a = await app(t, { routes: { "GET /api/sports/sports": { ok: false, error: { code: "SPORTS_LOGIN_REQUIRED", message: "需要登录" } } } });
+  a.nav("sports");
+  await until(() => /登录/.test(document.body.textContent), "login hint");
+  assert.match(a.$(".sports-panel").textContent, /需要先登录体育场馆/);
+  assert.equal(a.all(".sports-site").length, 0, "没有数据时不画场地");
+});

@@ -203,7 +203,7 @@ h3 {
 .icon-btn:hover {background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink);}
 .view {counter-reset:entry;overflow:auto;padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-5);min-width:0;min-height:0;}
 .view > * {width:100%;max-width:var(--content-width);margin-inline:auto;}
-.tabbar {display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom);}
+.tabbar {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom);}
 .rail-brand,.rail-create,.rail-recents,.rail-storage {display:none;}
 .rail-main,.rail-footer {display:contents;}
 .tab {display:flex;align-items:center;justify-content:center;gap:var(--space-3);min-width:0;min-height:56px;padding:var(--space-3);border:0;background:transparent;color:var(--muted);font-size:var(--text-ui);cursor:pointer;}
@@ -1363,3 +1363,26 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
   .timetable-grid {display:none;}
   .timetable-agenda {display:flex;}
 }
+
+/* 体育场馆预约 */
+.sports-panel {display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-5);border:1px solid var(--line);border-radius:var(--radius-panel);background:var(--panel);}
+.sports-label {font-size:var(--text-meta);letter-spacing:.08em;color:var(--ink-soft);margin:0;}
+.sports-chips {display:flex;flex-wrap:wrap;gap:var(--space-2);}
+.sports-chip {padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);font-size:var(--text-meta);cursor:pointer;transition:background .15s,border-color .15s;}
+.sports-chip:hover {background:var(--selected-fill);}
+.sports-chip[data-active="true"] {border-color:var(--ink);background:var(--ink);color:var(--paper);}
+.sports-dates {display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-1);}
+.sports-date {display:flex;flex-direction:column;align-items:center;gap:2px;min-width:74px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-control);background:var(--paper);color:var(--ink);cursor:pointer;}
+.sports-date[data-active="true"] {border-color:var(--ink);background:var(--selected-fill);}
+.sports-date-day {font-size:var(--text-meta);color:var(--ink-soft);}
+.sports-date-num {font-size:var(--text-body);}
+.sports-sessions {display:flex;flex-direction:column;gap:1px;border:1px solid var(--line);border-radius:var(--radius-control);overflow:hidden;}
+.sports-slot {display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:8px var(--space-3);background:var(--paper);}
+.sports-slot + .sports-slot {border-top:1px solid var(--line);}
+.sports-slot-time {font-variant-numeric:tabular-nums;color:var(--ink);}
+.sports-slot-sites {display:flex;flex-wrap:wrap;gap:var(--space-1);}
+.sports-site {padding:2px 8px;border-radius:var(--radius-small);border:1px solid var(--line);font-size:var(--text-meta);color:var(--ink-soft);}
+.sports-site[data-open="true"] {border-color:var(--ink);color:var(--ink);background:var(--selected-fill);}
+.sports-slot-meta {font-size:var(--text-meta);color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.sports-empty {margin:0;padding:var(--space-4);border:1px dashed var(--line);border-radius:var(--radius-control);color:var(--ink-soft);font-size:var(--text-meta);background:var(--paper);}
+@media (max-width: 720px) {.sports-slot {grid-template-columns:92px minmax(0,1fr);} .sports-slot-meta {grid-column:2;}}
