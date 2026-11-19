@@ -9,6 +9,7 @@ import { createChatWidthUI } from "./chat-width-ui.js";
 import { createRightSidebar } from "./right-sidebar.js";
 import { createTimetableView } from "./timetable-view.js";
 import { createSportsView } from "./sports-view.js";
+import { createSeatView } from "./seat-view.js";
 import { approvalPresentation, decideApproval } from "./approval.js";
 import { buildApiUrl, sanitizeBaseUrl, sanitizePairCode, sanitizeToken, trimTrailingSlashes } from "./guards.js";
 import { CONNECTION_KEY, LEGACY_BASE_KEY, LEGACY_TOKEN_KEY, resolveStartupConnection, writeConnection } from "./connection.js";
@@ -76,6 +77,7 @@ const $ = (selector) => document.querySelector(selector);
 const chatWidthUI = createChatWidthUI({ onError: toast });
 const timetablePage = createTimetableView({ el, api });
 const sportsPage = createSportsView({ el, api });
+const seatPage = createSeatView({ el, api });
 const rightSidebar = createRightSidebar({
   el, api, toast, renderRich, uploadFile,
   onResize: () => chatWidthUI.refresh(),
@@ -1703,7 +1705,7 @@ function render() {
   jobPoller.stop();
   const view = $("#view");
   view.dataset.view = state.view;
-  $("#view-context").textContent = ({chat:"对话工作台",timetable:"课表",sports:"体育",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置"})[state.view] || "对话工作台";
+  $("#view-context").textContent = ({chat:"对话工作台",timetable:"课表",sports:"体育",seat:"图书馆",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置"})[state.view] || "对话工作台";
   clear(view);
   for (const tab of document.querySelectorAll(".tab"))
     tab.setAttribute("aria-current", tab.dataset.view === state.view ? "page" : "false");
@@ -1711,6 +1713,7 @@ function render() {
     chat: chatView,
     timetable: () => timetablePage(),
     sports: () => sportsPage(),
+    seat: () => seatPage(),
     sessions: sessionsView,
     services: servicesView,
     tools: toolsView,
