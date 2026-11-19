@@ -905,7 +905,7 @@ test("app: sports view asks for login instead of pretending there is no data", a
 });
 
 test("app: library seat view lists seats and surfaces the real booking error", async t => {
-  const day = new Date().toISOString().slice(0, 10);
+  const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
@@ -918,7 +918,7 @@ test("app: library seat view lists seats and surfaces the real booking error", a
         ],
         available: 1,
       },
-      "GET /api/seat/segments?section=113": { ok: false, error: { code: "SEAT_EMPTY", message: "该区域没有可选时段。" } },
+      "GET /api/seat/segments?section=113": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
       "POST /api/seat/reserve/prepare": { ok: true, token: "unit-token" },
       "POST /api/seat/reserve": { ok: false, error: { code: "SEAT_BOOK_FAILED", message: "当前用户在该时段已存在预约。" } },
     },
@@ -946,12 +946,12 @@ test("app: library seat view asks for login instead of showing empty grids", asy
 });
 
 test("app: library seat view states an empty seat list honestly", async t => {
-  const day = new Date().toISOString().slice(0, 10);
+  const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
       [`GET /api/seat/floors?library=35&date=${day}`]: { ok: true, floors: [{ id: 113, name: "二层", free: 0, total: 0, valid: true }] },
-      "GET /api/seat/segments?section=113": { ok: false, error: { code: "SEAT_EMPTY", message: "该区域没有可选时段。" } },
+      "GET /api/seat/segments?section=113": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
       [`GET /api/seat/seats?section=113&date=${day}`]: { ok: true, seats: [], available: 0 },
     },
   });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments, reserveErrorCode } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -130,4 +130,13 @@ test("seat: 预约失败原因归类为稳定错误码", () => {
   assert.equal(reserveErrorCode("别的原因"), null);
   assert.equal(normalizeReserve({ status: 0, msg: "预约失败，系统结束预约时间为：23:00" }).code, "SEAT_WINDOW_CLOSED");
   assert.equal(normalizeReserve({ status: 1, msg: "预约成功" }).code, null);
+});
+
+test("seat: 官网时间窗 06:00-23:00 才允许预约", () => {
+  const at = (iso) => new Date(iso);
+  assert.equal(bookingWindowOpen(at("2026-11-20T05:59:00+08:00")), false);
+  assert.equal(bookingWindowOpen(at("2026-11-20T06:00:00+08:00")), true);
+  assert.equal(bookingWindowOpen(at("2026-11-20T22:59:00+08:00")), true);
+  assert.equal(bookingWindowOpen(at("2026-11-20T23:00:00+08:00")), false);
+  assert.throws(() => assertBookingWindow(at("2026-11-20T23:30:00+08:00")), /SEAT_WINDOW_CLOSED|06:00-23:00/);
 });
