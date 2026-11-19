@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDays, normalizeFloors, normalizeLibraries, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
+import { normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -79,4 +79,13 @@ test("seat: 座位列表按可用性归一，不把缺 status 当成可用", () 
   assert.equal(seats[0].available, false);
   assert.equal(seats[2].available, false, "没有 status 不算可用");
   assert.equal(seats[2].status, null);
+});
+
+test("seat: 预约结果不擅自判定成功", () => {
+  assert.deepEqual(normalizeReserve({ status: 1, msg: "预约成功" }), { ok: true, status: 1, message: "预约成功", data: null });
+  assert.equal(normalizeReserve({ status: 0, msg: "座位已被预约" }).ok, false);
+  assert.equal(normalizeReserve({ status: 0, msg: "座位已被预约" }).message, "座位已被预约");
+  assert.equal(normalizeReserve({}).ok, false, "缺 status 视为未成功");
+  assert.equal(normalizeReserve({}).message, "预约未成功");
+  assert.equal(normalizeReserve({ status: "1" }).ok, true);
 });
