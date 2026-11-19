@@ -227,7 +227,14 @@ export function createSeatView({ el, api }) {
         state.notice = result.ok ? `已提交预约：${state.seat.name} ${state.date} ${state.seat.begin || ""}-${state.seat.end || ""}` : result.message || "预约未成功。";
         if (result.ok) await loadSeats();
       } catch (error) {
-        state.notice = error?.code === "SEAT_LOGIN_REQUIRED" ? "登录已过期，请重新登录后再预约。" : error?.message || "预约请求失败。";
+        const hints = {
+          SEAT_LOGIN_REQUIRED: "登录已过期，请重新登录后再预约。",
+          SEAT_ALREADY_BOOKED: "你在这个时段已有预约，先去「我的预约」取消后再试。",
+          SEAT_WINDOW_CLOSED: "当前不在预约时段内（系统 23:00 截止），请在开放时间再试。",
+          SEAT_TAKEN: "这个座位刚被占用了，换一个再试。",
+          SEAT_SEGMENT_INVALID: "该时段已失效，刷新后重选。",
+        };
+        state.notice = hints[error?.code] ?? error?.message ?? "预约请求失败。";
       } finally {
         state.pending = null;
         render();

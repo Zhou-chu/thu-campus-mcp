@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments, reserveErrorCode } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -82,7 +82,7 @@ test("seat: 座位列表按可用性归一，不把缺 status 当成可用", () 
 });
 
 test("seat: 预约结果不擅自判定成功", () => {
-  assert.deepEqual(normalizeReserve({ status: 1, msg: "预约成功" }), { ok: true, status: 1, message: "预约成功", data: null });
+  assert.deepEqual(normalizeReserve({ status: 1, msg: "预约成功" }), { ok: true, code: null, status: 1, message: "预约成功", data: null });
   assert.equal(normalizeReserve({ status: 0, msg: "座位已被预约" }).ok, false);
   assert.equal(normalizeReserve({ status: 0, msg: "座位已被预约" }).message, "座位已被预约");
   assert.equal(normalizeReserve({}).ok, false, "缺 status 视为未成功");
@@ -119,4 +119,15 @@ test("seat: 边界输入不产生假数据", () => {
   assert.equal(missingStatus.status, null);
   assert.equal(missingStatus.available, false, "缺 status 不算可用");
   assert.equal(normalizeBuckets({ list: [{ spaceId: 1, spaceName: "A", bookTimeId: 9, day: "not-a-day" }] })[0].day, null);
+});
+
+test("seat: 预约失败原因归类为稳定错误码", () => {
+  assert.equal(reserveErrorCode("当前用户在该时段已存在预约，不可重复预约。"), "SEAT_ALREADY_BOOKED");
+  assert.equal(reserveErrorCode("预约失败，系统结束预约时间为：23:00"), "SEAT_WINDOW_CLOSED");
+  assert.equal(reserveErrorCode("该座位已被预约"), "SEAT_TAKEN");
+  assert.equal(reserveErrorCode("预约时间段不存在！"), "SEAT_SEGMENT_INVALID");
+  assert.equal(reserveErrorCode("没有登录或登录已超时"), "SEAT_LOGIN_REQUIRED");
+  assert.equal(reserveErrorCode("别的原因"), null);
+  assert.equal(normalizeReserve({ status: 0, msg: "预约失败，系统结束预约时间为：23:00" }).code, "SEAT_WINDOW_CLOSED");
+  assert.equal(normalizeReserve({ status: 1, msg: "预约成功" }).code, null);
 });
