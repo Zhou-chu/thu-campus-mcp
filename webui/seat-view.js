@@ -3,7 +3,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function createSeatView({ el, api }) {
   const state = {
     libraries: [], floors: [], segments: [], seats: [],
-    library: null, floor: null, segment: null, seat: null,
+    library: null, floor: null, segment: null, seat: null, retry: 0,
     date: today(), loading: false, error: "", notice: "", loaded: false, pending: null,
   };
 
@@ -40,7 +40,7 @@ export function createSeatView({ el, api }) {
     const seatGrid = () => {
       if (state.loading) return el("p", { class: "seat-empty", text: "正在读取座位…" });
       if (state.error) return el("p", { class: "seat-empty", text: state.error });
-      if (!state.segment) return el("p", { class: "seat-empty", text: "先选择时段。" });
+
       if (!state.seats.length) return el("p", { class: "seat-empty", text: "该时段没有座位数据。" });
       const grid = el("div", { class: "seat-grid" });
       for (const seat of state.seats) {
@@ -63,8 +63,8 @@ export function createSeatView({ el, api }) {
     };
 
     const confirmBlock = () => {
-      if (!state.seat || !state.segment) return null;
-      const line = `${state.library?.name ?? ""} · ${state.floor?.name ?? ""} · ${state.seat.name} · ${state.segment.day} ${state.segment.start}-${state.segment.end}`;
+      if (!state.seat) return null;
+      const line = `${state.library?.name ?? ""} · ${state.floor?.name ?? ""} · ${state.seat.name} · ${state.date} ${state.seat.begin || ""}-${state.seat.end || ""}`;
       const box = el("div", { class: "seat-confirm" }, [
         el("p", { class: "seat-confirm-line", text: line }),
         el("button", {
@@ -83,7 +83,7 @@ export function createSeatView({ el, api }) {
       const children = [
         el("h3", { class: "seat-label", text: "馆区" }),
         state.libraries.length
-          ? chips(state.libraries.filter(item => item.valid), state.library, "馆区", item => { state.library = item; void loadFloors(); })
+          ? chips(state.libraries, state.library, "馆区", item => { state.library = item; void loadFloors(); })
           : el("p", { class: "seat-empty", text: state.loading ? "正在读取…" : state.error || "暂无馆区。" }),
         el("h3", { class: "seat-label", text: "楼层" }),
         state.floors.length
@@ -92,7 +92,7 @@ export function createSeatView({ el, api }) {
         el("h3", { class: "seat-label", text: "时段" }),
         state.segments.length
           ? chips(state.segments.map(item => ({ ...item, name: `${item.day} ${item.start}-${item.end}` })), state.segment, "时段", item => { state.segment = item; state.seat = null; void loadSeats(); })
-          : el("p", { class: "seat-empty", text: state.floor ? "该楼层暂无时段。" : "先选择楼层。" }),
+          : el("p", { class: "seat-empty", text: state.floor ? "该楼层按整日预约，无需选择时段。" : "先选择楼层。" }),
         el("h3", { class: "seat-label", text: "座位" }),
         seatGrid(),
       ];
@@ -110,7 +110,7 @@ export function createSeatView({ el, api }) {
         const data = await api("/api/seat/libraries");
         state.libraries = Array.isArray(data.libraries) ? data.libraries : [];
         if (!state.libraries.length) state.error = "接口没有返回馆区。";
-        state.library = state.libraries.find(item => item.valid) ?? null;
+        state.library = state.libraries.find(item => item.id === 35) ?? state.libraries[0] ?? null;
       } catch (error) {
         state.error = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "暂时读不到馆区。";
       } finally {
@@ -133,8 +133,9 @@ export function createSeatView({ el, api }) {
       if (!state.library) return;
       try {
         const data = await api(`/api/seat/floors?library=${state.library.id}&date=${state.date}`);
-        state.floors = Array.isArray(data.floors) ? data.floors : [];
-        state.floor = state.floors[0] ?? null;
+        state.floors = (Array.isArray(data.floors) ? data.floors : []).filter(item => !/已停用|停用区域/.test(item.name));
+        state.retry = 0;
+        state.floor = state.floors.find(item => (item.free ?? 0) > 0) ?? state.floors[0] ?? null;
       } catch {
         state.error = "暂时读不到楼层。";
       }
@@ -157,16 +158,26 @@ export function createSeatView({ el, api }) {
         state.error = "暂时读不到时段。";
       }
       render();
-      if (state.segment) await loadSeats();
+      if (state.floor) { await loadSeats(); return; }
+      // 该分区没有时段时，有界地尝试下一个候选，而不是卡住。
+      if (state.retry < 2 && state.floor) {
+        const index = state.floors.findIndex(item => item.id === state.floor.id);
+        const next = state.floors[index + 1];
+        if (next) {
+          state.retry += 1;
+          state.floor = next;
+          await loadSegments();
+        }
+      }
     }
 
     async function loadSeats() {
-      if (!state.floor || !state.segment) return;
+      if (!state.floor) return;
       state.loading = true;
       state.error = "";
       render();
       try {
-        const data = await api(`/api/seat/seats?section=${state.floor.id}&date=${state.segment.day}`);
+        const data = await api(`/api/seat/seats?section=${state.floor.id}&date=${state.segment?.day ?? state.date}`);
         state.seats = Array.isArray(data.seats) ? data.seats : [];
       } catch {
         state.seats = [];
@@ -178,14 +189,14 @@ export function createSeatView({ el, api }) {
     }
 
     async function submitReserve() {
-      if (!state.seat || !state.segment) return;
+      if (!state.seat) return;
       state.pending = "prepare";
       state.notice = "";
       render();
       try {
-        const prepared = await api("/api/seat/reserve/prepare", { method: "POST", body: { space: state.seat.id, segment: state.segment.id, day: state.segment.day } });
-        const result = await api("/api/seat/reserve", { method: "POST", body: { space: state.seat.id, segment: state.segment.id, day: state.segment.day, confirmToken: prepared.token } });
-        state.notice = result.ok ? `已提交预约：${state.seat.name} ${state.segment.day} ${state.segment.start}-${state.segment.end}` : result.message || "预约未成功。";
+        const prepared = await api("/api/seat/reserve/prepare", { method: "POST", body: { space: state.seat.id, segment: state.seat.segment, day: state.date } });
+        const result = await api("/api/seat/reserve", { method: "POST", body: { space: state.seat.id, segment: state.seat.segment, day: state.date, confirmToken: prepared.token } });
+        state.notice = result.ok ? `已提交预约：${state.seat.name} ${state.date} ${state.seat.begin || ""}-${state.seat.end || ""}` : result.message || "预约未成功。";
         if (result.ok) await loadSeats();
       } catch (error) {
         state.notice = error?.code === "SEAT_LOGIN_REQUIRED" ? "登录已过期，请重新登录后再预约。" : error?.message || "预约请求失败。";

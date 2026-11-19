@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
+import { normalizeDays, normalizeFloors, normalizeLibraries, normalizeBuckets, normalizeReserve, normalizeSeats, normalizeSegments } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -88,4 +88,22 @@ test("seat: 预约结果不擅自判定成功", () => {
   assert.equal(normalizeReserve({}).ok, false, "缺 status 视为未成功");
   assert.equal(normalizeReserve({}).message, "预约未成功");
   assert.equal(normalizeReserve({ status: "1" }).ok, true);
+});
+
+test("seat: 场次桶统一两类分区，并去掉重复与空名", () => {
+  const data = {
+    list: [
+      { spaceId: 3143, spaceName: "M1-2", area: 3, bookTimeId: 1634673, beginTime: { date: "2026-11-19 08:00:00" }, endTime: "22:00", status: 1, day: "2026-11-19" },
+      { spaceId: 3143, spaceName: "M1-2", area: 3, bookTimeId: 1634673, beginTime: "08:00", endTime: "22:00", status: 1 },
+      { spaceId: 3144, spaceName: "M1-3", area: 3, bookTimeId: 1634673, beginTime: "08:00", endTime: "22:00", status: 0 },
+      { spaceId: 0, spaceName: "", bookTimeId: 1 },
+    ],
+  };
+  const buckets = normalizeBuckets(data);
+  assert.equal(buckets.length, 2, "同座位同时段只保留一条");
+  assert.equal(buckets[0].name, "M1-2");
+  assert.equal(buckets[0].begin, "08:00");
+  assert.equal(buckets[0].available, true);
+  assert.equal(buckets[1].available, false);
+  assert.equal(buckets[0].bookTimeId, 1634673);
 });
