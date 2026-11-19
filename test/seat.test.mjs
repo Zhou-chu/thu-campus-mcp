@@ -140,3 +140,31 @@ test("seat: 官网时间窗 06:00-23:00 才允许预约", () => {
   assert.equal(bookingWindowOpen(at("2026-11-20T23:00:00+08:00")), false);
   assert.throws(() => assertBookingWindow(at("2026-11-20T23:30:00+08:00")), /SEAT_WINDOW_CLOSED|06:00-23:00/);
 });
+
+test("seat: 归一函数覆盖缺字段与非法输入", () => {
+  assert.deepEqual(normalizeLibraries({ list: [null, "x", { id: 1 }] }), [], "缺名字或非对象都丢弃");
+  const libs = normalizeLibraries({
+    list: [
+      { id: 2, name: " 二号馆 ", levels: "3", parentId: "7", isValid: true },
+      { id: 1, name: "一号馆", isValid: 1 },
+    ],
+  });
+  assert.deepEqual(libs.map(item => item.id), [1, 2], "按 level/id 排序");
+  assert.equal(libs[1].name, "二号馆", "名字去空白");
+  assert.equal(libs[0].level, 0, "缺 levels 记为 0");
+  assert.equal(libs[0].parentId, null, "缺 parentId 记为 null");
+
+  const floors = normalizeFloors({
+    list: [
+      { areaInfo: { id: 9 }, childArea: [{ id: 0, name: "" }, { id: 5, name: " 二层 " }] },
+      { areaInfo: {}, childArea: "x" },
+    ],
+  });
+  assert.equal(floors.length, 1, "非法子区域与空名都丢弃");
+  assert.equal(floors[0].name, "二层");
+  assert.equal(floors[0].parentId, 9, "缺 parentId 时用 areaInfo.id");
+  assert.equal(floors[0].total, null, "缺容量记为 null");
+  assert.equal(floors[0].free, null, "缺占用记为 null");
+
+  assert.deepEqual(normalizeDays({ list: [null, { day: null }, { day: "bad" }] }), []);
+});
