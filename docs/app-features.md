@@ -142,3 +142,11 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 - `seats()` 用 `areadays` 的 segment + `spaces_old` 取座位；关闭时间窗外由 `bookingWindowOpen()` 直接拒绝，不启动浏览器。
 - 预约失败原因归类为稳定错误码：`SEAT_WINDOW_CLOSED`、`SEAT_ALREADY_BOOKED`、`SEAT_TAKEN`、`SEAT_SEGMENT_INVALID`、`SEAT_LOGIN_REQUIRED`。
 
+
+
+### 怎么用
+
+- 自然语言（Agent）：直接说「帮我看看图书馆 11-20 有没有空位」「约 11-20 音乐馆单人欣赏区的 M1-1」。Agent 会先 `seat_sections` 找可约分区 → `seat_seats` 看空位 → 经确认后用 `seat_reserve` 提交；要撤销时说「取消我 11-20 的座位预约」，走 `seat_bookings` → `seat_cancel`。
+- 网页（人类点击）：导航「图书馆」→ 选分区 → 选日期 → 点座位 → 「预约此座位」。未登录或不在开放时段时，界面会直接说明原因并给出「打开登录窗口」入口，不会假装可约。
+- 时间限制：每日 **06:00–23:00**（北京时间）；登录会话约 1 小时后失效，需要重新登录。
+
