@@ -2,7 +2,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export function createSeatView({ el, api }) {
   const state = {
-    libraries: [], floors: [], segments: [], seats: [],
+    libraries: [], floors: [], segments: [], seats: [], days: [],
     library: null, floor: null, segment: null, seat: null, retry: 0,
     date: today(), loading: false, error: "", notice: "", loaded: false, pending: null,
   };
@@ -92,9 +92,8 @@ export function createSeatView({ el, api }) {
         el("h3", { class: "seat-label", text: "日期" }),
         (() => {
           const strip = el("div", { class: "seat-dates", role: "group", "aria-label": "日期" });
-          for (let index = 0; index < 7; index += 1) {
-            const day = new Date(Date.now() + index * 86400000);
-            const value = day.toISOString().slice(0, 10);
+          const candidates = state.days.length ? state.days : Array.from({ length: 7 }, (_, index) => new Date(Date.now() + index * 86400000).toISOString().slice(0, 10));
+          for (const value of candidates) {
             strip.append(el("button", { class: "seat-chip", type: "button", dataset: { active: String(value === state.date) }, "aria-pressed": String(value === state.date), text: value.slice(5), onclick: () => { state.date = value; state.seat = null; state.notice = ""; void loadSeats(); } }));
           }
           return strip;
@@ -164,6 +163,8 @@ export function createSeatView({ el, api }) {
       try {
         const data = await api(`/api/seat/segments?section=${state.floor.id}`);
         state.segments = Array.isArray(data.segments) ? data.segments : [];
+        state.days = [...new Set(state.segments.map(item => item.day))];
+        if (state.days.length && !state.days.includes(state.date)) state.date = state.days[0];
         state.segment = state.segments.find(item => item.day === state.date) ?? state.segments[0] ?? null;
       } catch {
         state.error = "暂时读不到时段。";
