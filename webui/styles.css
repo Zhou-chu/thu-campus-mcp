@@ -1405,3 +1405,10 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 .seat-confirm-button {padding:8px 16px;border:1px solid var(--ink);border-radius:var(--radius-control);background:var(--ink);color:var(--paper);cursor:pointer;font-size:var(--text-meta);}
 .seat-confirm-button[disabled] {opacity:.5;cursor:progress;}
 .seat-notice {margin:0;padding:var(--space-3);border:1px dashed var(--line);border-radius:var(--radius-control);color:var(--ink);font-size:var(--text-meta);}
+
+@media (max-width: 430px) {
+  .tabbar { padding-inline: 4px; gap: 2px; }
+  .tabbar .tab { padding-inline: 2px; }
+  .tabbar .tab span { font-size: 10px; letter-spacing: 0; }
+  .tabbar .nav-icon { width: 16px; height: 16px; }
+}
