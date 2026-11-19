@@ -89,6 +89,16 @@ export function createSeatView({ el, api }) {
         state.floors.length
           ? chips(state.floors, state.floor, "楼层", item => { state.floor = item; void loadSegments(); })
           : el("p", { class: "seat-empty", text: state.library ? "该馆区暂无可用楼层。" : "先选择馆区。" }),
+        el("h3", { class: "seat-label", text: "日期" }),
+        (() => {
+          const strip = el("div", { class: "seat-dates", role: "group", "aria-label": "日期" });
+          for (let index = 0; index < 7; index += 1) {
+            const day = new Date(Date.now() + index * 86400000);
+            const value = day.toISOString().slice(0, 10);
+            strip.append(el("button", { class: "seat-chip", type: "button", dataset: { active: String(value === state.date) }, "aria-pressed": String(value === state.date), text: value.slice(5), onclick: () => { state.date = value; state.seat = null; state.notice = ""; void loadSeats(); } }));
+          }
+          return strip;
+        })(),
         el("h3", { class: "seat-label", text: "时段" }),
         state.segments.length
           ? chips(state.segments.map(item => ({ ...item, name: `${item.day} ${item.start}-${item.end}` })), state.segment, "时段", item => { state.segment = item; state.seat = null; void loadSeats(); })
@@ -135,6 +145,7 @@ export function createSeatView({ el, api }) {
         const data = await api(`/api/seat/floors?library=${state.library.id}&date=${state.date}`);
         state.floors = (Array.isArray(data.floors) ? data.floors : []).filter(item => !/已停用|停用区域/.test(item.name));
         state.retry = 0;
+        state.date = state.date || new Date().toISOString().slice(0, 10);
         state.floor = state.floors.find(item => (item.free ?? 0) > 0) ?? state.floors[0] ?? null;
       } catch {
         state.error = "暂时读不到楼层。";
