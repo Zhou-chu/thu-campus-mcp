@@ -150,3 +150,7 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 - 网页（人类点击）：导航「图书馆」→ 选分区 → 选日期 → 点座位 → 「预约此座位」。未登录或不在开放时段时，界面会直接说明原因并给出「打开登录窗口」入口，不会假装可约。
 - 时间限制：每日 **06:00–23:00**（北京时间）；登录会话约 1 小时后失效，需要重新登录。
 
+
+- 自动重登：`POST /api/seat/login` / 工具 `seat_login`。`reserve` 与 `cancel` 在登录失效时会自动用浏览器已保存凭据重登一次；**重登后会先核对服务器是否已创建订单**，命中即返回 `reconciled: true` 与 `bookingId`，不再重复提交。需要人工验证码时返回 `needsManual: true`。
+- 令牌来源：优先页面渲染的 `ska.access_token`（比 cookie 新），页面地址附带 `_=<timestamp>` 规避缓存导致的陈旧令牌。
+
