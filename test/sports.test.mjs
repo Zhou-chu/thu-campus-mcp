@@ -117,3 +117,33 @@ test("sports: 可约场地兼容数组返回且缺字段时保持诚实", async 
   assert.deepEqual(noDays[0].beforeReserveDays, [], "缺 beforeReserveDays 时给空数组");
   assert.equal(noDays[0].formId, undefined, "缺表单 id 时不编造");
 });
+
+test("sports: 归一函数的边界分支（缺字段/异形返回/状态为 0）", async () => {
+  const { normalizeScenes, normalizeAvailable, buildReservePayload } = await import("../lib/app/sports.mjs");
+  // 场景：非对象、双名缺失、beforeReserveDays 非数组
+  const scenes = normalizeScenes({ data: [
+    5,
+    { uuid: "s4" },
+    { uuid: "s5", sceneName: "场馆", beforeReserveDays: "not-array" },
+  ] });
+  assert.equal(scenes.length, 1);
+  assert.deepEqual(scenes[0].beforeReserveDays, [], "非数组按空处理");
+
+  // 场地：data 非数组、记录非对象、缺 uuid、reserveTime 非数组、缺 endTime、status=0
+  const empty = normalizeAvailable({ data: "bad" }, { sceneUuid: "s", date: "2026-11-21" });
+  assert.deepEqual(empty.sites, [], "异形返回不产出场地");
+
+  const mixed = normalizeAvailable({ data: { records: [
+    7,
+    { siteName: "缺 uuid" },
+    { uuid: "site2", reserveTime: "bad" },
+    { uuid: "site3", reserveTime: [{ startTime: "2026-11-21 08:00:00" }, { startTime: "2026-11-21 09:00:00", endTime: "2026-11-21 10:00:00", status: 0 }] },
+  ] } }, { sceneUuid: "s", date: "2026-11-21" });
+  assert.deepEqual(mixed.sites.map(site => site.uuid), ["site2", "site3"]);
+  assert.deepEqual(mixed.sites[0].slots, [], "缺 endTime 的时段丢弃");
+  assert.equal(mixed.sites[1].slots.length, 1);
+  assert.equal(mixed.sites[1].slots[0].available, false, "status=0 视为不可约");
+
+  const withDeploy = buildReservePayload({ sceneUuid: "s", siteUuid: "x", siteType: "ROOM", startTime: "a", endTime: "b", formId: "f", deployUuid: "d1" });
+  assert.equal(withDeploy.formParam.deployUuid, "d1", "有 deployUuid 时写入");
+});
