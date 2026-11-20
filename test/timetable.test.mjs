@@ -168,3 +168,41 @@ test("timetable http: exposes the real table and supports forced refresh", async
   assert.equal(refreshed.courses.length, 1);
   assert.equal((await fetch(app.base + "/api/timetable")).status, 401, "未授权不能读课表");
 });
+test("timetable: 自定义课程校验与本地增删隐藏", async () => {
+  const { normalizeCustomCourse, createLocalTimetable } = await import("../lib/app/timetable-local.mjs");
+  assert.equal(normalizeCustomCourse({}).ok, false);
+  assert.equal(normalizeCustomCourse({ name: "x", day: 9, from: 1 }).ok, false);
+  assert.equal(normalizeCustomCourse({ name: "x", day: 1, from: 5, to: 2 }).ok, false);
+  const ok = normalizeCustomCourse({ name: " 自习 ", day: 3, from: 1, to: 2, location: "图书馆" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.course.name, "自习");
+  assert.deepEqual(ok.course.slots, [{ day: 3, from: 1, to: 2 }]);
+
+  const file = path.join(await mkdtemp(path.join(tmpdir(), "timetable-")), "local.json");
+  const local = createLocalTimetable(file);
+  const added = await local.add({ name: "线下课", day: 2, from: 3, to: 4 });
+  assert.equal(added.ok, true);
+  let snapshot = await local.snapshot();
+  assert.equal(snapshot.custom.length, 1);
+  await local.hide({ courseId: "c1", day: 2, from: 1 });
+  snapshot = await local.snapshot();
+  assert.equal(snapshot.hidden.length, 1);
+  await local.unhide({ courseId: "c1", day: 2, from: 1 });
+  snapshot = await local.snapshot();
+  assert.equal(snapshot.hidden.length, 0);
+  await local.remove(added.course.id);
+  snapshot = await local.snapshot();
+  assert.equal(snapshot.custom.length, 0);
+});
+
+test("timetable: 本地覆盖层隐藏时段并叠加自定义课程", async () => {
+  const { applyLocalOverrides } = await import("../lib/app/timetable.mjs");
+  const table = { courses: [{ id: "c1", name: "物理", slots: [{ day: 2, from: 1, to: 2 }, { day: 4, from: 3, to: 3 }] }] };
+  const merged = applyLocalOverrides(table, {
+    hidden: [{ courseId: "c1", day: 2, from: 1 }],
+    custom: [{ id: "local-1", name: "自习", custom: true, slots: [{ day: 6, from: 1, to: 2 }] }],
+  });
+  assert.equal(merged.courses.length, 2);
+  assert.deepEqual(merged.courses.find(item => item.id === "c1").slots, [{ day: 4, from: 3, to: 3 }]);
+  assert.equal(merged.courses.find(item => item.id === "local-1").custom, true);
+});

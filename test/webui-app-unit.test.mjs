@@ -644,8 +644,9 @@ test("app: timetable renders the weekly grid, today marker and course detail", a
   assert.match(a.$(".timetable-page").textContent, /1 门课程没有上课时间地点/);
   assert.match(a.$(".timetable-head").textContent, /秋季学期/);
   a.click(a.$(".course-block"));
-  assert.match(a.$(".course-detail").textContent, /甲老师/);
-  assert.match(a.$(".course-detail").textContent, /一教101/);
+  assert.match(a.$(".timetable-detail").textContent, /甲老师/);
+  assert.match(a.$(".timetable-detail").textContent, /一教101/);
+  assert.match(a.$(".timetable-detail").textContent, /返回课表/);
 });
 
 test("app: timetable reports an unreadable semester without inventing courses", async t => {
