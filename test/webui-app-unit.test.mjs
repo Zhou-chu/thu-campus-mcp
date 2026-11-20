@@ -909,8 +909,9 @@ test("app: library seat view lists seats and surfaces the real booking error", a
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
-      "GET /api/seat/sections?library=35": { ok: true, sections: [{ id: 113, name: "二层", free: 10, total: 20, days: [day] }] },
-      [`GET /api/seat/seats?section=113&date=${day}`]: {
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+      "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 10 }] },
+      [`GET /api/seat/seats?section=96&date=${day}`]: {
         ok: true,
         seats: [
           { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true },
@@ -918,7 +919,7 @@ test("app: library seat view lists seats and surfaces the real booking error", a
         ],
         available: 1,
       },
-      "GET /api/seat/segments?section=113": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
+      "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
       "POST /api/seat/reserve/prepare": { ok: true, token: "unit-token" },
       "POST /api/seat/reserve": { ok: false, error: { code: "SEAT_BOOK_FAILED", message: "当前用户在该时段已存在预约。" } },
     },
@@ -950,12 +951,15 @@ test("app: library seat view states an empty seat list honestly", async t => {
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
-      "GET /api/seat/sections?library=35": { ok: true, sections: [{ id: 113, name: "二层", free: 0, total: 0, days: [day] }] },
-      "GET /api/seat/segments?section=113": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
-      [`GET /api/seat/seats?section=113&date=${day}`]: { ok: true, seats: [], available: 0 },
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+      "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 0 }] },
+      "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, seats: [], available: 0 },
     },
   });
   a.nav("seat");
-  await until(() => /该时段没有座位数据/.test(a.$(".seat-panel").textContent), "empty seats");
+  await until(() => /该分区当前没有可约座位/.test(a.$(".seat-panel").textContent), "empty seats");
   assert.equal(a.all(".seat").length, 0, "没有数据时不画座位");
 });
+
+
