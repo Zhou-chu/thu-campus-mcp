@@ -98,3 +98,22 @@ test("sports: 场景与可约场地归一，缺字段不编造", async () => {
   assert.equal(payload.formParam.formId, "f1");
   assert.equal("deployUuid" in payload.formParam, false, "没有 deployUuid 时不塞空字段");
 });
+
+test("sports: 工具层拒绝缺失参数与未知工具", async () => {
+  const { callSportsTool } = await import("../lib/sports/mcp.mjs");
+  await assert.rejects(() => callSportsTool("sports_available", {}), error => error.code === "ARGUMENT_REQUIRED");
+  await assert.rejects(() => callSportsTool("sports_unknown", {}), error => error.code === "UNKNOWN_TOOL");
+});
+
+test("sports: 可约场地兼容数组返回且缺字段时保持诚实", async () => {
+  const { normalizeAvailable, normalizeScenes } = await import("../lib/app/sports.mjs");
+  const arrayShaped = normalizeAvailable({ data: [
+    { uuid: "site9", siteName: "9号场", reserveTime: [{ startTime: "2026-11-21 08:00:00", endTime: "2026-11-21 09:00:00", available: false }] },
+  ] }, { sceneUuid: "s9", date: "2026-11-21" });
+  assert.equal(arrayShaped.sites.length, 1);
+  assert.equal(arrayShaped.sites[0].slots[0].available, false, "不可约时段如实标记");
+
+  const noDays = normalizeScenes({ data: [{ uuid: "s3", sceneName: "健身中心" }] });
+  assert.deepEqual(noDays[0].beforeReserveDays, [], "缺 beforeReserveDays 时给空数组");
+  assert.equal(noDays[0].formId, undefined, "缺表单 id 时不编造");
+});
