@@ -1868,7 +1868,12 @@ document.getElementById("theme-light")?.addEventListener("click", () => applyThe
 document.getElementById("theme-dark")?.addEventListener("click", () => applyTheme("dark"));
 document.getElementById("theme-auto")?.addEventListener("click", () => applyTheme("auto"));
 applyTheme((() => {
-  try { return localStorage.getItem("campus.theme") || "auto"; } catch { return "auto"; }
+  try {
+    return localStorage.getItem("campus.theme") || "auto";
+  } catch {
+    // 存储被禁用时沿用 theme.js 已解析出的配色，避免开机抖动。
+    return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  }
 })());
 const autoThemeTimer = setInterval(() => {
   if (themeMode === "auto") document.documentElement.dataset.theme = resolveAutoTheme();
