@@ -15,6 +15,7 @@ import { buildApiUrl, sanitizeBaseUrl, sanitizePairCode, sanitizeToken, trimTrai
 import { CONNECTION_KEY, LEGACY_BASE_KEY, LEGACY_TOKEN_KEY, resolveStartupConnection, writeConnection } from "./connection.js";
 
 const state = {
+  stats: new Map(),
   token: "",
   base: "",
   meta: null,
@@ -828,6 +829,47 @@ async function stopCurrentTurn() {
     toast(e.message);
   } finally { state.stopping = false; syncModelPickers(); }
 }
+function formatTokens(value) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (value >= 1e8) return (value / 1e8).toFixed(2) + "亿";
+  if (value >= 1e4) return (value / 1e4).toFixed(1) + "万";
+  return String(Math.round(value));
+}
+
+function sessionStats(key) {
+  const id = key || "draft";
+  if (!state.stats.has(id)) {
+    const draft = state.stats.get("draft");
+    state.stats.set(id, draft || { turns: 0 });
+    if (draft && id !== "draft") state.stats.delete("draft");
+  }
+  return state.stats.get(id);
+}
+
+function statsText() {
+  const stats = sessionStats(state.sessionId);
+  if (!stats.turns) return "";
+  const parts = ["第 " + stats.turns + " 轮"];
+  if (stats.steps) parts.push(stats.steps + " 步");
+  if (stats.rate) parts.push(stats.rate.toFixed(0) + " tok/s");
+  const total = formatTokens(stats.totalTokens);
+  if (total) parts.push(total + " tok");
+  if (Number.isFinite(stats.cachePct)) parts.push("缓存 " + stats.cachePct.toFixed(0) + "%");
+  return parts.join(" · ");
+}
+
+function statsNode() {
+  const text = statsText();
+  return el("div", { class: "chat-stats", id: "chat-stats", role: "status", hidden: !text, text });
+}
+
+function refreshStats() {
+  const node = $("#chat-stats");
+  if (!node) return;
+  node.textContent = statsText();
+  node.hidden = !node.textContent;
+}
+
 function chatView() {
   const wrap = el("div", { class: "stack chat", dataset: { empty: String(homeIsEmpty(state.messages, hasQueuedWork())) } });
   const hero = el("div", { class: "chat-home" }, [
@@ -848,7 +890,7 @@ function chatView() {
   for (const action of HOME_ACTIONS) quick.append(el("button", {
     class: "home-shortcut", type: "button", dataset: { action: action.id }, onclick: () => activateHomeAction(action.id, textarea),
   }, [homeIcon(action.icon), el("span", { text: action.label })]));
-  const dock = el("div", { class: "chat-dock" }, [queuePanel(), composer]);
+  const dock = el("div", { class: "chat-dock" }, [queuePanel(), statsNode(), composer]);
   wrap.append(...chatWidthUI.handles(), hero, messages, dock, quick);
   for (const block of state.messages) messages.append(blockNode(block));
   const send = () => submitDraft(textarea);
@@ -906,6 +948,9 @@ async function sendTurn(text) {
   const ctx = { sessionId: state.sessionId, messages: state.messages };
   const onScreen = () => state.sessionId === ctx.sessionId;
   const patchDom = fn => { if (onScreen()) fn(); };
+  const startedAt = Date.now();
+  const runStats = sessionStats(ctx.sessionId);
+  runStats.turns += 1;
   const turnModel = state.selectedModel;
   state.activeModel = turnModel;
   state.stopRequested = false;
@@ -1031,12 +1076,26 @@ async function sendTurn(text) {
           finishStep("error");
           addStatus({ kind: "error", code: payload.code, message: payload.message || "本轮失败。" });
           break;
-        case "done":
+        case "done": {
           state.sessionId = payload.sessionId || state.sessionId;
+          if (payload.usage) {
+            const prompt = Number(payload.usage.prompt_tokens) || 0;
+            const completion = Number(payload.usage.completion_tokens) || 0;
+            const cached = Number(payload.usage.prompt_tokens_details?.cached_tokens) || 0;
+            runStats.steps = Number(payload.steps) || runStats.steps;
+            runStats.totalTokens = Number(payload.usage.total_tokens) || prompt + completion;
+            runStats.cachePct = prompt ? (cached / prompt) * 100 : undefined;
+            const seconds = Math.max(0.001, (Date.now() - startedAt) / 1000);
+            runStats.rate = completion ? completion / seconds : runStats.rate;
+          } else if (payload.steps) {
+            runStats.steps = Number(payload.steps);
+          }
+          patchDom(refreshStats);
           finishStep(payload.aborted ? "stopped" : "done");
           completed = true;
           outcome = completedTurnOutcome(payload, failure, state.stopRequested);
           break;
+        }
       }
     }
     if (!completed) throw Object.assign(new Error("连接中断，已保留收到的内容，请重试。"), { code: "STREAM_INTERRUPTED" });

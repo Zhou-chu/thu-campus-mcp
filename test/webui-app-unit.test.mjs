@@ -963,3 +963,24 @@ test("app: library seat view states an empty seat list honestly", async t => {
 });
 
 
+
+test("app: chat stats show turns, steps, tokens and cache hit after a turn", async t => {
+  const a = await app(t, {});
+  const stream = a.stream();
+  a.routes.set("POST /api/chat", () => stream.response);
+  await a.send("看一下统计");
+  stream.emit("ready", { sessionId: "sess-stats" });
+  stream.emit("token", { text: "好" });
+  stream.emit("done", {
+    sessionId: "sess-stats",
+    steps: 3,
+    usage: { prompt_tokens: 1000, completion_tokens: 50, total_tokens: 1050, prompt_tokens_details: { cached_tokens: 900 } },
+  });
+  await flush();
+  a.frame();
+  const text = a.$("#chat-stats").textContent;
+  assert.match(text, /第 1 轮/);
+  assert.match(text, /3 步/);
+  assert.match(text, /缓存 90%/);
+  assert.match(text, /tok/);
+});
