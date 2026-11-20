@@ -1845,17 +1845,38 @@ async function start() {
         });
       }
     });
-  const applyTheme = (mode) => {
-    document.documentElement.dataset.theme = mode;
-    try {
-      localStorage.setItem("campus.theme", mode);
-    } catch {}
-    $("#theme-light").setAttribute("aria-pressed", String(mode === "light"));
-    $("#theme-dark").setAttribute("aria-pressed", String(mode === "dark"));
-  };
-  $("#theme-light").addEventListener("click", () => applyTheme("light"));
-  $("#theme-dark").addEventListener("click", () => applyTheme("dark"));
-  applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+  const resolveAutoTheme = () => {
+  const hour = new Date().getHours();
+  return hour >= 6 && hour < 18 ? "light" : "dark";
+};
+let themeMode = "auto";
+const syncThemeButtons = () => {
+  for (const [id, mode] of [["theme-light", "light"], ["theme-dark", "dark"], ["theme-auto", "auto"]]) {
+    const node = document.getElementById(id);
+    if (node) node.setAttribute("aria-pressed", String(themeMode === mode));
+  }
+};
+const applyTheme = mode => {
+  themeMode = mode === "light" || mode === "dark" ? mode : "auto";
+  document.documentElement.dataset.theme = themeMode === "auto" ? resolveAutoTheme() : themeMode;
+  try {
+    localStorage.setItem("campus.theme", themeMode);
+  } catch {}
+  syncThemeButtons();
+};
+document.getElementById("theme-light")?.addEventListener("click", () => applyTheme("light"));
+document.getElementById("theme-dark")?.addEventListener("click", () => applyTheme("dark"));
+document.getElementById("theme-auto")?.addEventListener("click", () => applyTheme("auto"));
+applyTheme((() => {
+  try { return localStorage.getItem("campus.theme") || "auto"; } catch { return "auto"; }
+})());
+const autoThemeTimer = setInterval(() => {
+  if (themeMode === "auto") document.documentElement.dataset.theme = resolveAutoTheme();
+}, 60000);
+autoThemeTimer?.unref?.();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && themeMode === "auto") document.documentElement.dataset.theme = resolveAutoTheme();
+});
   $("#pair-submit").addEventListener("click", submitPair);
   $("#pair-code").addEventListener("keydown", (event) => {
     if (event.key === "Enter") void submitPair();
