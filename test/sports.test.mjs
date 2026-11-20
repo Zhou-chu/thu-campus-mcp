@@ -147,3 +147,13 @@ test("sports: 归一函数的边界分支（缺字段/异形返回/状态为 0�
   const withDeploy = buildReservePayload({ sceneUuid: "s", siteUuid: "x", siteType: "ROOM", startTime: "a", endTime: "b", formId: "f", deployUuid: "d1" });
   assert.equal(withDeploy.formParam.deployUuid, "d1", "有 deployUuid 时写入");
 });
+
+test("sports: 场地记录使用 siteUuid 别名且缺开始时间的时段丢弃", async () => {
+  const { normalizeAvailable } = await import("../lib/app/sports.mjs");
+  const result = normalizeAvailable({ data: { records: [
+    { siteUuid: "alias-1", siteName: "别名场", reserveTime: [{ endTime: "2026-11-21 10:00:00" }] },
+  ] } }, { sceneUuid: "s", date: "2026-11-21" });
+  assert.equal(result.sites.length, 1);
+  assert.equal(result.sites[0].uuid, "alias-1", "uuid 缺省时回退 siteUuid");
+  assert.deepEqual(result.sites[0].slots, [], "缺开始时间的时段丢弃");
+});
