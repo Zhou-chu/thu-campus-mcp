@@ -31,8 +31,8 @@ test("one MCP entry forwards all47 tools, browser lifecycle and rain prompt", as
       }),
     );
     const tools = (await client.listTools()).tools;
-    assert.equal(tools.length, 66);
-    assert.equal(new Set(tools.map((t) => t.name)).size, 66);
+    assert.equal(tools.length, 67);
+    assert.equal(new Set(tools.map((t) => t.name)).size, 67);
     assert(tools.some((t) => t.name === "madmodel_status"));
     assert(tools.some((t) => t.name === "madmodel_models"));
     const courses = await client.callTool({
