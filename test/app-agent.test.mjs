@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runTurn, SYSTEM_PROMPT } from "../lib/app/agent.mjs";
+import { runTurn, SYSTEM_PROMPT, systemPromptFor } from "../lib/app/agent.mjs";
 import { createApprovals } from "../lib/app/approvals.mjs";
 
 const toolCall = (id, name = "learn_status", args = "{}") => ({ id, type: "function", function: { name, arguments: args } });
@@ -205,4 +205,12 @@ test("无法序列化的真实工具结果回灌明确占位，不导致循环�
 test("提示合理查询同步任务，不把状态轮询次数变成执行cap", () => {
   assert.match(SYSTEM_PROMPT, /learn_sync_status/);
   assert.match(SYSTEM_PROMPT, /不编造进度或结果/);
+});
+
+test("agent: system prompt carries current date and tells the model not to guess", () => {
+  const prompt = systemPromptFor(new Date("2026-11-20T13:35:00+08:00"));
+  assert.match(prompt, /当前时间：/);
+  assert.match(prompt, /2026/);
+  assert.match(prompt, /Asia\/Shanghai/);
+  assert.match(prompt, /不要靠试探性调用或报错来推断日期/);
 });
