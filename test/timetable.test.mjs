@@ -248,4 +248,8 @@ test("timetable: HTTP 自定义课程增删隐藏与错误分支", async t => {
 
   const missing = await fetch(app.base + "/api/timetable/custom/nope", { method: "DELETE", headers });
   assert.equal(missing.status, 404);
+
+  const broken = await fetch(app.base + "/api/timetable/custom", { method: "POST", headers, body: "not json" });
+  assert.equal(broken.status, 400, "非法 JSON 不写入，按校验失败返回");
+  assert.equal((await broken.json()).error.code, "INVALID_NAME");
 });
