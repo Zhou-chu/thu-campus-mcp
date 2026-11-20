@@ -913,3 +913,21 @@ test("app: sports reserve requires a scene, a slot and a confirmation token", as
   assert.equal(noToken.status, 428, "没有确认令牌不能下单");
   assert.equal((await noToken.json()).error.code, "APPROVAL_REQUIRED");
 });
+
+test("app: oversized and malformed request bodies are rejected with codes", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+
+  const malformed = await fetch(url + "/api/sidebar/submissions/prepare", { method: "POST", headers, body: "{not json" });
+  assert.equal(malformed.status, 400, "非法 JSON 直接拒绝");
+  assert.equal((await malformed.json()).error.code, "INVALID_JSON");
+
+  const oversized = await fetch(url + "/api/sidebar/submissions/prepare", {
+    method: "POST", headers, body: JSON.stringify({ content: "x".repeat(70 * 1024) }),
+  });
+  assert.equal(oversized.status, 413, "超过体积上限会被拒绝");
+  assert.equal((await oversized.json()).error.code, "PAYLOAD_TOO_LARGE");
+
+  const emptyBody = await fetch(url + "/api/tool-approvals", { method: "POST", headers, body: "" });
+  assert.equal(emptyBody.status, 404, "空请求体按缺字段处理，不冒充成功");
+});
