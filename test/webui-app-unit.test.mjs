@@ -644,8 +644,9 @@ test("app: timetable renders the weekly grid, today marker and course detail", a
   assert.match(a.$(".timetable-page").textContent, /1 门课程没有上课时间地点/);
   assert.match(a.$(".timetable-head").textContent, /秋季学期/);
   a.click(a.$(".course-block"));
-  assert.match(a.$(".course-detail").textContent, /甲老师/);
-  assert.match(a.$(".course-detail").textContent, /一教101/);
+  assert.match(a.$(".timetable-detail").textContent, /甲老师/);
+  assert.match(a.$(".timetable-detail").textContent, /一教101/);
+  assert.match(a.$(".timetable-detail").textContent, /返回课表/);
 });
 
 test("app: timetable reports an unreadable semester without inventing courses", async t => {
@@ -1032,6 +1033,242 @@ test("app: seat view explains expired login on segment read", async t => {
   a.nav("seat");
   await until(() => /暂时读不到座位|需要先登录/.test(a.$(".seat-panel").textContent), "seat failure");
   assert.equal(a.all(".seat").length, 0);
+});
+
+test("app: assignment detail hides an empty submitted section and shows group marker", async t => {
+  const item = id => ({ id, courseId: "c1", course: "电力电子", title: "作业" + id, submitted: false, deadline: checkedAt, deadlineText: "" });
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [item("h1")], expired: [], ungraded: [], courseErrors: [] },
+      "GET /api/sidebar/assignments/c1/h1": {
+        ok: true, id: "h1", courseId: "c1", title: "作业h1", submitted: false, completionType: 3,
+        body: "请提交实验报告\n\n## 已提交正文\n", attachments: [],
+      },
+    },
+  });
+  await until(() => a.all(".ddl").length === 1, "list");
+  a.click(a.button("详情", a.all(".ddl")[0]));
+  await until(() => !!a.$(".rsidebar-detail"), "detail");
+  const detail = a.$(".rsidebar-detail");
+  assert.match(detail.textContent, /请提交实验报告/);
+  assert.doesNotMatch(detail.textContent, /已提交正文/, "未提交时不显示空的已提交正文标题");
+  assert.match(detail.textContent, /小组作业/, "站点标记为小组作业时提前说明");
+});
+
+test("app: assignment detail keeps submitted content and offers overwrite", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [{ id: "h1", courseId: "c1", course: "电力电子", title: "作业h1", submitted: true, deadline: checkedAt, deadlineText: "" }], expired: [], ungraded: [], courseErrors: [] },
+      "GET /api/sidebar/assignments/c1/h1": {
+        ok: true, id: "h1", courseId: "c1", title: "作业h1", submitted: true,
+        body: "要求如下\n\n## 已提交正文\n\n我的实验报告\n",
+        attachments: [{ name: "我交的.pdf", role: "submittedAttachment" }],
+      },
+    },
+  });
+  await until(() => a.all(".ddl").length === 1, "list");
+  a.click(a.button("详情", a.all(".ddl")[0]));
+  await until(() => !!a.$(".rsidebar-detail"), "detail");
+  const detail = a.$(".rsidebar-detail");
+  assert.match(detail.textContent, /已提交正文/);
+  assert.match(detail.textContent, /我的实验报告/);
+  assert.match(detail.textContent, /（已提交）/);
+  a.click(a.button("提交", detail));
+  const area = a.$(".ddl-content");
+  assert.ok(area, "打开提交表单");
+  const overwrite = a.all("input").find(input => input.type === "checkbox");
+  assert.ok(overwrite, "已提交的作业提供覆盖勾选");
+});
+
+test("app: seat view opens the login window and reports failures", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: false, error: { code: "SEAT_LOGIN_REQUIRED", message: "需要登录" } },
+      "POST /api/tools/campus_browser_open": { ok: true, job: { id: "j1" } },
+    },
+  });
+  a.nav("seat");
+  await until(() => /需要先登录图书馆座位系统/.test(a.$(".seat-panel").textContent), "login required");
+  a.click(a.button("打开登录窗口", a.$(".seat-panel")));
+  await flush();
+  assert.ok(a.calls.some(call => call.url.includes("/api/tools/campus_browser_open")));
+  assert.match(a.$(".seat-notice")?.textContent || "", /已打开登录窗口/);
+});
+
+test("app: seat view explains a closed booking window and reserve failures", async t => {
+  const day = new Date().toLocaleDateString("sv-SE");
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+      "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 2 }] },
+      "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: false, error: { code: "SEAT_WINDOW_CLOSED", message: "窗口关闭" } },
+    },
+  });
+  a.nav("seat");
+  await until(() => /06:00-23:00/.test(a.$(".seat-panel").textContent), "window closed hint");
+  assert.equal(a.all(".seat").length, 0);
+});
+
+test("app: seat reserve failure maps to an actionable hint", async t => {
+  const day = new Date().toLocaleDateString("sv-SE");
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+      "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 2 }] },
+      "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, seats: [{ id: 501, name: "NF3B001", segment: 1, available: true, begin: "08:00", end: "22:00" }], available: 1 },
+      "POST /api/seat/reserve/prepare": { ok: true, token: "t".repeat(48) },
+      "POST /api/seat/reserve": () => { throw Object.assign(new Error("已存在预约"), { code: "SEAT_ALREADY_BOOKED" }); },
+    },
+  });
+  a.nav("seat");
+  await until(() => a.all(".seat").length === 1, "seat");
+  a.click(a.$(".seat"));
+  await until(() => !!a.$(".seat-confirm-button"), "confirm");
+  a.click(a.$(".seat-confirm-button"));
+  await until(() => /已有预约/.test(a.$(".seat-notice")?.textContent || ""), "hint");
+});
+
+test("app: assignment sidebar switches tabs, shows course errors and empty states", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": {
+        ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [],
+        courseErrors: [{ course: "电力电子", message: "单门课程读取失败" }],
+      },
+    },
+  });
+  await until(() => /没有待交作业/.test(a.$("#right-sidebar").textContent), "empty pending");
+  assert.match(a.$("#right-sidebar").textContent, /单门课程读取失败|门课程未读全|课程/);
+  assert.match(a.$("#right-sidebar").textContent, /没有待交作业/);
+});
+
+test("app: assignment submission requires explicit overwrite for an already submitted homework", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [{ id: "h1", courseId: "c1", course: "电力电子", title: "作业h1", submitted: true, deadline: checkedAt, deadlineText: "" }], expired: [], ungraded: [], courseErrors: [] },
+      "GET /api/sidebar/assignments/c1/h1": { ok: true, id: "h1", courseId: "c1", title: "作业h1", submitted: true, body: "要求", attachments: [] },
+      "POST /api/sidebar/submissions/prepare": { ok: true, preparation: { id: "11111111-1111-4111-8111-111111111111", course: "电力电子", content: "覆盖正文", overwrite: true, expiresAt: checkedAt } },
+      "POST /api/sidebar/submissions/confirm": { ok: true, receipt: { status: "submitted", message: "已回读核验" } },
+    },
+  });
+  await until(() => a.all(".ddl").length === 1, "list");
+  a.click(a.button("详情", a.all(".ddl")[0]));
+  await until(() => !!a.$(".rsidebar-detail"), "detail");
+  a.click(a.button("提交", a.$(".rsidebar-detail")));
+  const box = a.$(".rsidebar-detail input[type=checkbox]");
+  assert.ok(box, "已提交作业出现覆盖勾选");
+  a.click(box);
+  a.input(".ddl-content", "覆盖正文");
+  a.click(a.button("准备提交"));
+  await until(() => !!a.$(".ddl-prepared"), "prepared");
+  assert.match(a.$(".ddl-prepared").textContent, /覆盖提交/);
+  a.click(a.button("确认提交"));
+  await until(() => !!a.$(".ddl-receipt"), "receipt");
+  assert.ok(a.calls.some(call => call.url.includes("/submissions/prepare")));
+});
+
+test("app: assignment submission surfaces upload and confirm failures", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [{ id: "h1", courseId: "c1", course: "电力电子", title: "作业h1", submitted: false, deadline: checkedAt, deadlineText: "" }], expired: [], ungraded: [], courseErrors: [] },
+      "GET /api/sidebar/assignments/c1/h1": { ok: true, id: "h1", courseId: "c1", title: "作业h1", submitted: false, body: "要求", attachments: [] },
+      "POST /api/sidebar/uploads": () => { throw Object.assign(new Error("上传失败"), { code: "UPLOAD_FAILED" }); },
+      "POST /api/sidebar/submissions/prepare": { ok: true, preparation: { id: "11111111-1111-4111-8111-111111111111", course: "电力电子", content: "正文", expiresAt: checkedAt } },
+      "POST /api/sidebar/submissions/confirm": { ok: false, error: { code: "CONFIRM_FAILED", message: "站点拒绝了提交。" } },
+    },
+  });
+  await until(() => a.all(".ddl").length === 1, "list");
+  a.click(a.button("详情", a.all(".ddl")[0]));
+  await until(() => !!a.$(".rsidebar-detail"), "detail");
+  a.click(a.button("提交", a.$(".rsidebar-detail")));
+  await until(() => !!a.$(".ddl-content"), "form");
+  a.input(".ddl-content", "正文");
+  a.click(a.button("准备提交"));
+  await until(() => !!a.$(".ddl-prepared"), "prepared");
+  a.click(a.button("确认提交"));
+  await until(() => /站点拒绝了提交|CONFIRM_FAILED|失败/.test(a.$(".rsidebar-detail").textContent), "confirm failure");
+});
+
+test("app: seat refresh keeps the current selection and reloads libraries", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+      "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 1 }] },
+      "GET /api/seat/segments?section=96": { ok: true, segments: [] },
+      [`GET /api/seat/seats?section=96&date=${new Date().toLocaleDateString("sv-SE")}`]: { ok: true, seats: [], available: 0 },
+    },
+  });
+  a.nav("seat");
+  await until(() => /该分区当前没有可约座位|暂时读不到座位/.test(a.$(".seat-panel").textContent), "seat state");
+  const refresh = a.all(".seat-actions button").find(button => /刷新/.test(button.textContent));
+  a.click(refresh);
+  await flush();
+  assert.ok(a.calls.filter(call => call.url.includes("/api/seat/libraries")).length >= 2, "刷新会重新读取馆区");
+});
+
+test("app: timetable add form posts and returns to grid", async t => {
+  const checkedAt = new Date().toISOString();
+  const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
+  const course = { id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 2, from: 1, to: 2, location: "一教101" }] };
+  const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [course] }, "GET /api/timetable?refresh=1": { ...base, courses: [course] } } });
+  a.routes.set("POST /api/timetable/custom", { ...base, courses: [course] });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 1, "grid");
+  const addButton = a.all(".timetable-actions button").find(button => /添加课程/.test(button.textContent));
+  a.click(addButton);
+  await until(() => /添加课程/.test(a.$(".timetable-detail")?.textContent || ""), "add form");
+  a.input(".timetable-detail input", "自习");
+  a.click(a.all(".timetable-detail button").find(button => /保存到课表/.test(button.textContent)));
+  await until(() => a.calls.some(item => /timetable\/custom/.test(item.path || item.url || "") && item.body), "custom post");
+  const call = a.calls.find(item => /timetable\/custom/.test(item.path || item.url || "") && item.body);
+  assert.equal(call.body.name, "自习");
+  assert.equal(call.body.day >= 1 && call.body.day <= 7, true);
+});
+
+test("app: timetable add failure stays on the form and shows the reason", async t => {
+  const checkedAt = new Date().toISOString();
+  const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
+  const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [{ id: "c1", name: "甲课", slots: [{ day: 2, from: 1, to: 2 }] }] } } });
+  a.routes.set("POST /api/timetable/custom", () => { throw Object.assign(new Error("名称不能为空"), { code: "INVALID_NAME" }); });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 1, "grid");
+  a.click(a.all(".timetable-actions button").find(button => /添加课程/.test(button.textContent)));
+  await until(() => /添加课程/.test(a.$(".timetable-detail")?.textContent || ""), "add form");
+  a.click(a.all(".timetable-detail button").find(button => /保存到课表/.test(button.textContent)));
+  await flush();
+  assert.match(a.$(".timetable-error")?.textContent || "", /名称不能为空/);
+});
+
+test("app: timetable removes a custom course and hides an official slot", async t => {
+  const checkedAt = new Date().toISOString();
+  const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
+  const custom = { id: "local-1", name: "自习", custom: true, slots: [{ day: 6, from: 1, to: 2 }] };
+  const official = { id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 2, from: 1, to: 2 }] };
+  const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [official, custom] }, "GET /api/timetable?refresh=1": { ...base, courses: [official, custom] } } });
+  a.routes.set("DELETE /api/timetable/custom/local-1", { ...base, courses: [official] });
+  a.routes.set("POST /api/timetable/hide", { ...base, courses: [custom] });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 2, "grid");
+  const customBlock = a.all(".course-block").find(item => /自习/.test(item.textContent));
+  a.click(customBlock);
+  await until(() => /删除这门自定义课程/.test(a.$(".timetable-detail")?.textContent || ""), "custom detail");
+  a.click(a.all(".timetable-detail button").find(button => /删除这门自定义课程/.test(button.textContent)));
+  await flush();
+  await until(() => a.calls.some(item => /timetable\/custom\/local-1/.test(item.path || item.url || "")), "custom delete");
+
+  const officialBlock = a.all(".course-block").find(item => /甲课/.test(item.textContent));
+  a.click(officialBlock);
+  await until(() => /从课表移除这个时段/.test(a.$(".timetable-detail")?.textContent || ""), "official detail");
+  a.click(a.all(".timetable-detail button").find(button => /从课表移除这个时段/.test(button.textContent)));
+  await until(() => a.calls.some(item => /timetable\/hide/.test(item.path || item.url || "") && item.body), "hide post");
+  const hide = a.calls.find(item => /timetable\/hide/.test(item.path || item.url || "") && item.body);
+  assert.equal(hide.body.courseId, "c1");
+  assert.equal(hide.body.day, 2);
 });
 
 test("app: theme switches between light, dark and auto", async t => {
