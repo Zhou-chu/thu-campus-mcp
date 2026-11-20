@@ -1034,3 +1034,63 @@ test("app: seat view explains expired login on segment read", async t => {
   await until(() => /暂时读不到座位|需要先登录/.test(a.$(".seat-panel").textContent), "seat failure");
   assert.equal(a.all(".seat").length, 0);
 });
+
+test("app: timetable add form posts and returns to grid", async t => {
+  const checkedAt = new Date().toISOString();
+  const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
+  const course = { id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 2, from: 1, to: 2, location: "一教101" }] };
+  const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [course] }, "GET /api/timetable?refresh=1": { ...base, courses: [course] } } });
+  a.routes.set("POST /api/timetable/custom", { ...base, courses: [course] });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 1, "grid");
+  const addButton = a.all(".timetable-actions button").find(button => /添加课程/.test(button.textContent));
+  a.click(addButton);
+  await until(() => /添加课程/.test(a.$(".timetable-detail")?.textContent || ""), "add form");
+  a.input(".timetable-detail input", "自习");
+  a.click(a.all(".timetable-detail button").find(button => /保存到课表/.test(button.textContent)));
+  await until(() => a.calls.some(item => /timetable\/custom/.test(item.path || item.url || "") && item.body), "custom post");
+  const call = a.calls.find(item => /timetable\/custom/.test(item.path || item.url || "") && item.body);
+  assert.equal(call.body.name, "自习");
+  assert.equal(call.body.day >= 1 && call.body.day <= 7, true);
+});
+
+test("app: timetable add failure stays on the form and shows the reason", async t => {
+  const checkedAt = new Date().toISOString();
+  const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
+  const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [{ id: "c1", name: "甲课", slots: [{ day: 2, from: 1, to: 2 }] }] } } });
+  a.routes.set("POST /api/timetable/custom", () => { throw Object.assign(new Error("名称不能为空"), { code: "INVALID_NAME" }); });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 1, "grid");
+  a.click(a.all(".timetable-actions button").find(button => /添加课程/.test(button.textContent)));
+  await until(() => /添加课程/.test(a.$(".timetable-detail")?.textContent || ""), "add form");
+  a.click(a.all(".timetable-detail button").find(button => /保存到课表/.test(button.textContent)));
+  await flush();
+  assert.match(a.$(".timetable-error")?.textContent || "", /名称不能为空/);
+});
+
+test("app: timetable removes a custom course and hides an official slot", async t => {
+  const checkedAt = new Date().toISOString();
+  const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
+  const custom = { id: "local-1", name: "自习", custom: true, slots: [{ day: 6, from: 1, to: 2 }] };
+  const official = { id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 2, from: 1, to: 2 }] };
+  const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [official, custom] }, "GET /api/timetable?refresh=1": { ...base, courses: [official, custom] } } });
+  a.routes.set("DELETE /api/timetable/custom/local-1", { ...base, courses: [official] });
+  a.routes.set("POST /api/timetable/hide", { ...base, courses: [custom] });
+  a.nav("timetable");
+  await until(() => a.all(".course-block").length === 2, "grid");
+  const customBlock = a.all(".course-block").find(item => /自习/.test(item.textContent));
+  a.click(customBlock);
+  await until(() => /删除这门自定义课程/.test(a.$(".timetable-detail")?.textContent || ""), "custom detail");
+  a.click(a.all(".timetable-detail button").find(button => /删除这门自定义课程/.test(button.textContent)));
+  await flush();
+  await until(() => a.calls.some(item => /timetable\/custom\/local-1/.test(item.path || item.url || "")), "custom delete");
+
+  const officialBlock = a.all(".course-block").find(item => /甲课/.test(item.textContent));
+  a.click(officialBlock);
+  await until(() => /从课表移除这个时段/.test(a.$(".timetable-detail")?.textContent || ""), "official detail");
+  a.click(a.all(".timetable-detail button").find(button => /从课表移除这个时段/.test(button.textContent)));
+  await until(() => a.calls.some(item => /timetable\/hide/.test(item.path || item.url || "") && item.body), "hide post");
+  const hide = a.calls.find(item => /timetable\/hide/.test(item.path || item.url || "") && item.body);
+  assert.equal(hide.body.courseId, "c1");
+  assert.equal(hide.body.day, 2);
+});

@@ -206,3 +206,46 @@ test("timetable: 本地覆盖层隐藏时段并叠加自定义课程", async () 
   assert.deepEqual(merged.courses.find(item => item.id === "c1").slots, [{ day: 4, from: 3, to: 3 }]);
   assert.equal(merged.courses.find(item => item.id === "local-1").custom, true);
 });
+
+test("timetable: HTTP 自定义课程增删隐藏与错误分支", async t => {
+  const host = {
+    call: async (name) => {
+      if (name === "learn_list_semesters") return { ok: true, data: { current: { id: "s1", name: "秋季学期" } } };
+      if (name === "learn_list_courses")
+        return { ok: true, data: { items: [{ id: "c1", name: "甲课", teacher: "甲老师", timeAndLocation: "星期四第6节(全周)，三教3101" }], nextOffset: null } };
+      return { ok: true, data: {} };
+    },
+  };
+  const app = await appWith(host);
+  t.after(app.close);
+  const headers = { authorization: "Bearer timetable-fixture", "content-type": "application/json" };
+  const post = (path, body) => fetch(app.base + path, { method: "POST", headers, body: JSON.stringify(body) });
+
+  const bad = await post("/api/timetable/custom", { name: "", day: 1, from: 1 });
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).error.code, "INVALID_NAME");
+
+  const added = await post("/api/timetable/custom", { name: "自习", day: 6, from: 1, to: 2 });
+  assert.equal(added.status, 200);
+  const addedBody = await added.json();
+  assert.equal(addedBody.course.name, "自习");
+  assert.ok(addedBody.courses.some(course => course.custom));
+
+  const hidden = await post("/api/timetable/hide", { courseId: "c1", day: 4, from: 6 });
+  assert.equal(hidden.status, 200);
+  const hiddenBody = await hidden.json();
+  assert.equal(hiddenBody.courses.some(course => course.id === "c1"), false, "被隐藏的官方时段不再绘制");
+
+  const unhidden = await post("/api/timetable/unhide", { courseId: "c1", day: 4, from: 6 });
+  assert.equal((await unhidden.json()).courses.some(course => course.id === "c1"), true);
+
+  const missingId = await post("/api/timetable/hide", {});
+  assert.equal(missingId.status, 400);
+
+  const removed = await fetch(app.base + "/api/timetable/custom/" + encodeURIComponent(addedBody.course.id), { method: "DELETE", headers });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).courses.some(course => course.custom), false);
+
+  const missing = await fetch(app.base + "/api/timetable/custom/nope", { method: "DELETE", headers });
+  assert.equal(missing.status, 404);
+});
