@@ -67,3 +67,34 @@ test("sports: 空载荷与缺失字段不抛错", () => {
   assert.equal(single.sessions[0].status, "Y", "字符串状态原样保留");
   assert.equal(single.sessions[0].price, null);
 });
+test("sports: 场景与可约场地归一，缺字段不编造", async () => {
+  const { normalizeScenes, normalizeAvailable, buildReservePayload } = await import("../lib/app/sports.mjs");
+  const scenes = normalizeScenes({ data: [
+    { uuid: "s1", sceneName: "陈明游泳馆", siteType: "ROOM", formRuleVo: { formUuid: "f1" }, beforeReserveDays: ["0", "7"] },
+    { uuid: "s2", sceneName: "", sceneEnName: "Gym" },
+    { sceneName: "没有 uuid" },
+    null,
+  ] });
+  assert.equal(scenes.length, 2, "缺 uuid 或中英文名都没有的条目不进入结果");
+  assert.deepEqual(scenes[0], { uuid: "s1", name: "陈明游泳馆", siteType: "ROOM", formId: "f1", beforeReserveDays: [0, 7] });
+  assert.equal(scenes[1].name, "Gym", "没有中文名时回退英文名");
+
+  const loaded = normalizeAvailable({ data: { records: [
+    { uuid: "site1", siteName: "1号泳道", siteType: "ROOM", reserveTime: [{ startTime: "2026-11-21 19:00:00", endTime: "2026-11-21 20:00:00" }] },
+    { siteName: "没有 uuid" },
+    null,
+  ] } }, { sceneUuid: "s1", date: "2026-11-21" });
+  assert.equal(loaded.sites.length, 1);
+  assert.equal(loaded.sites[0].slots[0].available, true);
+  assert.equal(loaded.sceneUuid, "s1");
+
+  const payload = buildReservePayload({
+    sceneUuid: "s1", siteUuid: "site1", siteType: "ROOM", members: ["u1"],
+    startTime: "2026-11-21 19:00:00", endTime: "2026-11-21 20:00:00", formId: "f1",
+  });
+  assert.deepEqual(payload.reserveTime, [{ startTime: "2026-11-21 19:00:00", endTime: "2026-11-21 20:00:00" }]);
+  assert.equal(payload.resvKind, "CURRENT_RESERVE");
+  assert.deepEqual(payload.resvMember, ["u1"]);
+  assert.equal(payload.formParam.formId, "f1");
+  assert.equal("deployUuid" in payload.formParam, false, "没有 deployUuid 时不塞空字段");
+});
