@@ -931,3 +931,17 @@ test("app: oversized and malformed request bodies are rejected with codes", asyn
   const emptyBody = await fetch(url + "/api/tool-approvals", { method: "POST", headers, body: "" });
   assert.equal(emptyBody.status, 404, "空请求体按缺字段处理，不冒充成功");
 });
+
+test("app: sports routes surface argument errors without opening a browser", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t" };
+  const available = await fetch(url + "/api/sports/available?scene=", { headers });
+  assert.equal(available.status, 400, "缺场景时直接 400");
+  const availableBody = await available.json();
+  assert.equal(availableBody.ok, false);
+  assert.equal(availableBody.error.code, "ARGUMENT_REQUIRED");
+
+  const venues = await fetch(url + "/api/sports/venues", { headers });
+  assert.equal(venues.status, 400, "缺运动项目时直接 400");
+  assert.equal((await venues.json()).error.code, "SPORT_REQUIRED");
+});
