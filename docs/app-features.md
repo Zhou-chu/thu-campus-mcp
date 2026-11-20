@@ -154,3 +154,7 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 - 自动重登：`POST /api/seat/login` / 工具 `seat_login`。`reserve` 与 `cancel` 在登录失效时会自动用浏览器已保存凭据重登一次；**重登后会先核对服务器是否已创建订单**，命中即返回 `reconciled: true` 与 `bookingId`，不再重复提交。需要人工验证码时返回 `needsManual: true`。
 - 令牌来源：优先页面渲染的 `ska.access_token`（比 cookie 新），页面地址附带 `_=<timestamp>` 规避缓存导致的陈旧令牌。
 
+
+- **自动重登实测（2026-11-20）**：主动登出后再调 `POST /api/seat/login` → `ok=true, alreadyLoggedIn=false, needsManual=false`，耗时约 20 秒，恢复后 `ska.access_token` 32 位、`userid` 存在。凭据来自 `app/seat-credentials.json`（`{"username","password"}`，用户自行写入，代码不打印）。
+- **两条路径的预约证据**：工具层 `seat_reserve` → `ok=true, bookingId=7522862`；界面点击 → 提示「已提交预约：NF3B001」，记录 `7523614`；两条记录随后都取消成功。
+
