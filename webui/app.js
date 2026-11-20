@@ -1270,7 +1270,7 @@ function appendLoginAccount(row, name, info) {
 function servicesView() {
   const wrap = el("div", { class: "stack" });
   const panel = el("div", { class: "stack auth-panel" });
-  const labels = { learnx: "网络学堂", cloud: "清华云盘", hetang: "荷塘雨课堂", madmodel: "MadModel模型" };
+  const labels = { learnx: "网络学堂", cloud: "清华云盘", hetang: "荷塘雨课堂", madmodel: "MadModel模型", seat: "图书馆座位" };
   panel.draw = () => {
     clear(panel);
     panel.append(el("div", { class: "auth-header" }, [
@@ -1287,6 +1287,20 @@ function servicesView() {
       appendLoginAccount(row, name, info);
       const notice = state.authNotices[name];
       if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : "small"), role: notice.error ? "alert" : "status", text: notice.text }));
+      if (name === "seat") {
+        row.querySelector("button.ghost")?.replaceWith(el("button", {
+          class: "ghost",
+          type: "button",
+          text: "打开登录窗口",
+          onclick: async () => {
+            try {
+              await api("/api/tools/campus_browser_open", { method: "POST", body: { service: "seat" } });
+              toast("已打开座位系统登录窗口");
+            } catch (error) { toast(error.message || "打开登录窗口失败"); }
+          },
+        }));
+        row.append(el("div", { class: "small", text: "座位系统没有免登录状态接口：这里只探测站点可达性，预约等写入操作会在需要时自动登录。" }));
+      }
       const record = el("details", { class: "auth-evidence" }, [el("summary", { text: "核验记录" })]);
       if (info.checkedAt) record.append(el("div", { class: "small", text: "核验时间：" + new Date(info.checkedAt).toLocaleString() }));
       if (info.source) record.append(el("div", { class: "small", text: "来源：" + info.source }));
@@ -1300,7 +1314,7 @@ function servicesView() {
   wrap.append(panel, keepAliveCard());
   return wrap;
 }
-const SERVICE_LABEL = { learnx: "网络学堂", cloud: "云盘", hetang: "雨课堂", madmodel: "MadModel" };
+const SERVICE_LABEL = { learnx: "网络学堂", cloud: "云盘", hetang: "雨课堂", madmodel: "MadModel", seat: "图书馆" };
 function keepAliveCard() {
   const card = el("div", { class: "card stack" }, [el("h3", { text: "会话保活自检" })]);
   const body = el("div", { class: "stack" });
