@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createAppServer } from "../lib/app/server.mjs";
@@ -167,4 +167,120 @@ test("timetable http: exposes the real table and supports forced refresh", async
   const refreshed = await (await fetch(app.base + "/api/timetable?refresh=1", { headers })).json();
   assert.equal(refreshed.courses.length, 1);
   assert.equal((await fetch(app.base + "/api/timetable")).status, 401, "未授权不能读课表");
+});
+test("timetable: 自定义课程校验与本地增删隐藏", async () => {
+  const { normalizeCustomCourse, createLocalTimetable } = await import("../lib/app/timetable-local.mjs");
+  assert.equal(normalizeCustomCourse({}).ok, false);
+  assert.equal(normalizeCustomCourse({ name: "x", day: 9, from: 1 }).ok, false);
+  assert.equal(normalizeCustomCourse({ name: "x", day: 1, from: 5, to: 2 }).ok, false);
+  const ok = normalizeCustomCourse({ name: " 自习 ", day: 3, from: 1, to: 2, location: "图书馆" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.course.name, "自习");
+  assert.deepEqual(ok.course.slots, [{ day: 3, from: 1, to: 2 }]);
+
+  const file = path.join(await mkdtemp(path.join(tmpdir(), "timetable-")), "local.json");
+  const local = createLocalTimetable(file);
+  const added = await local.add({ name: "线下课", day: 2, from: 3, to: 4 });
+  assert.equal(added.ok, true);
+  let snapshot = await local.snapshot();
+  assert.equal(snapshot.custom.length, 1);
+  await local.hide({ courseId: "c1", day: 2, from: 1 });
+  snapshot = await local.snapshot();
+  assert.equal(snapshot.hidden.length, 1);
+  await local.unhide({ courseId: "c1", day: 2, from: 1 });
+  snapshot = await local.snapshot();
+  assert.equal(snapshot.hidden.length, 0);
+  await local.remove(added.course.id);
+  snapshot = await local.snapshot();
+  assert.equal(snapshot.custom.length, 0);
+});
+
+test("timetable: 本地覆盖层隐藏时段并叠加自定义课程", async () => {
+  const { applyLocalOverrides } = await import("../lib/app/timetable.mjs");
+  const table = { courses: [{ id: "c1", name: "物理", slots: [{ day: 2, from: 1, to: 2 }, { day: 4, from: 3, to: 3 }] }] };
+  const merged = applyLocalOverrides(table, {
+    hidden: [{ courseId: "c1", day: 2, from: 1 }],
+    custom: [{ id: "local-1", name: "自习", custom: true, slots: [{ day: 6, from: 1, to: 2 }] }],
+  });
+  assert.equal(merged.courses.length, 2);
+  assert.deepEqual(merged.courses.find(item => item.id === "c1").slots, [{ day: 4, from: 3, to: 3 }]);
+  assert.equal(merged.courses.find(item => item.id === "local-1").custom, true);
+});
+
+test("timetable: HTTP 自定义课程增删隐藏与错误分支", async t => {
+  const host = {
+    call: async (name) => {
+      if (name === "learn_list_semesters") return { ok: true, data: { current: { id: "s1", name: "秋季学期" } } };
+      if (name === "learn_list_courses")
+        return { ok: true, data: { items: [{ id: "c1", name: "甲课", teacher: "甲老师", timeAndLocation: "星期四第6节(全周)，三教3101" }], nextOffset: null } };
+      return { ok: true, data: {} };
+    },
+  };
+  const app = await appWith(host);
+  t.after(app.close);
+  const headers = { authorization: "Bearer timetable-fixture", "content-type": "application/json" };
+  const post = (path, body) => fetch(app.base + path, { method: "POST", headers, body: JSON.stringify(body) });
+
+  const bad = await post("/api/timetable/custom", { name: "", day: 1, from: 1 });
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).error.code, "INVALID_NAME");
+
+  const added = await post("/api/timetable/custom", { name: "自习", day: 6, from: 1, to: 2 });
+  assert.equal(added.status, 200);
+  const addedBody = await added.json();
+  assert.equal(addedBody.course.name, "自习");
+  assert.ok(addedBody.courses.some(course => course.custom));
+
+  const hidden = await post("/api/timetable/hide", { courseId: "c1", day: 4, from: 6 });
+  assert.equal(hidden.status, 200);
+  const hiddenBody = await hidden.json();
+  assert.equal(hiddenBody.courses.some(course => course.id === "c1"), false, "被隐藏的官方时段不再绘制");
+
+  const unhidden = await post("/api/timetable/unhide", { courseId: "c1", day: 4, from: 6 });
+  assert.equal((await unhidden.json()).courses.some(course => course.id === "c1"), true);
+
+  const missingId = await post("/api/timetable/hide", {});
+  assert.equal(missingId.status, 400);
+
+  const removed = await fetch(app.base + "/api/timetable/custom/" + encodeURIComponent(addedBody.course.id), { method: "DELETE", headers });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).courses.some(course => course.custom), false);
+
+  const missing = await fetch(app.base + "/api/timetable/custom/nope", { method: "DELETE", headers });
+  assert.equal(missing.status, 404);
+
+  const broken = await fetch(app.base + "/api/timetable/custom", { method: "POST", headers, body: "not json" });
+  assert.equal(broken.status, 400, "非法 JSON 不写入，按校验失败返回");
+  assert.equal((await broken.json()).error.code, "INVALID_NAME");
+});
+
+test("timetable: 自定义课程默认结束节次与容错读取", async () => {
+  const { normalizeCustomCourse, createLocalTimetable } = await import("../lib/app/timetable-local.mjs");
+  const onlyFrom = normalizeCustomCourse({ name: "仅开始", day: 2, from: 3 });
+  assert.equal(onlyFrom.ok, true);
+  assert.deepEqual(onlyFrom.course.slots, [{ day: 2, from: 3, to: 3 }], "缺 to 时按单节处理");
+
+  const dir = await mkdtemp(path.join(tmpdir(), "timetable-local-"));
+  const file = path.join(dir, "local.json");
+  await writeFile(file, "not json", "utf8");
+  const broken = createLocalTimetable(file);
+  const snapshot = await broken.snapshot();
+  assert.deepEqual(snapshot, { custom: [], hidden: [] }, "损坏文件按空覆盖层处理，不抛错");
+
+  const local = createLocalTimetable(path.join(dir, "second.json"));
+  await local.hide({ courseId: "c1", day: 2, from: 1 });
+  const again = await local.hide({ courseId: "c1", day: 2, from: 1 });
+  assert.equal(again.ok, true, "重复隐藏幂等");
+  assert.equal((await local.snapshot()).hidden.length, 1);
+  const noChange = await local.unhide({ courseId: "c9", day: 1, from: 1 });
+  assert.equal(noChange.changed, false, "隐藏不存在时不误报变更");
+});
+
+test("timetable: 全部时段被隐藏时课程不再出现", async () => {
+  const { applyLocalOverrides } = await import("../lib/app/timetable.mjs");
+  const merged = applyLocalOverrides(
+    { courses: [{ id: "c1", name: "物理", slots: [{ day: 2, from: 1, to: 2 }] }] },
+    { hidden: [{ courseId: "c1", day: 2, from: 1 }], custom: [] },
+  );
+  assert.deepEqual(merged.courses, [], "没有剩余时段的课程整体移除");
 });
