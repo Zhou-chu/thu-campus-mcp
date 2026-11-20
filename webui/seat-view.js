@@ -91,10 +91,13 @@ export function createSeatView({ el, api }) {
         state.libraries.length
           ? chips(state.libraries, state.library, "馆区", item => { state.library = item; void loadFloors(); })
           : el("p", { class: "seat-empty", text: state.loading ? "正在读取…" : state.error || "暂无馆区。" }),
-        el("h3", { class: "seat-label", text: "楼层" }),
+        el("h3", { class: "seat-label", text: "区域" }),
         state.floors.length
-          ? chips(state.floors, state.floor, "楼层", item => { state.floor = item; void loadSegments(); })
-          : el("p", { class: "seat-empty", text: state.library ? state.error || "该馆区暂无可用楼层。" : "先选择馆区。" }),
+          ? el("select", { class: "seat-select", "aria-label": "区域", onchange: event => {
+              const picked = state.floors.find(item => String(item.id) === event.target.value);
+              if (picked) { state.floor = picked; void loadSegments(); }
+            } }, state.floors.map(item => el("option", { value: String(item.id), text: item.free !== undefined && item.free !== null ? item.name + "（空位 " + item.free + "）" : item.name, selected: state.floor !== null && item.id === state.floor.id })))
+          : el("p", { class: "seat-empty", text: state.library ? state.error || "该馆区暂无可用区域。" : "先选择馆区。" }),
         el("h3", { class: "seat-label", text: "日期" }),
         (() => {
           const strip = el("div", { class: "seat-dates", role: "group", "aria-label": "日期" });
@@ -104,15 +107,12 @@ export function createSeatView({ el, api }) {
           }
           return strip;
         })(),
-        el("h3", { class: "seat-label", text: "时段" }),
-        state.segments.length
-          ? chips(state.segments.map(item => ({ ...item, name: `${item.day} ${item.start}-${item.end}` })), state.segment, "时段", item => { state.segment = item; state.seat = null; void loadSeats(); })
-          : el("p", { class: "seat-empty", text: state.floor ? "该楼层按整日预约，无需选择时段。" : "先选择楼层。" }),
+
         el("h3", { class: "seat-label", text: "座位" }),
         seatGrid(),
       ];
       const block = confirmBlock();
-      if (block) children.push(block);
+      if (block) children.unshift(block);
       if (state.notice) children.push(el("p", { class: "seat-notice", text: state.notice }));
       panel.replaceChildren(...children);
     }

@@ -1412,3 +1412,12 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
   .tabbar .tab span { letter-spacing: 0; }
   .tabbar .nav-icon { width: 16px; height: 16px; }
 }
+
+.seat-select {appearance:none;width:100%;padding:10px 34px 10px 14px;border:1px solid var(--line-strong);border-radius:var(--radius-control);background:var(--paper);color:var(--ink);font-size:var(--text-meta);cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) 55%,calc(100% - 12px) 55%;background-size:6px 6px,6px 6px;background-repeat:no-repeat;}
+.seat-select:focus-visible {outline:2px solid var(--ink);outline-offset:2px;}
+.seat-confirm {position:static;}
+
+@media (max-width: 700px) {
+  .seat-panel {padding-bottom: 104px;}
+  .seat-confirm {position: static;box-shadow: none;}
+}
