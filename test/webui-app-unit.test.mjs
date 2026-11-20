@@ -963,3 +963,73 @@ test("app: library seat view states an empty seat list honestly", async t => {
 });
 
 
+
+test("app: chat stats show turns, steps, tokens and cache hit after a turn", async t => {
+  const a = await app(t, {});
+  const stream = a.stream();
+  a.routes.set("POST /api/chat", () => stream.response);
+  await a.send("看一下统计");
+  stream.emit("ready", { sessionId: "sess-stats" });
+  stream.emit("token", { text: "好" });
+  stream.emit("done", {
+    sessionId: "sess-stats",
+    steps: 3,
+    usage: { prompt_tokens: 1000, completion_tokens: 50, total_tokens: 1050, prompt_tokens_details: { cached_tokens: 900 } },
+  });
+  await flush();
+  a.frame();
+  const text = a.$("#chat-stats").textContent;
+  assert.match(text, /第 1 轮/);
+  assert.match(text, /3 步/);
+  assert.match(text, /缓存 90%/);
+  assert.match(text, /tok/);
+});
+
+test("app: chat stats format large totals and zero cache", async t => {
+  const a = await app(t, {});
+  const stream = a.stream();
+  a.routes.set("POST /api/chat", () => stream.response);
+  await a.send("大数值统计");
+  stream.emit("ready", { sessionId: "sess-big" });
+  stream.emit("token", { text: "好" });
+  stream.emit("done", {
+    sessionId: "sess-big",
+    steps: 4,
+    usage: { prompt_tokens: 2000, completion_tokens: 100, total_tokens: 150000000, prompt_tokens_details: { cached_tokens: 0 } },
+  });
+  await flush();
+  a.frame();
+  const text = a.$("#chat-stats").textContent;
+  assert.match(text, /4 步/);
+  assert.match(text, /1\.50亿/);
+  assert.match(text, /缓存 0%/);
+});
+
+test("app: seat view reports area and segment failures honestly", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+    },
+  });
+  a.routes.set("GET /api/seat/areas?floor=37", () => { throw Object.assign(new Error("bad"), { code: "SEAT_EMPTY" }); });
+  a.nav("seat");
+  await until(() => /暂时读不到分区/.test(a.$(".seat-panel").textContent), "area failure");
+  assert.equal(a.all(".seat").length, 0);
+});
+
+test("app: seat view explains expired login on segment read", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
+      "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
+      "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 3 }] },
+    },
+  });
+  a.routes.set("GET /api/seat/segments?section=96", () => { throw Object.assign(new Error("login"), { code: "SEAT_LOGIN_REQUIRED" }); });
+  const day = new Date().toLocaleDateString("sv-SE");
+  a.routes.set(`GET /api/seat/seats?section=96&date=${day}`, () => { throw Object.assign(new Error("login"), { code: "SEAT_LOGIN_REQUIRED" }); });
+  a.nav("seat");
+  await until(() => /暂时读不到座位|需要先登录/.test(a.$(".seat-panel").textContent), "seat failure");
+  assert.equal(a.all(".seat").length, 0);
+});

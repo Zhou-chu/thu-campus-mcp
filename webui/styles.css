@@ -1421,3 +1421,6 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
   .seat-panel {padding-bottom: 104px;}
   .seat-confirm {position: static;box-shadow: none;}
 }
+
+.chat-stats {margin:0 auto 6px;max-width:var(--chat-width, 860px);padding:0 10px;font-size:var(--text-meta);color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.chat-stats[hidden] {display:none;}
