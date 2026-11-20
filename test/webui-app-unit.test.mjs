@@ -1033,3 +1033,17 @@ test("app: seat view explains expired login on segment read", async t => {
   await until(() => /暂时读不到座位|需要先登录/.test(a.$(".seat-panel").textContent), "seat failure");
   assert.equal(a.all(".seat").length, 0);
 });
+
+test("app: theme switches between light, dark and auto", async t => {
+  const a = await app(t, {});
+  a.click("#theme-dark");
+  assert.equal(a.document.documentElement.dataset.theme, "dark");
+  assert.equal(a.$("#theme-dark").getAttribute("aria-pressed"), "true");
+  a.click("#theme-auto");
+  assert.equal(a.$("#theme-auto").getAttribute("aria-pressed"), "true");
+  assert.equal(a.$("#theme-light").getAttribute("aria-pressed"), "false");
+  assert.ok(["light", "dark"].includes(a.document.documentElement.dataset.theme));
+  a.click("#theme-light");
+  assert.equal(a.document.documentElement.dataset.theme, "light");
+  assert.equal(a.$("#theme-light").getAttribute("aria-pressed"), "true");
+});
