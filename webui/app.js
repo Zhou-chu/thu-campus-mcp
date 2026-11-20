@@ -903,6 +903,9 @@ function failedTurnOutcome(error) {
   return { ok: false, reason: error.message || "连接中断，队列已暂停。" };
 }
 async function sendTurn(text) {
+  const ctx = { sessionId: state.sessionId, messages: state.messages };
+  const onScreen = () => state.sessionId === ctx.sessionId;
+  const patchDom = fn => { if (onScreen()) fn(); };
   const turnModel = state.selectedModel;
   state.activeModel = turnModel;
   state.stopRequested = false;
@@ -911,8 +914,8 @@ async function sendTurn(text) {
   const container = $("#messages");
   if (container) container.dataset.followTail = "true";
   const userBlock = { kind: "user", text };
-  state.messages.push(userBlock);
-  appendBlock(userBlock);
+  ctx.messages.push(userBlock);
+  patchDom(() => appendBlock(userBlock));
   let assistant = null;
   let reasoning = null;
   let frame = 0;
@@ -929,15 +932,16 @@ async function sendTurn(text) {
   const ensureAssistant = () => {
     if (assistant) return;
     assistant = { kind: "assistant", text: "" };
-    state.messages.push(assistant);
-    appendBlock(assistant);
+    ctx.messages.push(assistant);
+    patchDom(() => appendBlock(assistant));
   };
   const ensureReasoning = () => {
     if (reasoning) return;
     reasoning = { kind: "reasoning", text: "", status: "streaming" };
-    const index = assistant ? state.messages.indexOf(assistant) : -1;
-    if (index < 0) state.messages.push(reasoning);
-    else state.messages.splice(index, 0, reasoning);
+    const index = assistant ? ctx.messages.indexOf(assistant) : -1;
+    if (index < 0) ctx.messages.push(reasoning);
+    else ctx.messages.splice(index, 0, reasoning);
+    if (!onScreen()) return;
     const node = appendBlock(reasoning);
     if (node && assistant?.node?.parentNode === node.parentNode) assistant.node.before(node);
   };
@@ -949,7 +953,7 @@ async function sendTurn(text) {
     assistant = null;
     reasoning = null;
   };
-  const addStatus = block => { state.messages.push(block); appendBlock(block); };
+  const addStatus = block => { ctx.messages.push(block); patchDom(() => appendBlock(block)); };
   state.controller = new AbortController();
   try {
     const headers = { "content-type": "application/json" };
@@ -966,9 +970,12 @@ async function sendTurn(text) {
     }
     for await (const { event, payload } of readChatEvents(response.body)) {
       switch (event) {
-        case "ready":
-          state.sessionId = payload.sessionId;
-          break;
+        case "ready": {
+        const wasCurrent = onScreen();
+        ctx.sessionId = payload.sessionId ?? ctx.sessionId;
+        if (wasCurrent) state.sessionId = ctx.sessionId;
+        break;
+      }
         case "token":
           if (typeof payload.text !== "string") break;
           ensureAssistant();
@@ -993,10 +1000,10 @@ async function sendTurn(text) {
         case "tool": {
           if (payload.phase === "start") {
             const card = { kind: "tool", name: payload.name, args: payload.args, state: "running" };
-            state.messages.push(card);
-            appendBlock(card);
+          ctx.messages.push(card);
+          patchDom(() => appendBlock(card));
           } else {
-            const card = [...state.messages].reverse().find(b => b.kind === "tool" && b.name === payload.name && b.state === "running");
+            const card = [...ctx.messages].reverse().find(b => b.kind === "tool" && b.name === payload.name && b.state === "running");
             if (card) {
               card.state = payload.ok ? "done" : "failed";
               card.result = payload.ok ? payload.result : undefined;
@@ -1647,8 +1654,12 @@ async function loadSessions() {
   refreshSidebar();
 }
 let sessionNavigation = 0;
+function pendingQueueLength() {
+  const queue = turnQueue.snapshot();
+  return queue.pending.length;
+}
 function startNewConversation() {
-  if (hasQueuedWork()) { toast(state.busy ? "请先停止当前对话。" : "请先处理或清空待发消息。"); return; }
+  if (pendingQueueLength() > 0) { toast("请先处理或清空待发消息。"); return; }
   sessionNavigation++;
   state.sessionId = null;
   state.messages = [];
@@ -1658,12 +1669,12 @@ function startNewConversation() {
   $("#composer")?.focus();
 }
 async function openSavedSession(id, button) {
-  if (hasQueuedWork()) { toast(state.busy ? "请先停止当前对话。" : "请先处理或清空待发消息。"); return; }
+  if (pendingQueueLength() > 0) { toast("请先处理或清空待发消息。"); return; }
   const ticket = ++sessionNavigation;
   const displayedView = $("#view").firstElementChild;
   await runAction(button, async () => {
     const data = await api("/api/sessions/" + encodeURIComponent(id));
-    if (ticket !== sessionNavigation || hasQueuedWork() || $("#view").firstElementChild !== displayedView) return;
+    if (ticket !== sessionNavigation || $("#view").firstElementChild !== displayedView) return;
     state.sessionId = data.session.id;
     state.messages = blocksFromSession(data.session);
     state.view = "chat";

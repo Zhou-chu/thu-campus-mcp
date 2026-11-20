@@ -226,7 +226,21 @@ export function createRightSidebar({ el, api, toast, renderRich, uploadFile, sto
     ]);
   }
 
-  function detailBlock(kind) {
+  function pruneEmptySections(root) {
+  const headings = [...root.querySelectorAll("h1, h2, h3")];
+  for (const heading of headings) {
+    if (!/^(已提交正文|参考答案|批改反馈)$/.test(heading.textContent.trim())) continue;
+    let node = heading.nextElementSibling;
+    let hasContent = false;
+    while (node && !/^H[1-3]$/.test(node.tagName)) {
+      if ((node.textContent || "").trim()) { hasContent = true; break; }
+      node = node.nextElementSibling;
+    }
+    if (!hasContent) heading.remove();
+  }
+}
+
+function detailBlock(kind) {
     const panel = panelOf(kind);
     if (panel.detailLoading) return el("div", { class: "rsidebar-note", role: "status", text: "正在读取作业详情…" });
     if (panel.detailError) return el("div", { class: "rsidebar-note error", role: "alert", text: "详情读取失败：" + panel.detailError });
@@ -239,6 +253,8 @@ export function createRightSidebar({ el, api, toast, renderRich, uploadFile, sto
       el("dl", { class: "ddl-facts" }, [
         el("dt", { text: "截止" }), el("dd", { text: dateText(detail.deadline) || "未知" }),
         el("dt", { text: "状态" }), el("dd", { text: detail.submitted ? "已提交" : "未提交" }),
+    detail.completionType !== null && detail.completionType !== 1 ? el("dt", { text: "站点标记" }) : null,
+    detail.completionType !== null && detail.completionType !== 1 ? el("dd", { text: "小组作业（需组内成员在官网提交，助手不代提交）" }) : null,
         detail.submitTime ? el("dt", { text: "提交时间" }) : null,
         detail.submitTime ? el("dd", { text: dateText(detail.submitTime) }) : null,
         detail.grade !== null && detail.grade !== undefined ? el("dt", { text: "成绩" }) : null,
@@ -248,7 +264,11 @@ export function createRightSidebar({ el, api, toast, renderRich, uploadFile, sto
         el("p", { class: "small muted", text: "附件" }),
         el("ul", {}, attachments.map(file => el("li", { text: file.name + (file.role === "submittedAttachment" ? "（已提交）" : "") }))),
       ]) : null,
-      el("div", { class: "rich ddl-body" }, [detail.body ? renderRich(detail.body) : el("p", { class: "small muted", text: "作业正文为空。" })]),
+      (() => {
+    const node = el("div", { class: "rich ddl-body" }, [detail.body ? renderRich(detail.body) : el("p", { class: "small muted", text: "作业正文为空。" })]);
+    pruneEmptySections(node);
+    return node;
+  })(),
       el("div", { class: "rsidebar-foot" }, [
         el("button", { class: "primary", type: "button", text: "提交", onclick: () => { panel.submit = null; panel.mode = "submit"; renderBody(); } }),
       ]),
