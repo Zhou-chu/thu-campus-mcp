@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createAppServer } from "../lib/app/server.mjs";
@@ -252,4 +252,35 @@ test("timetable: HTTP 自定义课程增删隐藏与错误分支", async t => {
   const broken = await fetch(app.base + "/api/timetable/custom", { method: "POST", headers, body: "not json" });
   assert.equal(broken.status, 400, "非法 JSON 不写入，按校验失败返回");
   assert.equal((await broken.json()).error.code, "INVALID_NAME");
+});
+
+test("timetable: 自定义课程默认结束节次与容错读取", async () => {
+  const { normalizeCustomCourse, createLocalTimetable } = await import("../lib/app/timetable-local.mjs");
+  const onlyFrom = normalizeCustomCourse({ name: "仅开始", day: 2, from: 3 });
+  assert.equal(onlyFrom.ok, true);
+  assert.deepEqual(onlyFrom.course.slots, [{ day: 2, from: 3, to: 3 }], "缺 to 时按单节处理");
+
+  const dir = await mkdtemp(path.join(tmpdir(), "timetable-local-"));
+  const file = path.join(dir, "local.json");
+  await writeFile(file, "not json", "utf8");
+  const broken = createLocalTimetable(file);
+  const snapshot = await broken.snapshot();
+  assert.deepEqual(snapshot, { custom: [], hidden: [] }, "损坏文件按空覆盖层处理，不抛错");
+
+  const local = createLocalTimetable(path.join(dir, "second.json"));
+  await local.hide({ courseId: "c1", day: 2, from: 1 });
+  const again = await local.hide({ courseId: "c1", day: 2, from: 1 });
+  assert.equal(again.ok, true, "重复隐藏幂等");
+  assert.equal((await local.snapshot()).hidden.length, 1);
+  const noChange = await local.unhide({ courseId: "c9", day: 1, from: 1 });
+  assert.equal(noChange.changed, false, "隐藏不存在时不误报变更");
+});
+
+test("timetable: 全部时段被隐藏时课程不再出现", async () => {
+  const { applyLocalOverrides } = await import("../lib/app/timetable.mjs");
+  const merged = applyLocalOverrides(
+    { courses: [{ id: "c1", name: "物理", slots: [{ day: 2, from: 1, to: 2 }] }] },
+    { hidden: [{ courseId: "c1", day: 2, from: 1 }], custom: [] },
+  );
+  assert.deepEqual(merged.courses, [], "没有剩余时段的课程整体移除");
 });
