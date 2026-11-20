@@ -1270,3 +1270,17 @@ test("app: timetable removes a custom course and hides an official slot", async 
   assert.equal(hide.body.courseId, "c1");
   assert.equal(hide.body.day, 2);
 });
+
+test("app: theme switches between light, dark and auto", async t => {
+  const a = await app(t, {});
+  a.click("#theme-dark");
+  assert.equal(a.document.documentElement.dataset.theme, "dark");
+  assert.equal(a.$("#theme-dark").getAttribute("aria-pressed"), "true");
+  a.click("#theme-auto");
+  assert.equal(a.$("#theme-auto").getAttribute("aria-pressed"), "true");
+  assert.equal(a.$("#theme-light").getAttribute("aria-pressed"), "false");
+  assert.ok(["light", "dark"].includes(a.document.documentElement.dataset.theme));
+  a.click("#theme-light");
+  assert.equal(a.document.documentElement.dataset.theme, "light");
+  assert.equal(a.$("#theme-light").getAttribute("aria-pressed"), "true");
+});
