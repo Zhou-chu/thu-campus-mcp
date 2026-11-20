@@ -858,3 +858,33 @@ test("座位接口对缺参与未确认分别返回 400/428，未知子路径保
   const unknown = await fetch(url + "/api/seat/unknown", { headers });
   assert.equal(unknown.status, 404);
 });
+
+test("app: method and not-found branches report honest HTTP errors", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const post = (path, body) => fetch(url + path, { method: "POST", headers, body: JSON.stringify(body || {}) });
+  const unknownRoute = await post("/api/timetable", {});
+  assert.equal(unknownRoute.status, 404);
+  assert.equal((await unknownRoute.json()).error.code, "NOT_FOUND");
+  const missingRename = await fetch(url + "/api/sessions/nope", { method: "PATCH", headers, body: JSON.stringify({ title: "x" }) });
+  assert.ok([404, 405].includes(missingRename.status), "不存在的会话不能改名为成功");
+  const missingDelete = await fetch(url + "/api/sessions/nope", { method: "DELETE", headers });
+  assert.equal(missingDelete.status, 404);
+  const service = await (await fetch(url + "/api/service", { headers })).json();
+  assert.equal(service.ok, true);
+  assert.equal(typeof service.installed, "boolean");
+});
+
+test("app: submission confirm and seat prepare reject invalid input with codes", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const confirm = await fetch(url + "/api/sidebar/submissions/confirm", {
+    method: "POST", headers, body: JSON.stringify({ preparationId: "11111111-1111-4111-8111-111111111111" }),
+  });
+  assert.equal(confirm.status, 409);
+  assert.equal((await confirm.json()).error.code, "CONFIRMATION_REQUIRED");
+
+  const prepare = await fetch(url + "/api/seat/reserve/prepare", { method: "POST", headers, body: "{}" });
+  assert.equal(prepare.status, 400);
+  assert.equal((await prepare.json()).error.code, "ARGUMENT_REQUIRED");
+});
