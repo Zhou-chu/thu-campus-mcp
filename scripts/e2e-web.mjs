@@ -271,7 +271,8 @@ async function main() {
     // 4. 服务页：四行服务 + 编号
     await page.click('button[data-view="services"]');
     await page.waitForSelector(".auth-service");
-    record("服务行数为 4", (await page.locator(".auth-service").count()) === 4);
+    record("服务行数为 5", (await page.locator(".auth-service").count()) === 5);
+  record("服务页包含图书馆座位", (await page.locator('.auth-service[data-service="seat"]').count()) === 1);
     record("服务名称与核验入口存在", (await page.locator('.auth-service[data-service="learnx"]').innerText()).includes("网络学堂") && await page.getByRole("button", { name: "核验登录状态", exact: true }).isVisible());
 
     // 5. 工具页：编号索引与写入标记
