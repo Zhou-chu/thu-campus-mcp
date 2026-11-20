@@ -888,3 +888,28 @@ test("app: submission confirm and seat prepare reject invalid input with codes",
   assert.equal(prepare.status, 400);
   assert.equal((await prepare.json()).error.code, "ARGUMENT_REQUIRED");
 });
+
+test("app: sports reserve requires a scene, a slot and a confirmation token", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const empty = await fetch(url + "/api/sports/reserve/prepare", { method: "POST", headers, body: "{}" });
+  assert.equal(empty.status, 400, "缺少场地与时段时直接拒绝");
+  assert.equal((await empty.json()).error.code, "ARGUMENT_REQUIRED");
+
+  const prepared = await fetch(url + "/api/sports/reserve/prepare", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sceneUuid: "s1", siteUuid: "site1", day: "2026-11-21", startTime: "19:00", endTime: "20:00" }),
+  });
+  const preparedBody = await prepared.json();
+  assert.equal(prepared.status, 200);
+  assert.equal(typeof preparedBody.token, "string");
+
+  const noToken = await fetch(url + "/api/sports/reserve", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sceneUuid: "s1", siteUuid: "site1", day: "2026-11-21", startTime: "19:00", endTime: "20:00" }),
+  });
+  assert.equal(noToken.status, 428, "没有确认令牌不能下单");
+  assert.equal((await noToken.json()).error.code, "APPROVAL_REQUIRED");
+});
