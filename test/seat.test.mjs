@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache } from "../lib/app/seat.mjs";
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -182,4 +182,14 @@ test("seat: 分区扫描结果按 TTL 复用", () => {
   cache.set("k", 2);
   cache.clear();
   assert.equal(cache.get("k"), null, "清理后为空");
+});
+
+test("seat: 规则文本提取开放时段与当日次日规则", () => {
+  const parsed = normalizeRules("1.读者可预约当日或次日的座位。<p>系统开放时间为每日的 6：00-23：00。</p>");
+  assert.deepEqual(parsed.window, { open: "06:00", close: "23:00" });
+  assert.equal(parsed.sameDayOrNext, true);
+  assert.match(parsed.text, /当日或次日/);
+  const empty = normalizeRules("");
+  assert.equal(empty.window, null);
+  assert.equal(empty.sameDayOrNext, false);
 });
