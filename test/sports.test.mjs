@@ -157,3 +157,38 @@ test("sports: 场地记录使用 siteUuid 别名且缺开始时间的时段丢�
   assert.equal(result.sites[0].uuid, "alias-1", "uuid 缺省时回退 siteUuid");
   assert.deepEqual(result.sites[0].slots, [], "缺开始时间的时段丢弃");
 });
+
+test("sports: 场次归一覆盖状态对象、费用形态与排序", async () => {
+  const { normalizeSlots } = await import("../lib/app/sports.mjs");
+  const payload = { data: [
+    {
+      siteName: "二号场",
+      sessionVo: [
+        { beginTime: "20:00:00", endTime: "21:00:00", reserveStatus: { reserveStatus: "N", reserveStatusReason: "维护中" }, userFeeDetails: { chargingUnitPrice: 30 }, allowUserNum: 4, resvUserNum: 4 },
+        { beginTime: "19:00:00", endTime: "20:00:00", reserveStatus: { code: "Y" }, userFeeDetails: [{ price: 15 }] },
+        { beginTime: "19:00:00", endTime: "20:00:00", reserveStatus: "", ruleFeeDetails: [{ amount: 8 }] },
+        { beginTime: "18:00:00", endTime: "19:00:00", reserveStatus: { reserveStatus: "" }, userFeeDetails: 12 },
+        { beginTime: "", endTime: "20:00:00" },
+      ],
+    },
+    { sceneName: "一号场", sessionVo: [{ beginTime: "19:00:00", endTime: "20:00:00", reserveStatus: "Y" }] },
+  ] };
+  const normalized = normalizeSlots(payload, { venue: "综合馆", date: "2026-11-21" });
+  assert.equal(normalized.sessions.length, 5, "缺开始时间的场次被丢弃");
+  assert.deepEqual(normalized.sessions.map(item => item.begin), ["18:00", "19:00", "19:00", "19:00", "20:00"], "按开始时间排序");
+  const [first, , , , last] = normalized.sessions;
+  assert.equal(first.price, 12, "费用为数字时直接采用");
+  assert.equal(first.status, undefined, "空状态不编造");
+  assert.equal(last.status, "N");
+  assert.equal(last.statusReason, "维护中");
+  assert.equal(last.price, 30);
+  assert.equal(last.capacity, 4);
+  assert.equal(last.reserved, 4);
+  assert.equal(normalized.sessions.filter(item => item.site === "一号场").length, 1, "缺 siteName 时用 sceneName");
+});
+
+test("sports: 工具层未知工具与缺场景参数直接报错", async () => {
+  const { callSportsTool } = await import("../lib/sports/mcp.mjs");
+  await assert.rejects(() => callSportsTool("sports_bogus", {}), error => error.code === "UNKNOWN_TOOL");
+  await assert.rejects(() => callSportsTool("sports_available", { scene: 42 }), error => error.code === "ARGUMENT_REQUIRED");
+});
