@@ -57,7 +57,7 @@ export async function profileLease(options = {}) {
   try {
     release = await lockfile.lock(cfg.stateDir, {
       retries: 0,
-      stale: 120000,
+      stale: 30000,
       update: 10000,
     });
     const marker = await readJson(path.join(cfg.stateDir, "workspace.json"));
