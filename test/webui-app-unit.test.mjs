@@ -1349,3 +1349,20 @@ test("app: gitlab settings save, mask and test the connection honestly", async t
   assert.match(a.$(".gitlab-settings").textContent, /周楚/);
   assert.match(a.$(".gitlab-settings").textContent, /19\.6\.0/);
 });
+
+
+test("app: gitlab settings surface save and connection failures instead of pretending", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" },
+      "PUT /api/gitlab/config": { ok: false, error: { message: "地址必须是 http(s) 链接。" } },
+      "POST /api/gitlab/test": { ok: false, error: { message: "令牌无效或已过期。" } },
+    },
+  });
+  a.nav("settings");
+  await until(() => !!a.$(".gitlab-settings"), "gitlab card");
+  a.click(a.button("保存", a.$(".gitlab-settings")));
+  await until(() => /地址必须是 http/.test(a.$("#settings")?.textContent || a.document.body.textContent), "save error");
+  a.click(a.button("测试连接", a.$(".gitlab-settings")));
+  await until(() => /令牌无效或已过期/.test(a.document.body.textContent), "test error");
+});

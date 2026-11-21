@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -122,4 +122,30 @@ test("gitlab: 工具层归一项目/议题/MR/流水线字段", async () => {
   assert.equal(encodeProject(52412), "52412");
   assert.equal(encodeProject("zhouc24/gtep-cli"), "zhouc24%2Fgtep-cli");
   assert.ok(new GitlabError("X", "y") instanceof Error);
+});
+
+test("gitlab: 没有状态目录、空令牌与损坏配置分别如实处理", async () => {
+  await assert.rejects(() => saveGitlabConfig({ token: "t" }, {}), error => error.code === "GITLAB_STATE_DIR_MISSING");
+  const stateDir = await tempState();
+  await saveGitlabConfig({ baseUrl: "https://git.tsinghua.edu.cn", token: "keepme" }, { stateDir });
+  const kept = await saveGitlabConfig({ token: "" }, { stateDir });
+  assert.equal(kept.configured, true, "空令牌不覆盖已有令牌");
+  await writeFile(path.join(stateDir, "gitlab.json"), "{broken", "utf8");
+  const recovered = await loadGitlabConfig({ stateDir, env: {} });
+  assert.equal(recovered.configured, false, "损坏配置按未配置处理");
+  assert.equal(recovered.baseUrl, "https://git.tsinghua.edu.cn");
+});
+
+test("gitlab: 状态工具返回版本与账号，且不泄露令牌", async () => {
+  const config = { baseUrl: "https://git.tsinghua.edu.cn", token: "secret-token", configured: true };
+  const fetchImpl = async url => {
+    const relative = url.toString().replace("https://git.tsinghua.edu.cn/api/v4/", "");
+    if (relative === "version") return jsonResponse({ version: "19.6.0" });
+    if (relative === "user") return jsonResponse({ id: 23001, username: "zhouc24", name: "周楚", state: "active" });
+    return jsonResponse({}, 404);
+  };
+  const status = await callGitlabTool("gitlab_status", {}, { config, fetchImpl });
+  assert.equal(status.version, "19.6.0");
+  assert.equal(status.user.username, "zhouc24");
+  assert.ok(!JSON.stringify(status).includes("secret-token"), "结果里没有令牌");
 });
