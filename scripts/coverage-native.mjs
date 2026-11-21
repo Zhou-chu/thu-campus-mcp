@@ -19,7 +19,7 @@ export async function nativeTestFiles(root = ROOT) {
 export async function nativePlan(root = ROOT, env = process.env) {
   if (!env.NODE_V8_COVERAGE || !env.CAMPUS_COVERAGE_RUN_DIR || !env.CAMPUS_COVERAGE_MANIFEST) throw new Error("C8_COVERAGE_ENV_REQUIRED");
   const common = { ...env, NODE_V8_COVERAGE: env.NODE_V8_COVERAGE };
-  const plans = [{ name: "node-tests", args: ["--enable-source-maps", "--test", ...await nativeTestFiles(root)], env: common }];
+  const plans = [{ name: "node-tests", args: ["--enable-source-maps", "--test", "--test-concurrency=1", ...await nativeTestFiles(root)], env: common }];
   const hook = pathToFileURL(path.join(root, "scripts/coverage-browser.mjs")).href;
   for (const script of E2E_SCRIPTS) plans.push({ name: script, args: ["--enable-source-maps", "--import", hook, path.join(root, "scripts", script)], env: { ...common, CAMPUS_COVERAGE_BROWSER: "1", CAMPUS_COVERAGE_ROOT: root, CAMPUS_COVERAGE_BROWSER_DIR: path.join(env.CAMPUS_COVERAGE_RUN_DIR, "browser") } });
   return plans;
