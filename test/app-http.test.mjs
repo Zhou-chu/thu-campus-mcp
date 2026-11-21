@@ -1140,3 +1140,17 @@ test("app: gitlab test route asks for configuration instead of failing as networ
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, "GITLAB_NOT_CONFIGURED");
 });
+
+
+test("app: gitlab config keeps the saved token when only the url changes", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  await fetch(url + "/api/gitlab/config", { method: "PUT", headers, body: JSON.stringify({ token: "abcd1234efgh" }) });
+  const afterUrlOnly = await (await fetch(url + "/api/gitlab/config", { method: "PUT", headers, body: JSON.stringify({ baseUrl: "https://git.tsinghua.edu.cn" }) })).json();
+  assert.equal(afterUrlOnly.configured, true, "只改地址不清空令牌");
+  assert.equal(afterUrlOnly.masked, "abcd****efgh");
+  const current = await (await fetch(url + "/api/gitlab/config", { headers })).json();
+  assert.equal(current.baseUrl, "https://git.tsinghua.edu.cn");
+  assert.equal(current.configured, true);
+  assert.ok(!JSON.stringify(current).includes("abcd1234efgh"));
+});
