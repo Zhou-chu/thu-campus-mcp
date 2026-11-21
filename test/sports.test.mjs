@@ -203,3 +203,12 @@ test("sports: 下单结果区分成功、失败与需要人工验证", async () 
   assert.match(captcha.message, /人工/);
   assert.equal(reserveOutcome({}).ok, true, "没有错误码时按成功处理");
 });
+
+
+test("seat: 未开放时段可被识别，不再误报为需要人工登录", async () => {
+  const { seatPageState } = await import("../lib/app/seat.mjs");
+  assert.equal(seatPageState("系统开放预约时间 06:00~23:00 请在开放时间段进行预约。 返回首页 预约规则"), "closed");
+  assert.equal(seatPageState("登录 座位预约 图书馆"), "login");
+  assert.equal(seatPageState("座位预约 已登录"), "ready");
+  assert.equal(seatPageState(""), "ready");
+});
