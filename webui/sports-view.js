@@ -151,7 +151,7 @@ export function createSportsView({ el, api }) {
         state.venues = Array.isArray(data.venues) ? data.venues : [];
         state.venue = state.venues[0] || "";
       } catch {
-        state.error = "暂时读不到该运动的场馆。";
+        state.error = error?.code === "BROWSER_BUSY" || error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到该运动的场馆。";
       }
       render();
       if (state.venue) await loadSlots();
