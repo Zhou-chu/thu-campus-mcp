@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -822,7 +822,7 @@ test("app: keepalive evidence/time/actions and failed manual run are not claimed
   a.click(a.button("立即自检")); await flush(); assert.match(a.$("#toast").textContent, /fixture keepalive failed/);
   assert.equal(a.button("立即自检").disabled, false);
   a.routes.set("POST /api/keepalive/run", { ok: true, enabled: true, intervalMs: 60000, restoreExpired: false, history: [] });
-  a.click(a.button("立即自检")); await flush(); assert.match(a.$(".card").textContent, /只记录不恢复.*还没有自检记录/);
+  a.click(a.button("立即自检")); await flush(); assert.match(a.all(".card").find(card => /自检/.test(card.textContent)).textContent, /只记录不恢复.*还没有自检记录/);
   assert.match(a.$("#toast").textContent, /自检已完成/);
 });
 
