@@ -192,3 +192,14 @@ test("sports: 工具层未知工具与缺场景参数直接报错", async () => 
   await assert.rejects(() => callSportsTool("sports_bogus", {}), error => error.code === "UNKNOWN_TOOL");
   await assert.rejects(() => callSportsTool("sports_available", { scene: 42 }), error => error.code === "ARGUMENT_REQUIRED");
 });
+
+test("sports: 下单结果区分成功、失败与需要人工验证", async () => {
+  const { reserveOutcome } = await import("../lib/app/sports.mjs");
+  assert.deepEqual(reserveOutcome({ code: 0, message: "预约成功" }), { ok: true, message: "预约成功" });
+  assert.equal(reserveOutcome({ code: 500, message: "场地已满" }).code, "SPORTS_RESERVE_FAILED");
+  const captcha = reserveOutcome({ code: 0, message: "请完成安全验证：向右滑动完成验证" });
+  assert.equal(captcha.ok, false);
+  assert.equal(captcha.code, "SPORTS_MANUAL_VERIFICATION");
+  assert.match(captcha.message, /人工/);
+  assert.equal(reserveOutcome({}).ok, true, "没有错误码时按成功处理");
+});
