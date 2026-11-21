@@ -1326,6 +1326,56 @@ function appendLoginAccount(row, name, info) {
   } });
   row.insertBefore(el("label", { class: "field auth-account" }, [el("span", { text: "学号" }), input]), row.lastChild);
 }
+function accountCard() {
+  const card = el("section", { class: "card stack account-card" });
+  const status = el("p", { class: "small" });
+  const username = el("input", { type: "text", placeholder: "学号或用户名", "aria-label": "清华账号", autocomplete: "username", spellcheck: "false" });
+  const password = el("input", { type: "password", placeholder: "统一身份认证密码", "aria-label": "清华账号密码", autocomplete: "current-password" });
+  const result = el("div", { class: "small", role: "status", hidden: true });
+  const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });
+  const describe = data => {
+    status.textContent = data.configured ? `已配置 · ${data.masked}` : "未配置：填一次学号与密码，座位与体育都复用";
+  };
+  const drawResults = data => {
+    const lines = Object.entries(data.results || {}).map(([name, item]) =>
+      `${name === "seat" ? "图书馆座位" : "体育场馆"}：${item.ok ? "已登录" : item.message || "失败"}`);
+    result.textContent = lines.join(" · ");
+    result.hidden = false;
+  };
+  const loginButton = el("button", {
+    class: "primary", type: "button", text: "保存并登录全部",
+    onclick: event => runAction(event.currentTarget, async () => {
+      await api("/api/account", { method: "PUT", body: { username: username.value.trim(), password: password.value } });
+      password.value = "";
+      const data = await api("/api/account/login", { method: "POST" });
+      drawResults(data);
+      const current = await api("/api/account");
+      describe(current);
+      return data;
+    }, { pending: "登录中…", errorNode }),
+  });
+  const clearButton = el("button", {
+    class: "ghost", type: "button", text: "清除账号",
+    onclick: event => runAction(event.currentTarget, async () => {
+      const data = await api("/api/account", { method: "DELETE" });
+      describe(data);
+      result.hidden = true;
+      return data;
+    }, { pending: "清除中…", errorNode }),
+  });
+  void api("/api/account").then(data => { if (status.isConnected) describe(data); }).catch(() => { if (status.isConnected) status.textContent = "账号状态读取失败，可重试"; });
+  card.append(
+    el("h3", { text: "清华账号" }),
+    status,
+    el("label", { class: "field" }, [el("span", { text: "学号" }), username]),
+    el("label", { class: "field" }, [el("span", { text: "密码" }), password]),
+    el("div", { class: "settings-actions" }, [loginButton, clearButton]),
+    result,
+    errorNode,
+  );
+  return card;
+}
+
 function servicesView() {
   const wrap = el("div", { class: "stack" });
   const panel = el("div", { class: "stack auth-panel" });
@@ -1370,7 +1420,7 @@ function servicesView() {
     }
   };
   panel.draw();
-  wrap.append(panel, keepAliveCard());
+  wrap.append(accountCard(), panel, keepAliveCard());
   return wrap;
 }
 const SERVICE_LABEL = { learnx: "网络学堂", cloud: "云盘", hetang: "雨课堂", madmodel: "MadModel", seat: "图书馆" };

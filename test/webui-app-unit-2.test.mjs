@@ -47,7 +47,7 @@ async function boot(t, { paired = true, href = origin + '/', routes: overrides =
   const saved = new Map(paired ? [[key, JSON.stringify({ version: 1, base: origin, token })]] : []);
   const localStorage = { getItem(k) { if (storageError) throw new Error('fixture storage blocked'); return saved.get(k) ?? null; }, setItem(k, v) { if (storageError) throw new Error('fixture storage blocked'); saved.set(k, String(v)); }, removeItem(k) { if (storageError) throw new Error('fixture storage blocked'); saved.delete(k); } };
   w.localStorage = localStorage;
-  const routes = new Map(Object.entries({ 'GET /api/meta': meta(), 'GET /api/sessions': { ok: true, sessions: [] }, 'GET /api/workspace/storage': { ok: true, storage: { mode: 'cloud', state: 'unavailable' } }, 'GET /api/sidebar/assignments': { ok: true, state: 'ready', fetchedAt: '2026-11-15T00:00:00.000Z', active: [], expired: [], ungraded: [], courseErrors: [] }, 'GET /api/gitlab/config': { ok: true, baseUrl: 'https://git.tsinghua.edu.cn', configured: false, masked: '', source: 'none' }, 'GET /api/service': { ok: true, supported: false }, ...overrides }));
+  const routes = new Map(Object.entries({ 'GET /api/meta': meta(), 'GET /api/sessions': { ok: true, sessions: [] }, 'GET /api/workspace/storage': { ok: true, storage: { mode: 'cloud', state: 'unavailable' } }, 'GET /api/sidebar/assignments': { ok: true, state: 'ready', fetchedAt: '2026-11-15T00:00:00.000Z', active: [], expired: [], ungraded: [], courseErrors: [] }, 'GET /api/gitlab/config': { ok: true, baseUrl: 'https://git.tsinghua.edu.cn', configured: false, masked: '', source: 'none' }, 'GET /api/account': { ok: true, configured: false, masked: '', source: 'none' }, 'GET /api/service': { ok: true, supported: false }, ...overrides }));
   const calls = [], denied = [], streams = [], timers = new Map(), frames = new Map(); let serial = 0, now = 0;
   const a = { w, document: w.document, saved, routes, calls,
     $: s => w.document.querySelector(s), all: s => [...w.document.querySelectorAll(s)],
@@ -204,7 +204,7 @@ test('unit2: tool missing schema, omitted optional values, catalog cache and res
 
 test('unit2: service errors, startup-folder diagnostics and invalid invite produce no unsafe links', async t => {
   const a = await boot(t, { routes: { 'GET /api/keepalive': new Response('', { status: 503 }), 'GET /api/service': { ok: true, supported: true, mode: 'startup-folder', installed: false, startup: { installed: false, entryPath: 'fixture-only' } }, 'POST /api/pair/invite': { ok: true, code: null } } });
-  a.nav('services'); await flush(); assert.match(a.$('.card').textContent, /非 JSON/);
+  a.nav('services'); await flush(); const keepaliveCard = a.all('.card').find(card => /自检/.test(card.textContent)); assert.match(keepaliveCard.textContent, /非 JSON/);
   a.nav('settings'); await flush(); assert.match(a.$('.settings-page').textContent, /启动文件夹.*未安装.*未创建/); a.click(a.button('生成配对码')); await flush(); assert.equal(a.all('.pair-links input').length, 0);
   a.routes.set('POST /api/pair/invite', { ok: true, code: '123456' }); a.click(a.button('生成配对码')); await flush(); assert.equal(a.all('.pair-links input').length, 2); assert.equal(a.$('.pair-links input').value, origin + '/#code=123456');
 });
