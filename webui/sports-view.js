@@ -107,7 +107,7 @@ export function createSportsView({ el, api }) {
             : el("p", { class: "sports-empty", text: state.loading ? "正在读取…" : state.error || "暂无运动项目。" }),
         el("h3", { class: "sports-label", text: "场馆" }),
         state.venues.length ? chipGroup(state.venues, state.venue, item => { state.venue = item; void loadSlots(); }, "场馆")
-          : el("p", { class: "sports-empty", text: state.sport ? "该运动暂无场馆。" : "先选一个运动项目。" }),
+          : el("p", { class: "sports-empty", text: state.sport ? "该运动暂无场馆，换个运动试试。" : "先选一个运动项目。" }),
         el("h3", { class: "sports-label", text: "日期" }),
         dateStrip(),
         el("h3", { class: "sports-label", text: "场次" }),
