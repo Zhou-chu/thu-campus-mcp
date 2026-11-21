@@ -888,3 +888,111 @@ test("app: submission confirm and seat prepare reject invalid input with codes",
   assert.equal(prepare.status, 400);
   assert.equal((await prepare.json()).error.code, "ARGUMENT_REQUIRED");
 });
+
+test("app: sessions, devices, models and settings routes answer honestly", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+
+  const sessions = await (await fetch(url + "/api/sessions", { headers })).json();
+  assert.equal(sessions.ok, true);
+  assert.ok(Array.isArray(sessions.sessions));
+
+  const devices = await (await fetch(url + "/api/devices", { headers })).json();
+  assert.equal(devices.ok, true);
+  const missingDevice = await fetch(url + "/api/devices/no-such-device", { method: "DELETE", headers });
+  assert.equal(missingDevice.status, 404, "不存在的设备不能假装撤销成功");
+  assert.equal((await missingDevice.json()).error.code, "DEVICE_NOT_FOUND");
+
+  const models = await (await fetch(url + "/api/models", { headers })).json();
+  assert.equal(models.ok, true);
+  assert.equal(models.current, "test-model");
+
+  const settings = await (await fetch(url + "/api/settings", { headers })).json();
+  assert.equal(settings.ok, true);
+  assert.equal(typeof settings.settings.keepAliveMinutes, "number");
+  const updated = await fetch(url + "/api/settings", {
+    method: "PUT", headers, body: JSON.stringify({ modelName: "fixture-model", keepAliveMinutes: 30 }),
+  });
+  const updatedBody = await updated.json();
+  assert.equal(updated.status, 200);
+  assert.equal(updatedBody.settings.modelName, "fixture-model");
+
+  const withKeepAlive = await boot(t, { token: "t2", keepAlive: fakeKeepAlive() });
+  const headers2 = { authorization: "Bearer t2", "content-type": "application/json" };
+  const invalidKeepAlive = await fetch(withKeepAlive.url + "/api/settings", {
+    method: "PUT", headers: headers2, body: JSON.stringify({ keepAliveMinutes: 99999 }),
+  });
+  assert.equal(invalidKeepAlive.status, 400, "越界的保活间隔要拒绝");
+  const okKeepAlive = await fetch(withKeepAlive.url + "/api/settings", {
+    method: "PUT", headers: headers2, body: JSON.stringify({ keepAliveMinutes: 30, keepAliveRestore: true }),
+  });
+  assert.equal(okKeepAlive.status, 200, "合法保活配置应保存成功");
+});
+
+test("app: non-GET healthz is rejected and sidebar detail/submission routes answer", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+
+  const wrongMethod = await fetch(url + "/healthz", { method: "POST" });
+  assert.equal(wrongMethod.status, 405);
+  assert.equal((await wrongMethod.json()).error.code, "METHOD_NOT_ALLOWED");
+
+  const auth = await (await fetch(url + "/api/auth/status", { headers })).json();
+  assert.equal(auth.ok, true);
+  assert.equal(typeof auth.services, "object");
+
+  const detail = await fetch(url + "/api/sidebar/assignments/c1/h1", { headers });
+  assert.ok([200, 404, 502].includes(detail.status), "作业详情不会返回 2xx 之外的成功语义");
+
+  const prepared = await fetch(url + "/api/sidebar/submissions/prepare", {
+    method: "POST", headers, body: JSON.stringify({ courseId: "c1", homeworkId: "h1", content: "正文" }),
+  });
+  assert.ok([200, 400, 502].includes(prepared.status));
+  if (prepared.status === 200) {
+    const body = await prepared.json();
+    assert.equal(typeof body.confirmToken, "string", "准备成功必须签发确认令牌");
+  }
+});
+
+test("app: seat reserve approvals and tool dispatch reject the wrong caller", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+
+  const prepare = await fetch(url + "/api/seat/reserve/prepare", { method: "POST", headers, body: "{}" });
+  assert.equal(prepare.status, 400, "缺座位与时段直接拒绝");
+  assert.equal((await prepare.json()).error.code, "ARGUMENT_REQUIRED");
+
+  const noToken = await fetch(url + "/api/seat/reserve", {
+    method: "POST", headers, body: JSON.stringify({ space: 1, segment: 2, day: "2026-11-21" }),
+  });
+  assert.equal(noToken.status, 428, "没有确认令牌不能预约座位");
+
+  const unknownTool = await fetch(url + "/api/tools/no_such_tool", { method: "POST", headers, body: "{}" });
+  assert.ok([200, 400, 404].includes(unknownTool.status), "未知工具由 host 决定成败，不在这里伪装成功语义");
+
+  const destructive = await fetch(url + "/api/tools/learn_submit_assignment", { method: "POST", headers, body: "{}" });
+  assert.equal(destructive.status, 428, "写入类工具没有审批令牌时拒绝执行");
+  assert.equal((await destructive.json()).error.code, "APPROVAL_REQUIRED");
+
+  const workspaceTool = await fetch(url + "/api/tools/workspace_list", { method: "POST", headers, body: "{}" });
+  assert.equal(workspaceTool.status, 403, "工作区工具不能从通用入口绕过");
+});
+
+test("app: attachment upload validates name and emptiness", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/octet-stream" };
+
+  const noName = await fetch(url + "/api/sidebar/attachments", { method: "POST", headers, body: "abc" });
+  assert.equal(noName.status, 400);
+  assert.equal((await noName.json()).error.code, "INVALID_FILE_NAME");
+
+  const empty = await fetch(url + "/api/sidebar/attachments?name=a.txt", { method: "POST", headers, body: "" });
+  assert.equal(empty.status, 400, "空文件不保存");
+  assert.equal((await empty.json()).error.code, "EMPTY_FILE");
+
+  const ok = await fetch(url + "/api/sidebar/attachments?name=a.txt", { method: "POST", headers, body: "hello" });
+  const body = await ok.json();
+  assert.equal(ok.status, 200);
+  assert.equal(body.file.size, 5);
+  assert.equal(typeof body.file.sha256, "string");
+});
