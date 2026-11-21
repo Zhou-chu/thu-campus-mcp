@@ -996,3 +996,52 @@ test("app: attachment upload validates name and emptiness", async (t) => {
   assert.equal(body.file.size, 5);
   assert.equal(typeof body.file.sha256, "string");
 });
+
+test("app: session rename and delete use session ids honestly", async (t) => {
+  const { url, sessions } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const session = await sessions.create({ title: "旧标题" });
+  const sessionId = session.id;
+  await sessions.append(sessionId, [{ role: "user", content: "你好", at: new Date().toISOString() }], { title: "旧标题" });
+  assert.ok(sessionId, "测试需要一条真实会话记录");
+
+  const renamed = await fetch(url + "/api/sessions/" + sessionId, { method: "PATCH", headers, body: JSON.stringify({ title: "新标题" }) });
+  const renamedBody = await renamed.json();
+  assert.equal(renamed.status, 200);
+  assert.equal(renamedBody.session.title, "新标题");
+
+  const missing = await fetch(url + "/api/sessions/9a1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f", { method: "PATCH", headers, body: JSON.stringify({ title: "x" }) });
+  assert.equal(missing.status, 404);
+
+  const removed = await fetch(url + "/api/sessions/" + sessionId, { method: "DELETE", headers });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).removed, sessionId);
+  const again = await fetch(url + "/api/sessions/" + sessionId, { method: "DELETE", headers });
+  assert.equal(again.status, 404, "重复删除如实返回不存在");
+});
+
+test("app: auth login validates service and reports job ids", async (t) => {
+  const baseHost = fakeHost();
+  const host = { ...baseHost, async call(name, args) { if (name === "campus_browser_login") return { ok: true, data: { id: "job-1" } }; return baseHost.call(name, args); } };
+  const { url } = await boot(t, { token: "t", host });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const bad = await fetch(url + "/api/auth/login", { method: "POST", headers, body: JSON.stringify({ service: "nope" }) });
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).error.code, "INVALID_ARGUMENTS");
+
+  const ok = await fetch(url + "/api/auth/login", { method: "POST", headers, body: JSON.stringify({ service: "learnx", account: "2023000000" }) });
+  const okBody = await ok.json();
+  assert.equal(ok.status, 200);
+  assert.equal(typeof okBody.jobId, "string");
+
+  const job = await (await fetch(url + "/api/jobs/" + okBody.jobId, { headers })).json();
+  assert.equal(job.ok, true);
+  assert.equal(job.id, okBody.jobId);
+
+  const abortUnknown = await fetch(url + "/api/chat/8f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f/abort", { method: "POST", headers });
+  assert.equal(abortUnknown.status, 200);
+  assert.equal((await abortUnknown.json()).aborted, false, "没有进行中的对话时如实返回未中止");
+
+  const confirmMissing = await fetch(url + "/api/chat/8f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f/confirm", { method: "POST", headers, body: "{}" });
+  assert.equal(confirmMissing.status, 400, "缺少 callId 不冒充确认成功");
+});
