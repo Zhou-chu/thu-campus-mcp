@@ -68,10 +68,27 @@ export function createSportsView({ el, api }) {
         for (const item of items)
           sites.append(el("span", { class: "sports-site", dataset: { open: String(isOrderable(item)) }, title: `${item.site} · ${statusText(item)} · ${priceText(item.price)}`, text: item.site }));
         const open = items.filter(isOrderable).length;
+    const [begin, end] = slot.split("-");
+    const prepare = el("button", {
+      class: "ghost sports-prepare", type: "button", text: "打开预约窗口",
+      title: "自动选好该时段并停在人工验证前",
+      onclick: async () => {
+        prepare.disabled = true; prepare.textContent = "正在打开…";
+        try {
+          const result = await api("/api/sports/booking/prepare", { method: "POST", body: { sport: state.sport, venue: state.venue, start: begin, end, date: state.date } });
+          state.error = result.message || "窗口已打开，请在窗口内完成验证与支付。";
+        } catch (error) {
+          state.error = error?.message || "打开预约窗口失败。";
+        } finally {
+          prepare.disabled = false; prepare.textContent = "打开预约窗口"; render();
+        }
+      },
+    });
         list.append(el("div", { class: "sports-slot" }, [
           el("div", { class: "sports-slot-time", text: slot }),
           sites,
           el("div", { class: "sports-slot-meta", text: `${open}/${items.length} 可约 · ${priceText(items[0]?.price)}` }),
+      prepare,
         ]));
       }
       return list;
