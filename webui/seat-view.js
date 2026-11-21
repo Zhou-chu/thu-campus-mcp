@@ -78,7 +78,7 @@ export function createSeatView({ el, api }) {
       children.push(el("h3", { class: "seat-label", text: "馆区" }));
       children.push(state.libraries.length
         ? chips(state.libraries, state.library, "馆区", item => { state.library = item; void loadFloors(); })
-        : el("p", { class: "seat-empty", text: state.loading ? "正在读取…" : state.error || "暂无馆区。" }));
+        : el("p", { class: "seat-empty", text: state.loading ? "正在读取馆区（首次需先登录座位系统，约 30 秒）" : state.error || "暂无馆区。" }));
       children.push(el("h3", { class: "seat-label", text: "楼层" }));
       children.push(state.floors.length
         ? chips(state.floors, state.floor, "楼层", item => { state.floor = item; void loadAreas(); })
