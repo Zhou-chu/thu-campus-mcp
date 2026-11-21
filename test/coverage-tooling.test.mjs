@@ -97,7 +97,7 @@ test("tooling报告只转换同次unit/raw与native/raw，不清理或重跑套�
   for (const phase of ["unit", "combined"]) {
     assert.deepEqual(result[phase].errors, []);
     const args = toolingCoverageArgs(root, runDirectory, phase, cli);
-    assert.equal(args[1], "report"); assert.ok(args.includes("--clean=false")); assert.ok(args.includes("--all=false"));
+    assert.equal(args[1], "report"); assert.ok(args.includes("--clean=false")); assert.ok(args.includes("--all=true"), "覆盖率固定分母：统计全部生产源码");
     assert.ok(args.includes(`--temp-directory=${path.join(runDirectory, phase === "unit" ? "unit/raw" : "native/raw")}`));
     assert.ok(args.includes("--include=scripts/**/*.mjs")); assert.ok(!args.some(arg => arg.includes("--include=lib/")));
     assert.equal(args.includes("--"), false);
