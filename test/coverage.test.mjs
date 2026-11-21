@@ -198,7 +198,7 @@ test("原生计划覆盖四组测试和四个E2E，NODE_V8_COVERAGE跨子进程�
   const calls = []; assert.equal(await nativeMain(root, env, async args => { calls.push(args); if (calls.length === 3) await put(runDirectory, "native/raw/e2e.json", "{}"); return { code: calls.length === 2 ? 1 : 0 }; }), 1); assert.equal(calls.length, 6);
   assert.equal(calls[1][1], "report"); assert.ok(calls[1].includes("--clean=false"));
   assert.deepEqual(await readdir(path.join(runDirectory, "unit/raw")), ["unit.json"]); assert.ok((await readdir(env.NODE_V8_COVERAGE)).includes("e2e.json"));
-  const c8 = nativeCoverageArgs(ROOT, runDirectory); assert.equal(c8.filter(arg => arg === "--clean=true").length, 1); assert.ok(c8.includes("--all=false")); assert.ok(path.isAbsolute(c8[0])); assert.ok(c8.includes(process.execPath));
+  const c8 = nativeCoverageArgs(ROOT, runDirectory); assert.equal(c8.filter(arg => arg === "--clean=true").length, 1); assert.ok(c8.includes("--all=true")); assert.ok(path.isAbsolute(c8[0])); assert.ok(c8.includes(process.execPath));
   assert.ok(path.isAbsolute(localCli(ROOT, "vitest", "vitest.mjs"))); assert.ok(path.isAbsolute(npmCli()));
 });
 test("spawn始终是绝对Node与inherit stdio，不使用shell/PATH，并记录退出/信号/错误", async () => {

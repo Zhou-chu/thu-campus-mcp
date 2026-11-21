@@ -199,7 +199,7 @@ export async function runNode(args, { cwd = ROOT, env = process.env, spawnImpl =
   });
 }
 export function nativeCoverageArgs(root, runDirectory, cli = localCli(root, "c8", "bin/c8.js")) {
-  const args = [cli, `--config=${path.join(runDirectory, "c8-config.json")}`, "--all=false", "--clean=true", "--merge-async", "--exclude-after-remap", "--reporter=json", `--reports-dir=${path.join(runDirectory, "native")}`, `--temp-directory=${path.join(runDirectory, "native/raw")}`];
+  const args = [cli, `--config=${path.join(runDirectory, "c8-config.json")}`, "--all=true", "--clean=true", "--merge-async", "--exclude-after-remap", "--reporter=json", `--reports-dir=${path.join(runDirectory, "native")}`, `--temp-directory=${path.join(runDirectory, "native/raw")}`];
   for (const directory of SOURCE_ROOTS) {
     args.push(`--src=${path.join(root, directory)}`);
     for (const ext of EXTENSIONS) args.push(`--include=${directory}/**/*${ext}`);
