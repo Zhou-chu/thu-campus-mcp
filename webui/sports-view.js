@@ -111,7 +111,7 @@ export function createSportsView({ el, api }) {
         el("h3", { class: "sports-label", text: "日期" }),
         dateStrip(),
         el("h3", { class: "sports-label", text: "场次" }),
-    state.notice ? el("p", { class: "sports-notice", role: "status", text: state.notice }) : null,
+    ...(state.notice ? [el("p", { class: "sports-notice", role: "status", text: state.notice })] : []),
         sessionList(),
       );
     }
