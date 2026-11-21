@@ -12,7 +12,7 @@ const statusText = session => {
 };
 
 export function createSportsView({ el, api }) {
-  const state = { notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false };
+  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false };
 
   return function sportsPage() {
     const wrap = el("div", { class: "stack sports-page" });
@@ -107,7 +107,7 @@ export function createSportsView({ el, api }) {
             : el("p", { class: "sports-empty", text: state.loading ? "正在读取…" : state.error || "暂无运动项目。" }),
         el("h3", { class: "sports-label", text: "场馆" }),
         state.venues.length ? chipGroup(state.venues, state.venue, item => { state.venue = item; void loadSlots(); }, "场馆")
-          : el("p", { class: "sports-empty", text: state.sport ? "该运动暂无场馆，换个运动试试。" : "先选一个运动项目。" }),
+          : el("p", { class: "sports-empty", text: state.venuesLoading ? "正在读取场馆…" : state.sport ? "该运动暂无场馆，换个运动试试。" : "先选一个运动项目。" }),
         el("h3", { class: "sports-label", text: "日期" }),
         dateStrip(),
         el("h3", { class: "sports-label", text: "场次" }),
