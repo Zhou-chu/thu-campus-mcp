@@ -1154,3 +1154,43 @@ test("app: gitlab config keeps the saved token when only the url changes", async
   assert.equal(current.configured, true);
   assert.ok(!JSON.stringify(current).includes("abcd1234efgh"));
 });
+
+
+test("app: 作业栏会话失效会同步到服务状态，恢复后自动清除", async (t) => {
+  const { clearLearnxSignal } = await import("../lib/app/session-signals.mjs");
+  clearLearnxSignal();
+  const baseHost = fakeHost();
+  let mode = "expired";
+  const host = {
+    ...baseHost,
+    async call(name, args) {
+      if (name === "learn_list_assignments") {
+        return mode === "expired"
+          ? { ok: false, error: { code: "AUTH_REQUIRED", message: "会话已失效，需要重新登录。" } }
+          : { ok: true, data: { items: [], errors: [], nextOffset: null } };
+      }
+      return baseHost.call(name, args);
+    },
+  };
+  const { url } = await boot(t, { token: "t", host });
+  const headers = { authorization: "Bearer t" };
+
+  const before = await (await fetch(url + "/api/meta", { headers })).json();
+  assert.notEqual(before.services.learnx?.state, "expired", "未触发前不应标成过期");
+
+  const failed = await (await fetch(url + "/api/sidebar/assignments", { headers })).json();
+  assert.equal(failed.state, "unavailable");
+  assert.equal(failed.error.code, "AUTH_REQUIRED");
+
+  const after = await (await fetch(url + "/api/meta", { headers })).json();
+  assert.equal(after.services.learnx.state, "expired", "服务状态应同步为登录已过期");
+  assert.equal(after.services.learnx.code, "AUTH_REQUIRED");
+  assert.equal(after.services.learnx.verified, false);
+  assert.equal(typeof after.services.learnx.signalAt, "string");
+
+  mode = "ready";
+  const recovered = await (await fetch(url + "/api/sidebar/assignments?refresh=1", { headers })).json();
+  assert.equal(recovered.state, "ready");
+  const cleared = await (await fetch(url + "/api/meta", { headers })).json();
+  assert.notEqual(cleared.services.learnx?.state, "expired", "恢复后信号应清除");
+});
