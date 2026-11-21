@@ -1045,3 +1045,67 @@ test("app: auth login validates service and reports job ids", async (t) => {
   const confirmMissing = await fetch(url + "/api/chat/8f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f/confirm", { method: "POST", headers, body: "{}" });
   assert.equal(confirmMissing.status, 400, "缺少 callId 不冒充确认成功");
 });
+
+test("app: sports reserve requires a scene, a slot and a confirmation token", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const empty = await fetch(url + "/api/sports/reserve/prepare", { method: "POST", headers, body: "{}" });
+  assert.equal(empty.status, 400, "缺少场地与时段时直接拒绝");
+  assert.equal((await empty.json()).error.code, "ARGUMENT_REQUIRED");
+
+  const prepared = await fetch(url + "/api/sports/reserve/prepare", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sceneUuid: "s1", siteUuid: "site1", day: "2026-11-21", startTime: "19:00", endTime: "20:00" }),
+  });
+  const preparedBody = await prepared.json();
+  assert.equal(prepared.status, 200);
+  assert.equal(typeof preparedBody.token, "string");
+
+  const noToken = await fetch(url + "/api/sports/reserve", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sceneUuid: "s1", siteUuid: "site1", day: "2026-11-21", startTime: "19:00", endTime: "20:00" }),
+  });
+  assert.equal(noToken.status, 428, "没有确认令牌不能下单");
+  assert.equal((await noToken.json()).error.code, "APPROVAL_REQUIRED");
+});
+
+test("app: sports reserve requires a scene, a slot and a confirmation token", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+  const empty = await fetch(url + "/api/sports/reserve/prepare", { method: "POST", headers, body: "{}" });
+  assert.equal(empty.status, 400, "缺少场地与时段时直接拒绝");
+  assert.equal((await empty.json()).error.code, "ARGUMENT_REQUIRED");
+
+  const prepared = await fetch(url + "/api/sports/reserve/prepare", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sceneUuid: "s1", siteUuid: "site1", day: "2026-11-21", startTime: "19:00", endTime: "20:00" }),
+  });
+  const preparedBody = await prepared.json();
+  assert.equal(prepared.status, 200);
+  assert.equal(typeof preparedBody.token, "string");
+
+  const noToken = await fetch(url + "/api/sports/reserve", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sceneUuid: "s1", siteUuid: "site1", day: "2026-11-21", startTime: "19:00", endTime: "20:00" }),
+  });
+  assert.equal(noToken.status, 428, "没有确认令牌不能下单");
+  assert.equal((await noToken.json()).error.code, "APPROVAL_REQUIRED");
+});
+
+test("app: sports routes surface argument errors without opening a browser", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t" };
+  const available = await fetch(url + "/api/sports/available?scene=", { headers });
+  assert.equal(available.status, 400, "缺场景时直接 400");
+  const availableBody = await available.json();
+  assert.equal(availableBody.ok, false);
+  assert.equal(availableBody.error.code, "ARGUMENT_REQUIRED");
+
+  const venues = await fetch(url + "/api/sports/venues", { headers });
+  assert.equal(venues.status, 400, "缺运动项目时直接 400");
+  assert.equal((await venues.json()).error.code, "SPORT_REQUIRED");
+});

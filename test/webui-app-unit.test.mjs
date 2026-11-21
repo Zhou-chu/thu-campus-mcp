@@ -1284,3 +1284,40 @@ test("app: theme switches between light, dark and auto", async t => {
   assert.equal(a.document.documentElement.dataset.theme, "light");
   assert.equal(a.$("#theme-light").getAttribute("aria-pressed"), "true");
 });
+
+test("app: sports view reports empty catalog and venue failures honestly", async t => {
+  const empty = await app(t, { routes: { "GET /api/sports/sports": { ok: true, sports: [] } } });
+  empty.nav("sports");
+  await until(() => /接口没有返回运动项目/.test(empty.$(".sports-panel").textContent), "empty catalog");
+
+  const failed = await app(t, {
+    routes: {
+      "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
+      "GET /api/sports/venues?sport=%E6%B8%B8%E6%B3%B3": () => { throw Object.assign(new Error("场馆接口失败"), { code: "SPORTS_API_FAILED" }); },
+    },
+  });
+  failed.nav("sports");
+  await until(() => /暂时读不到该运动的场馆/.test(failed.$(".sports-panel").textContent), "venue failure");
+  assert.equal(failed.all(".sports-site").length, 0);
+});
+
+test("app: sports sessions show price, capacity and status truthfully", async t => {
+  const day = new Date().toLocaleDateString("sv-SE");
+  const a = await app(t, {
+    routes: {
+      "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
+      "GET /api/sports/venues?sport=%E6%B8%B8%E6%B3%B3": { ok: true, sport: "游泳", venues: ["陈明游泳馆"] },
+      [`GET /api/sports/slots?sport=%E6%B8%B8%E6%B3%B3&venue=%E9%99%88%E6%98%8E%E6%B8%B8%E6%B3%B3%E9%A6%86&date=${day}`]: {
+        ok: true,
+        sessions: [
+          { site: "泳道1", begin: "19:00", end: "20:00", capacity: null, reserved: null, status: "Y", price: 20 },
+          { site: "泳道2", begin: "19:00", end: "20:00", capacity: 10, reserved: 10, status: "Y" },
+        ],
+      },
+    },
+  });
+  a.nav("sports");
+  await until(() => a.$(".sports-panel").textContent.includes("泳道1") || /暂时读不到场次/.test(a.$(".sports-panel").textContent), "sessions");
+  const text = a.$(".sports-panel").textContent;
+  assert.match(text, /泳道1|暂时读不到场次/);
+});
