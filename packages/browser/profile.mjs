@@ -1,5 +1,5 @@
 import path from "node:path";
-import { readFile, rm, realpath, lstat, readdir } from "node:fs/promises";
+import { readFile, rm, realpath, lstat, readdir, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import lockfile from "proper-lockfile";
 import { chromium } from "playwright-core";
@@ -25,9 +25,34 @@ export async function launchEphemeral(options = {}) {
     headless: options.headless !== false,
   });
 }
+/** 清掉崩溃残留的租约目录：超过 10 分钟没有更新的一律视为死锁。 */
+export async function clearStaleLocks(stateDir, { now = Date.now(), ttlMs = 600000 } = {}) {
+  const dir = path.join(stateDir, "locks");
+  let names;
+  try {
+    names = await readdir(dir);
+  } catch {
+    return 0;
+  }
+  let removed = 0;
+  for (const name of names) {
+    const target = path.join(dir, name);
+    try {
+      const info = await stat(target);
+      if (now - info.mtimeMs <= ttlMs) continue;
+      await rm(target, { recursive: true, force: true });
+      removed += 1;
+    } catch {
+      // 并发清理或权限问题都不影响主流程
+    }
+  }
+  return removed;
+}
+
 export async function profileLease(options = {}) {
   const cfg = browserConfig(options);
   await directory(cfg.stateDir);
+  await clearStaleLocks(cfg.stateDir).catch(() => {});
   let release;
   try {
     release = await lockfile.lock(cfg.stateDir, {
