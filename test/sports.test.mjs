@@ -52,7 +52,7 @@ test("sports: 场次解析出时段、余量、状态原因与价格", () => {
   assert.equal(sessions[0].statusReason, "当前场次预约人数已满");
   assert.equal(sessions[0].price, 0, "零元场次保留为 0 而不是 null");
   assert.equal(sessions[0].date, "2026-11-17");
-  assert.equal(sessions[1].price, 15, "规则费用兜底");
+  assert.equal(sessions[1].price, 0.15, "规则费用兜底（分转元）");
   assert.equal(sessions[1].status, "Y");
 });
 
@@ -177,11 +177,11 @@ test("sports: 场次归一覆盖状态对象、费用形态与排序", async () 
   assert.equal(normalized.sessions.length, 5, "缺开始时间的场次被丢弃");
   assert.deepEqual(normalized.sessions.map(item => item.begin), ["18:00", "19:00", "19:00", "19:00", "20:00"], "按开始时间排序");
   const [first, , , , last] = normalized.sessions;
-  assert.equal(first.price, 12, "费用为数字时直接采用");
+  assert.equal(first.price, 0.12, "费用为数字时按分转元");
   assert.equal(first.status, undefined, "空状态不编造");
   assert.equal(last.status, "N");
   assert.equal(last.statusReason, "维护中");
-  assert.equal(last.price, 30);
+  assert.equal(last.price, 30 / 100);
   assert.equal(last.capacity, 4);
   assert.equal(last.reserved, 4);
   assert.equal(normalized.sessions.filter(item => item.site === "一号场").length, 1, "缺 siteName 时用 sceneName");
