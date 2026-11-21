@@ -1,0 +1,22 @@
+{
+  "name": "@thu-campus/mobile-core",
+  "version": "0.1.0",
+  "description": "清华校园助手移动端共享核心：只包含平台无关的 API 客户端与格式化逻辑",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "smoke": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}
