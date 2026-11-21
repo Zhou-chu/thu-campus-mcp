@@ -43,8 +43,7 @@ test("browser-lock: 任务抛错后队列仍可继续，深度归零", async () 
 });
 
 test("browser-lock: 超时返回 BROWSER_BUSY", async () => {
-  await assert.rejects(
-    () => withBrowserLock("超时任务", () => new Promise(() => {}), { timeoutMs: 20 }),
-    error => error.code === "BROWSER_BUSY",
-  );
+  const slow = withBrowserLock("超时任务", () => new Promise(resolve => setTimeout(() => resolve("late"), 120)), { timeoutMs: 20 });
+  await assert.rejects(() => slow, error => error.code === "BROWSER_BUSY");
+  await new Promise(resolve => setTimeout(resolve, 140));
 });
