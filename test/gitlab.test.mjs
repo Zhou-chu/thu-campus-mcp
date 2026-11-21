@@ -188,3 +188,28 @@ test("gitlab: 工具层按上限截断 per_page，并把 search 传给接口", a
   await callGitlabTool("gitlab_merge_requests", { project: 1, state: "merged" }, { config, fetchImpl });
   assert.match(seen[3], /state=merged/);
 });
+
+
+test("gitlab: 环境配置、空响应体与非数组返回都不伪装成功", async () => {
+  const stateDir = await tempState();
+  const previous = { dir: process.env.THU_CAMPUS_APP_STATE_DIR, token: process.env.GITLAB_TOKEN };
+  process.env.THU_CAMPUS_APP_STATE_DIR = stateDir;
+  process.env.GITLAB_TOKEN = "env-only-token";
+  try {
+    const viaEnv = await gitlabRequest("user", { fetchImpl: async () => jsonResponse({ username: "zhouc24" }) });
+    assert.equal(viaEnv.username, "zhouc24", "没有显式配置时读环境");
+    const empty = await gitlabRequest("user", { config: { baseUrl: "https://git.tsinghua.edu.cn", token: "t", configured: true }, fetchImpl: async () => ({ ok: true, status: 200, text: async () => "" }) });
+    assert.equal(empty, null, "空响应体返回 null");
+    const notArray = await callGitlabTool("gitlab_projects", {}, { config: { baseUrl: "https://git.tsinghua.edu.cn", token: "t", configured: true }, fetchImpl: async () => jsonResponse({}) });
+    assert.deepEqual(notArray.projects, [], "非数组按空列表处理");
+    const noVersion = await callGitlabTool("gitlab_status", {}, { config: { baseUrl: "https://git.tsinghua.edu.cn", token: "t", configured: true }, fetchImpl: async url => jsonResponse(url.toString().endsWith("version") ? {} : { username: "u" }) });
+    assert.equal(noVersion.version, "unknown");
+    await assert.rejects(
+      () => gitlabRequest("user", { config: { baseUrl: "https://git.tsinghua.edu.cn", token: "t", configured: true }, fetchImpl: async () => { throw {}; } }),
+      error => error.code === "GITLAB_UNREACHABLE" && /网络错误/.test(error.message),
+    );
+  } finally {
+    if (previous.dir === undefined) delete process.env.THU_CAMPUS_APP_STATE_DIR; else process.env.THU_CAMPUS_APP_STATE_DIR = previous.dir;
+    if (previous.token === undefined) delete process.env.GITLAB_TOKEN; else process.env.GITLAB_TOKEN = previous.token;
+  }
+});

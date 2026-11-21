@@ -1366,6 +1366,7 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 
 /* 体育场馆预约 */
 .sports-panel {display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-5);border:1px solid var(--line);border-radius:var(--radius-panel);background:var(--panel);}
+.sports-notice {margin:0;color:var(--ink-soft);font-size:var(--text-meta);}
 .sports-label {font-size:var(--text-meta);letter-spacing:.08em;color:var(--ink-soft);margin:0;}
 .sports-chips {display:flex;flex-wrap:wrap;gap:var(--space-2);}
 .sports-chip {padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);font-size:var(--text-meta);cursor:pointer;transition:background .15s,border-color .15s;}

@@ -12,7 +12,7 @@ const statusText = session => {
 };
 
 export function createSportsView({ el, api }) {
-  const state = { sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false };
+  const state = { notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false };
 
   return function sportsPage() {
     const wrap = el("div", { class: "stack sports-page" });
@@ -76,7 +76,7 @@ export function createSportsView({ el, api }) {
         prepare.disabled = true; prepare.textContent = "正在打开…";
         try {
           const result = await api("/api/sports/booking/prepare", { method: "POST", body: { sport: state.sport, venue: state.venue, start: begin, end, date: state.date } });
-          state.error = result.message || "窗口已打开，请在窗口内完成验证与支付。";
+          state.notice = result.message || "窗口已打开，请在窗口内完成验证与支付。";
         } catch (error) {
           state.error = error?.message || "打开预约窗口失败。";
         } finally {
@@ -111,6 +111,7 @@ export function createSportsView({ el, api }) {
         el("h3", { class: "sports-label", text: "日期" }),
         dateStrip(),
         el("h3", { class: "sports-label", text: "场次" }),
+    state.notice ? el("p", { class: "sports-notice", role: "status", text: state.notice }) : null,
         sessionList(),
       );
     }
@@ -118,6 +119,7 @@ export function createSportsView({ el, api }) {
     async function loadSports() {
       state.loading = true;
       state.error = "";
+  state.notice = "";
       render();
       try {
         const data = await api("/api/sports/sports");

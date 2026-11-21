@@ -1366,3 +1366,28 @@ test("app: gitlab settings surface save and connection failures instead of prete
   a.click(a.button("测试连接", a.$(".gitlab-settings")));
   await until(() => /令牌无效或已过期/.test(a.document.body.textContent), "test error");
 });
+
+
+test("app: sports booking buttons report the prepared step and failures honestly", async t => {
+  const day = new Date().toLocaleDateString("sv-SE");
+  const a = await app(t, {
+    routes: {
+      "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
+      "GET /api/sports/venues?sport=%E6%B8%B8%E6%B3%B3": { ok: true, sport: "游泳", venues: ["陈明游泳馆"] },
+      [`GET /api/sports/slots?sport=%E6%B8%B8%E6%B3%B3&venue=%E9%99%88%E6%98%8E%E6%B8%B8%E6%B3%B3%E9%A6%86&date=${day}`]: {
+        ok: true,
+        sessions: [{ site: "泳道1", begin: "20:00", end: "21:00", capacity: 10, reserved: 1, status: "Y", price: 7 }],
+      },
+      "POST /api/sports/booking/prepare": { ok: true, step: "verification", message: "已停在滑块验证这一步。" },
+    },
+  });
+  a.nav("sports");
+  await until(() => !!a.$(".sports-prepare"), "prepare button");
+  a.click(a.$(".sports-prepare"));
+  await until(() => /已停在滑块验证/.test(a.$(".sports-panel").textContent), "prepare feedback");
+
+  a.routes.set("POST /api/sports/booking/prepare", { ok: false, error: { message: "打开窗口失败。" } });
+  await until(() => !!a.$(".sports-prepare"), "prepare button again");
+  a.click(a.$(".sports-prepare"));
+  await until(() => /打开窗口失败/.test(a.$(".sports-panel").textContent), "prepare failure");
+});
