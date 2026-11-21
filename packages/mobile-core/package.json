@@ -7,10 +7,12 @@
   "engines": {
     "node": ">=22"
   },
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "typescript": "6.0.3",
