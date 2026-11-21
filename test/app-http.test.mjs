@@ -1109,3 +1109,34 @@ test("app: sports routes surface argument errors without opening a browser", asy
   assert.equal(venues.status, 400, "缺运动项目时直接 400");
   assert.equal((await venues.json()).error.code, "SPORT_REQUIRED");
 });
+
+test("app: gitlab config route masks the token and reports when it is missing", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t", "content-type": "application/json" };
+
+  const fresh = await (await fetch(url + "/api/gitlab/config", { headers })).json();
+  assert.equal(fresh.ok, true);
+  assert.equal(fresh.configured, false, "默认没有令牌");
+  assert.equal(fresh.baseUrl, "https://git.tsinghua.edu.cn");
+  assert.equal(fresh.masked, "");
+
+  const saved = await (await fetch(url + "/api/gitlab/config", {
+    method: "PUT", headers, body: JSON.stringify({ baseUrl: "https://git.tsinghua.edu.cn", token: "abcd1234efgh" }),
+  })).json();
+  assert.equal(saved.ok, true);
+  assert.equal(saved.configured, true);
+  assert.equal(saved.masked, "abcd****efgh", "只回显末四位");
+  assert.ok(!JSON.stringify(saved).includes("abcd1234efgh"), "接口不回显明文令牌");
+
+  const invalid = await fetch(url + "/api/gitlab/config", { method: "PUT", headers, body: JSON.stringify({ baseUrl: "ftp://bad" }) });
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error.code, "INVALID_BASE_URL");
+});
+
+test("app: gitlab test route asks for configuration instead of failing as network error", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t" };
+  const response = await fetch(url + "/api/gitlab/test", { method: "POST", headers });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, "GITLAB_NOT_CONFIGURED");
+});

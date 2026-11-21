@@ -281,7 +281,7 @@ async function gatewayFixture(t, { duplicate = false, failedConnect = false } = 
 test("gateway registers real handlers, delegates tools/prompts and rejects browser credential-shaped input", async (t) => {
   const h = await gatewayFixture(t); await h.mod.serveGateway();
   assert.equal(h.info.name, "thu-campus-mcp"); assert.equal(h.clients[0].transport.options.stderr, "pipe");
-  const listed = await h.handlers.get("ListToolsRequestSchema")(); assert.equal(listed.tools.length, 24); assert(listed.tools.some((tool) => tool.name === "campus_browser_login"));
+  const listed = await h.handlers.get("ListToolsRequestSchema")(); assert.equal(listed.tools.length, 29); assert(listed.tools.some((tool) => tool.name === "campus_browser_login"));
   assert.deepEqual((await h.handlers.get("ListPromptsRequestSchema")()).prompts, [{ name: "unit_prompt" }]);
   assert.deepEqual(await h.handlers.get("GetPromptRequestSchema")({ params: { name: "unit_prompt", arguments: { x: "1" } } }), { messages: [] });
   await assert.rejects(h.handlers.get("GetPromptRequestSchema")({ params: { name: "missing" } }), /Unknown prompt/);

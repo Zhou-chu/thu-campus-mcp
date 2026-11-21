@@ -1667,6 +1667,48 @@ function settingsSection(title, children, extra = "") {
     el("div", { class: "settings-content" }, children),
   ]);
 }
+function gitlabCard() {
+  const status = el("p", { class: "small" });
+  const baseInput = el("input", { type: "url", value: "https://git.tsinghua.edu.cn", placeholder: "https://git.tsinghua.edu.cn", "aria-label": "GitLab 地址" });
+  const tokenInput = el("input", { type: "password", placeholder: "访问令牌（留空表示不修改）", "aria-label": "GitLab 访问令牌", autocomplete: "off", spellcheck: "false" });
+  const outcome = el("p", { class: "small", role: "status", hidden: true });
+  const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });
+  const describe = data => {
+    status.textContent = data.configured
+      ? `已配置 · ${data.baseUrl} · 令牌 ${data.masked || "已保存"}`
+      : `未配置 · 使用 ${data.baseUrl || "https://git.tsinghua.edu.cn"}`;
+  };
+  const save = el("button", {
+    class: "primary", type: "button", text: "保存",
+    onclick: event => runAction(event.currentTarget, async () => {
+      const data = await api("/api/gitlab/config", { method: "PUT", body: { baseUrl: baseInput.value.trim(), token: tokenInput.value } });
+      tokenInput.value = "";
+      describe(data);
+      outcome.textContent = "已保存"; outcome.hidden = false;
+      return data;
+    }, { pending: "保存中…", errorNode }),
+  });
+  const test = el("button", {
+    class: "ghost", type: "button", text: "测试连接",
+    onclick: event => runAction(event.currentTarget, async () => {
+      const data = await api("/api/gitlab/test", { method: "POST" });
+      outcome.textContent = `已连接 · ${data.user?.name || data.user?.username || "账号"} · GitLab ${data.version}`;
+      outcome.hidden = false;
+      errorNode.hidden = true;
+      return data;
+    }, { pending: "连接中…", errorNode }),
+  });
+  void api("/api/gitlab/config").then(data => { if (status.isConnected) describe(data); }).catch(() => { if (status.isConnected) status.textContent = "配置读取失败，可重试"; });
+  return el("div", { class: "stack gitlab-settings" }, [
+    status,
+    el("label", { class: "field" }, [el("span", { class: "field-label", text: "GitLab 地址" }), baseInput]),
+    el("label", { class: "field" }, [el("span", { class: "field-label", text: "访问令牌" }), tokenInput]),
+    el("div", { class: "settings-actions" }, [save, test]),
+    outcome,
+    errorNode,
+  ]);
+}
+
 function settingsView() {
   const wrap = el("div", { class: "stack settings-page" });
   wrap.append(el("h2", { text: "设置" }));
@@ -1707,7 +1749,8 @@ function settingsView() {
   });
   surface.append(settingsSection("接入其它设备", [inviteButton, errorNode, codeNode, validity, linkBox]));
   diagnostics.append(residentCard(), el("a", { href: "/preview.html", target: "_blank", rel: "noreferrer", text: "设计目录" }));
-  surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
+  surface.append(settingsSection("GitLab", [gitlabCard()], "settings-gitlab"));
+surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
   surface.append(settingsSection("设备安全", [el("button", {
     class: "ghost danger", type: "button", text: "清除本地令牌并退出",
     onclick: () => { forgetToken(); showPair("已清除本地令牌。"); },
