@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -1320,4 +1320,32 @@ test("app: sports sessions show price, capacity and status truthfully", async t 
   await until(() => a.$(".sports-panel").textContent.includes("泳道1") || /暂时读不到场次/.test(a.$(".sports-panel").textContent), "sessions");
   const text = a.$(".sports-panel").textContent;
   assert.match(text, /泳道1|暂时读不到场次/);
+});
+
+
+test("app: gitlab settings save, mask and test the connection honestly", async t => {
+  const a = await app(t, {
+    routes: {
+      "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" },
+      "PUT /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: true, masked: "abcd****efgh" },
+      "POST /api/gitlab/test": { ok: true, version: "19.6.0", user: { username: "zhouc24", name: "周楚" } },
+    },
+  });
+  a.nav("settings");
+  await until(() => /未配置/.test(a.$(".gitlab-settings").textContent), "gitlab status");
+
+  const base = a.$(".gitlab-settings input[type=url]");
+  const token = a.$(".gitlab-settings input[type=password]");
+  base.value = "https://git.tsinghua.edu.cn";
+  token.value = "abcd1234efgh";
+  a.click(a.button("保存", a.$(".gitlab-settings")));
+  await until(() => /已配置/.test(a.$(".gitlab-settings").textContent), "saved status");
+  assert.match(a.$(".gitlab-settings").textContent, /abcd\*\*\*\*efgh/, "只显示掩码");
+  assert.equal(token.value, "", "保存后清空令牌输入");
+  assert.ok(!a.$(".gitlab-settings").textContent.includes("abcd1234efgh"), "页面不回显明文令牌");
+
+  a.click(a.button("测试连接", a.$(".gitlab-settings")));
+  await until(() => /已连接/.test(a.$(".gitlab-settings").textContent), "connection result");
+  assert.match(a.$(".gitlab-settings").textContent, /周楚/);
+  assert.match(a.$(".gitlab-settings").textContent, /19\.6\.0/);
 });
