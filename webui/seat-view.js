@@ -135,7 +135,8 @@ export function createSeatView({ el, api }) {
       try {
         const data = await api("/api/seat/libraries");
         state.libraries = Array.isArray(data.libraries) ? data.libraries : [];
-        state.library = state.libraries.find(item => item.id === 35) ?? state.libraries[0] ?? null;
+        const usable = state.libraries.filter(item => item.valid !== false);
+  state.library = state.libraries.find(item => item.id === 35) ?? usable[0] ?? state.libraries[0] ?? null;
       } catch (error) {
         state.error = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "暂时读不到馆区。";
       } finally {
