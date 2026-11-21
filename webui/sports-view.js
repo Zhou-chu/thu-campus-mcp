@@ -175,9 +175,9 @@ export function createSportsView({ el, api }) {
       try {
         const data = await api(`/api/sports/slots?sport=${encodeURIComponent(state.sport)}&venue=${encodeURIComponent(state.venue)}&date=${state.date}`);
         state.sessions = Array.isArray(data.sessions) ? data.sessions : [];
-      } catch {
+      } catch (error) {
         state.sessions = [];
-        state.error = "暂时读不到场次。";
+    state.error = error?.code === "SPORTS_MAINTENANCE" ? error.message : error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到场次。";
       } finally {
         state.loading = false;
         render();
