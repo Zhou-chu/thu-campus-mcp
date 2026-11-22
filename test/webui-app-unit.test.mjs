@@ -900,6 +900,39 @@ test("app: sports view asks for login instead of pretending there is no data", a
   assert.equal(a.all(".sports-site").length, 0, "没有数据时不画场地");
 });
 
+test("app: sports shows manual verification and exposes the matching login action", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/sports/sports": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要本人完成学校验证" } },
+    "POST /api/tools/campus_browser_open": { ok: true },
+  } });
+  a.nav("sports");
+  await until(() => !!a.$(".sports-login"), "sports login action");
+  assert.match(a.$(".sports-panel").textContent, /需要本人完成学校验证/);
+  a.click(".sports-login");
+  await until(() => /运行实例的电脑/.test(a.$(".sports-panel").textContent), "host login notification");
+  assert.equal(a.count("POST /api/tools/campus_browser_open"), 1);
+});
+
+test("app: refreshing a throttled sports venue preserves selected date and reloads only its slots", async t => {
+  const day = new Date().toLocaleDateString("sv-SE");
+  const slotKey = `GET /api/sports/slots?sport=${encodeURIComponent("游泳")}&venue=${encodeURIComponent("陈明游泳馆")}&date=${day}`;
+  const a = await app(t, { routes: {
+    "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
+    [`GET /api/sports/venues?sport=${encodeURIComponent("游泳")}`]: { ok: true, venues: ["陈明游泳馆"] },
+    [slotKey]: { ok: false, error: { code: "SPORTS_THROTTLED", message: "请稍后查询" } },
+  } });
+  a.nav("sports");
+  await until(() => /请稍后查询/.test(a.$(".sports-panel").textContent), "rate limit shown");
+  assert.equal(a.all(".sports-slot").length, 0);
+  assert.equal(a.$(".sports-panel a")?.textContent, "打开体育官网");
+  const pickedDate = a.$('.sports-date[aria-selected="true"]').textContent;
+  a.click(".sports-actions button");
+  await until(() => a.count("GET /api/sports/slots") === 2, "only selected query reloaded");
+  assert.ok(a.calls.filter(call => new URL(call.url).pathname === "/api/sports/slots").every(call => new URL(call.url).searchParams.get("date") === day));
+  assert.equal(a.count("GET /api/sports/sports"), 1);
+  assert.equal(a.$('.sports-date[aria-selected="true"]').textContent, pickedDate);
+});
+
 test("app: library seat view lists seats and surfaces the real booking error", async t => {
   const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, {

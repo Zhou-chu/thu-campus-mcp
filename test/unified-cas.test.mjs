@@ -38,12 +38,12 @@ test("unified CAS never fills credentials at a different origin or submits a cha
   }
 });
 
-function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { ok: true }, prior = { version: "old", data: { account: "test-user" } } } = {}) {
+function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { ok: true }, version = "old", gotoError, closeError, prior = { version: "old", data: { account: "test-user" } } } = {}) {
   const saves = [];
   const account = { username: "test-user", password: "test-only" };
   let closed = 0, read = 0, origins;
   const page = {
-    goto: async () => {}, locator: () => ({ click: async () => {}, first: () => ({ waitFor: async () => {} }) }),
+    goto: async () => { if (gotoError) throw gotoError; }, locator: () => ({ click: async () => {}, first: () => ({ waitFor: async () => {} }) }),
     waitForURL: async (predicate, { timeout }) => {
       if (timeout === 12000) assert.equal(predicate(new URL(CAS_ORIGIN)), true);
       else if (afterSubmit) throw new Error("No return");
@@ -53,12 +53,12 @@ function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { o
   const context = { newPage: async () => page, cookies: async input => { origins = input; return []; } };
   class AuthStore {
     async generation() { return "epoch"; }
-    async version() { return "old"; }
+    async version() { return version === false ? undefined : version; }
     async loadVersioned() { return prior; }
     async saveBrowserIfCurrent(...args) { saves.push(args); }
   }
   const login = createLearnxAccountLogin({
-    launch: async () => ({ newContext: async () => context, close: async () => { closed += 1; } }),
+    launch: async () => ({ newContext: async () => context, close: async () => { closed += 1; if (closeError) throw closeError; } }),
     accountStore: async () => accounts ? accounts[read++] : account,
     learnx: async () => ({ AuthStore, loadConfig: () => ({ stateDir: "test" }),
       browserSessionData: async username => ({ account: username, csrfToken: "test" }), verifyBrowserSession: async () => verified }),
@@ -88,6 +88,22 @@ test("LearnX automatic recovery never launches a browser for a different account
   const fixture = learnFixture();
   await assert.rejects(() => fixture.login({ sameAccountOnly: true, expectedAccount: { username: "test-user", password: "changed" } }), { code: "AUTH_CHANGED" });
   assert.equal(fixture.closed(), 0);
+});
+
+test("LearnX interrupted navigation is verified normally; failures don't leak upstream URL or write state", async () => {
+  const one = learnFixture({ prior: null, version: false, fillResult: { ok: false, code: "CAS_SUBMIT_INTERRUPTED" } });
+  assert.deepEqual(await one.login({ sameAccountOnly: true }), { ok: true });
+  assert.equal(one.saves[0][2], null);
+  for (const [options, code] of [
+    [{ afterSubmit: "no-redirect" }, "LEARNX_LOGIN_UNCONFIRMED"],
+    [{ gotoError: Object.assign(new Error("synthetic redirect with private fields"), { name: "TimeoutError" }) }, "LEARNX_LOGIN_TIMEOUT"],
+    [{ fillResult: { ok: false, code: "CAS_FORM_NOT_FOUND", message: "No form" } }, "CAS_FORM_NOT_FOUND"],
+  ]) {
+    const fixture = learnFixture({ ...options, closeError: new Error("cleanup failed") });
+    await assert.rejects(() => fixture.login(), error => error.code === code && !error.message.includes("private fields"));
+    assert.deepEqual(fixture.saves, []);
+    assert.equal(fixture.closed(), 1);
+  }
 });
 
 test("LearnX never persists on challenge, failed verification or changed account", async () => {
