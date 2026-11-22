@@ -14,7 +14,11 @@ async function withStore(run) {
     const store = new ScheduleStore(dir, { now: () => new Date(nowMs) });
     return await run({ store, advance: ms => { nowMs += ms; }, dir });
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    // Windows 上执行器可能仍在写文件；短暂重试，避免 ENOTEMPTY 假失败。
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try { await rm(dir, { recursive: true, force: true }); break; }
+      catch (error) { if (attempt === 4 || error?.code !== "ENOTEMPTY") throw error; await new Promise(resolve => setTimeout(resolve, 50)); }
+    }
   }
 }
 
