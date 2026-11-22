@@ -80,6 +80,13 @@ node bin/thu-campus.mjs app status            # 脱敏状态，不联网
 
 成功统一为 `{ "ok": true, ...payload }`。
 
+契约由 `lib/app/http-envelope.mjs` 实现，不再由各处自行拼字符串：
+
+- `errorEnvelope(code, message, extra)` 只接受大写下划线代码；非法代码回落 `APP_ERROR`，消息截断到 400 字。
+- `envelopeProblems(body)` 是唯一的形状判定，单测与契约测试共用。
+- 错误码分四类：输入（400）、需要本人处理或状态不允许（409）、限流（429）、本机资源忙（503）、上游失败（502）。登录类接口的映射见 `lib/app/login-contract.mjs`。
+- `test/app-http.test.mjs` 的“每个 JSON 接口都符合统一响应契约”用真实 HTTP 遍历成功与失败接口，断言信封；前端只依赖 `ok` 与 `error.code`，不解析 `message`。
+
 | 方法 | 路径 | 认证 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/healthz` | 否 | `{ ok, version, uptimeMs }` |
