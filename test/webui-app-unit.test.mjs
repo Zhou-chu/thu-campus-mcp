@@ -429,32 +429,27 @@ test("app: service login does not imply verified authentication; failed checks r
   a.routes.set("GET /api/auth/status", { ok: true }); a.click(a.button("核验登录状态")); await flush();
   assert.match(a.$(".auth-panel > .error").textContent, /认证状态响应无效/);
   assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unknown");
-  a.routes.set("POST /api/auth/login", { ok: false, error: { message: "fixture window unavailable" } });
+  a.routes.set("POST /api/auth/learnx", { ok: false, error: { message: "fixture window unavailable" } });
   a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
   assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /登录未完成.*fixture window unavailable/);
 });
 
-test("app: first learnx login exposes account failure, sends trimmed account and never stores it", async t => {
-  let completed = false;
+test("app: unified service rows need no second account field and retain failed verification", async t => {
   const a = await app(t, { routes: {
     "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "POST /api/auth/learnx": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要验证码" } },
     "POST /api/auth/login": { ok: true, jobId: "learnx-login" },
-    "GET /api/jobs/learnx-login": () => ({ ok: true, found: true, job: { service: "learnx", status: completed ? "complete" : "failed", error: "BROWSER_ACCOUNT_REQUIRED" } }),
+    "GET /api/jobs/learnx-login": { ok: true, found: true, job: { service: "learnx", status: "complete" } },
   } });
   a.nav("services"); await flush();
-  assert.equal(a.$('label.auth-account > span').textContent, "学号");
+  assert.ok(!a.$("#learnx-account"));
+  for (const name of ["seat", "sports", "gitlab"]) assert.ok(a.$('[data-service="' + name + '"]'));
+  assert.doesNotMatch(a.$(".account-card").textContent, /图书馆座位|体育场馆/);
   a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /需要填写学号/);
-  assert.equal(a.$("#learnx-account").hasAttribute("required"), true);
-  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.equal(a.count("POST /api/auth/login"), 1);
-  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /请先填写/);
-  a.input("#learnx-account", "  fixture-student  "); completed = true;
-  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.deepEqual(a.calls.filter(call => call.method === "POST").at(-1).body, { service: "learnx", account: "fixture-student" });
-  assert.equal(a.$("#learnx-account").value, "");
-  assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unverified");
-  assert.equal([...a.savedValues.values()].some(value => value.includes("fixture-student")), false);
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /验证码/);
+  a.click(a.button("人工验证", a.$('[data-service="learnx"]'))); await flush();
+  assert.deepEqual(a.calls.filter(call => call.method === "POST").at(-1).body, { service: "learnx" });
+  assert.notEqual(a.$('[data-service="learnx"] .state').dataset.s, "ready");
 });
 
 test("app: login polls queued, downloading and running without claiming a window or duplicate starts", async t => {
