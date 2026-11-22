@@ -236,6 +236,11 @@ test("an already-running plaintext deployment can migrate explicitly and says so
 test("ToolHost normalizes payloads, tool metadata, validation and failures using an injected client", async (t) => {
   const { ToolHost, serviceOf } = await realModule(t, "lib/app/host.mjs");
   assert.deepEqual(["learn_status", "cloud_get", "rain_list", "madmodel_chat", "campus_browser_open", "other_tool"].map(serviceOf), ["learnx", "cloud", "hetang", "madmodel", "browser", "campus"]);
+  // 网关标注优先：工具改名后仍归属正确服务；非法标注回落到前缀推断。
+  assert.equal(serviceOf({ name: "renamed_tool", _meta: { service: "seat" } }), "seat");
+  assert.equal(serviceOf({ name: "learn_renamed", _meta: { service: "not-a-service" } }), "learnx");
+  assert.equal(serviceOf({ name: "mystery", _meta: { service: 42 } }), "campus");
+  assert.equal(serviceOf({}), "campus");
   let listing = [{ name: "learn_read", description: "x".repeat(1100), annotations: { readOnlyHint: true } }, { name: "cloud_write", annotations: { destructiveHint: true } }], response = {}, thrown, refreshError;
   const calls = [];
   const client = { listTools: async () => { if (refreshError) throw refreshError; return { tools: listing }; }, callTool: async (...args) => { calls.push(args); if (thrown) throw thrown; return response; }, close: async () => { throw new Error("already closed"); } };
