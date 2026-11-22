@@ -6,7 +6,8 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from "node:fs/promises";
 import {
   ROOT, SOURCE_ROOTS, TOOLING_ROOTS, E2E_SCRIPTS, isProductionPath, relativeSource, snapshotSources, sourceChanges,
-  hashSource, zeroFile, convertBrowserRecord, combineCoverage, writeReports, checkThreshold,
+  hashSource, zeroFile, convertBrowserRecord, combineCoverage,
+  ALL_ROOTS, writeReports, checkThreshold,
   coverageMain, collectCoverage, collectToolingCoverage, verifyReports, nativeCoverageArgs, localCli, npmCli, runNode,
 } from "../scripts/coverage.mjs";
 import { nativePlan, nativeMain, nativeTestFiles, snapshotNativeUnit } from "../scripts/coverage-native.mjs";
@@ -26,7 +27,7 @@ function browserRecord(file, source, count = 1) {
   return { file, source, hash: hashSource(source), functions: [{ functionName: "", isBlockCoverage: true, ranges: [{ startOffset: 0, endOffset: source.length, count }] }] };
 }
 async function hit(root, file) {
-  const data = await zeroFile(root, file);
+  const data = await zeroFile(root, file, ALL_ROOTS);
   for (const value of Object.values(data)) { delete value.all; for (const key of Object.keys(value.s)) value.s[key] = 1; }
   return data;
 }
@@ -44,11 +45,14 @@ test("全生产范围包含八个根，排除的仅为构建/第三方/测试与
 });
 test("原生+三Vitest+浏览器可合并；未执行生产代码始终保留0，不引入dist SF", async t => {
   const root = await fixture(t), source = "export const browserValue = 1;\n";
-  for (const file of ["lib/used.mjs", "lib/never.mjs", "desktop/launcher.mjs", "packages/browser/index.mjs", ...["hetang", "learnx", "thu-cloud"].map(name => `packages/${name}/src/index.ts`)]) await put(root, file, "export const value = 1;\n");
+  for (const file of ["lib/used.mjs", "lib/never.mjs", "desktop/launcher.mjs", "packages/browser/index.mjs"]) await put(root, file, "export const value = 1;\n");
   await put(root, "webui/app.js", source); await put(root, "webui/sw.js", "const unusedWorker = 1;\n");
   const manifest = await snapshotSources(root), inputs = [{ label: "native", data: await hit(root, "lib/used.mjs") }];
-  for (const name of ["hetang", "learnx", "thu-cloud"]) inputs.push({ label: name, data: await hit(root, `packages/${name}/src/index.ts`) });
   const result = await combineCoverage({ root, manifest, inputs, browser: [browserRecord("webui/app.js", source)] });
+  await put(root, "packages/hetang/src/index.ts", "export const value = 1;\n");
+  const outside = await combineCoverage({ root, manifest, inputs: [{ label: "pkg", data: await hit(root, "packages/hetang/src/index.ts") }] });
+  assert.equal(outside.ignoredInputFiles, 1, "业务包源码不属于应用覆盖口径");
+  assert.ok(!outside.map.files().some(file => file.includes("packages/hetang")));
   assert.deepEqual(result.errors, []); assert.equal(result.map.files().length, Object.keys(manifest.files).length);
   assert.equal(result.map.fileCoverageFor(path.join(root, "lib/never.mjs")).toSummary().lines.covered, 0);
   assert.equal(result.map.fileCoverageFor(path.join(root, "webui/sw.js")).toSummary().lines.covered, 0);
@@ -264,7 +268,7 @@ test("本地c8实际tiny fixture验证一次采集、unit快照report与TS重映
   const cli = localCli(ROOT, "c8", "bin/c8.js");
   assert.equal((await runNode(nativeCoverageArgs(root, runDirectory, cli), { cwd: root })).code, 0);
   const combined = JSON.parse(await readFile(path.join(runDirectory, "native/coverage-final.json"), "utf8"));
-  const files = Object.keys(combined).map(file => relativeSource(root, file)); assert.ok(files.includes("lib/example.mjs")); assert.ok(files.includes("packages/learnx/src/example.ts")); assert.ok(files.every(Boolean));
+  const files = Object.keys(combined).map(file => relativeSource(root, file, ALL_ROOTS)); assert.ok(files.includes("lib/example.mjs"), JSON.stringify(files)); assert.ok(files.includes("packages/learnx/src/example.ts"), JSON.stringify(files)); assert.ok(files.every(Boolean));
   const env = { ...process.env, NODE_V8_COVERAGE: path.join(runDirectory, "native/raw"), CAMPUS_COVERAGE_RUN_DIR: runDirectory };
   assert.equal((await snapshotNativeUnit(root, env)).code, 0);
   const snapshot = JSON.parse(await readFile(path.join(runDirectory, "unit/snapshot.json"), "utf8")); assert.equal(snapshot.beforeE2E, true); assert.ok(snapshot.files.length > 0);
