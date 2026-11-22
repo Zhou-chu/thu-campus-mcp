@@ -1472,3 +1472,40 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 
 .chat-stats {margin:0 auto 6px;max-width:var(--chat-width, 860px);padding:0 10px;font-size:var(--text-meta);color:var(--ink-soft);font-variant-numeric:tabular-nums;}
 .chat-stats[hidden] {display:none;}
+
+.switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0 4px;
+  cursor: pointer;
+}
+.switch-row > .stack { min-width: 0; gap: 4px; }
+.switch-row strong { font-weight: 600; }
+.switch-input {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--control-fill);
+  position: relative;
+  cursor: pointer;
+}
+.switch-input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  transition: transform var(--motion), background-color var(--motion);
+}
+.switch-input:checked { background: var(--ink); border-color: var(--ink); }
+.switch-input:checked::after { transform: translateX(18px); background: var(--paper); }
+.switch-input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
