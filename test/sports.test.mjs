@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDate, normalizeSlots, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+import { createSportsReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+
+test("sports: catalogue uses the official versioned group tree, without guessed venue categories", async () => {
+  const origin = "https://www.sports.tsinghua.edu.cn";
+  const snapshot = async () => ({ origins: [{ origin, localStorage: [{ name: "token", value: '"fixture-token"' }] }] });
+  const fetchImpl = async (url, request) => {
+    assert.equal(url, origin + "/venue/site/api/site/menu");
+    assert.equal(request.headers["x-api-version"], "2.0.0");
+    assert.equal(request.redirect, "manual");
+    return Response.json({ success: true, data: [
+      { menuName: "训练课" }, { menuName: "场地预约", childrenVo: [
+        { menuName: "羽毛球", childrenVo: [{ menuName: "气膜馆羽毛球", uuid: "scene-one" }, { menuName: "缺少标识" }] },
+        { menuName: "空类别", childrenVo: [] }, {},
+      ] },
+    ] });
+  };
+  const read = createSportsReader({ snapshot, fetchImpl });
+  assert.deepEqual(normalizeSportsMenu((await read("menu")).data), [{ sport: "羽毛球", venues: [{ name: "气膜馆羽毛球", uuid: "scene-one" }] }]);
+  await assert.rejects(() => read("https://other.example"), { code: "INVALID_ARGUMENTS" });
+  await assert.rejects(() => createSportsReader({ snapshot: async () => ({}) })("menu"), { code: "SPORTS_LOGIN_REQUIRED" });
+  assert.deepEqual(normalizeSportsMenu(null), []);
+});
 
 test("sports: status checks only the official origin with its saved token and never returns credentials", async () => {
   const origin = "https://www.sports.tsinghua.edu.cn";

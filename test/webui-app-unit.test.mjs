@@ -908,7 +908,7 @@ test("app: library seat view lists seats and surfaces the real booking error", a
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 10 }] },
       [`GET /api/seat/seats?section=96&date=${day}`]: {
-        ok: true,
+        ok: true, sectionId: 96, date: day,
         seats: [
           { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true },
           { id: 5123, name: "A002", segment: 1586205, begin: "08:00", end: "22:00", status: 0, available: false },
@@ -950,7 +950,7 @@ test("app: library seat view states an empty seat list honestly", async t => {
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 0 }] },
       "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
-      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, seats: [], available: 0 },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, sectionId: 96, date: day, seats: [], available: 0 },
     },
   });
   a.nav("seat");
@@ -1008,7 +1008,7 @@ test("app: seat view reports area and segment failures honestly", async t => {
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
     },
   });
-  a.routes.set("GET /api/seat/areas?floor=37", () => { throw Object.assign(new Error("bad"), { code: "SEAT_EMPTY" }); });
+  a.routes.set("GET /api/seat/areas?floor=37", () => { throw Object.assign(new Error("bad"), { code: "SEAT_UNREACHABLE" }); });
   a.nav("seat");
   await until(() => /暂时读不到分区/.test(a.$(".seat-panel").textContent), "area failure");
   assert.equal(a.all(".seat").length, 0);
@@ -1114,7 +1114,7 @@ test("app: seat reserve failure maps to an actionable hint", async t => {
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 2 }] },
       "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
-      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, seats: [{ id: 501, name: "NF3B001", segment: 1, available: true, begin: "08:00", end: "22:00" }], available: 1 },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, sectionId: 96, date: day, seats: [{ id: 501, name: "NF3B001", segment: 1, available: true, begin: "08:00", end: "22:00" }], available: 1 },
       "POST /api/seat/reserve/prepare": { ok: true, token: "t".repeat(48) },
       "POST /api/seat/reserve": () => { throw Object.assign(new Error("已存在预约"), { code: "SEAT_ALREADY_BOOKED" }); },
     },
@@ -1188,22 +1188,22 @@ test("app: assignment submission surfaces upload and confirm failures", async t 
   await until(() => /站点拒绝了提交|CONFIRM_FAILED|失败/.test(a.$(".rsidebar-detail").textContent), "confirm failure");
 });
 
-test("app: seat refresh keeps the current selection and reloads libraries", async t => {
+test("app: seat refresh keeps the current selection and reloads the current area", async t => {
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 1 }] },
       "GET /api/seat/segments?section=96": { ok: true, segments: [] },
-      [`GET /api/seat/seats?section=96&date=${new Date().toLocaleDateString("sv-SE")}`]: { ok: true, seats: [], available: 0 },
     },
   });
   a.nav("seat");
-  await until(() => /该分区当前没有可约座位|暂时读不到座位/.test(a.$(".seat-panel").textContent), "seat state");
+  await until(() => /未取得可预约日期/.test(a.$(".seat-panel").textContent), "seat state");
   const refresh = a.all(".seat-actions button").find(button => /刷新/.test(button.textContent));
   a.click(refresh);
   await flush();
-  assert.ok(a.calls.filter(call => call.url.includes("/api/seat/libraries")).length >= 2, "刷新会重新读取馆区");
+  assert.equal(a.count("GET /api/seat/libraries"), 1);
+  assert.equal(a.calls.filter(call => new URL(call.url).pathname === "/api/seat/segments" && new URL(call.url).searchParams.get("section") === "96").length, 2);
 });
 
 test("app: timetable add form posts and returns to grid", async t => {

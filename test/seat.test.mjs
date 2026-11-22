@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache, seatQueryWindow } from "../lib/app/seat.mjs";
+
+test("seat: 当天从北京时间现在查，未来从官方起始时间查", () => {
+  const segment = { id: 123, day: "2026-11-22", start: "08:00", end: "22:00" };
+  assert.deepEqual(seatQueryWindow(segment, new Date("2026-11-22T04:52:00Z")), { start: "12:52", end: "22:00" });
+  assert.deepEqual(seatQueryWindow(segment, new Date("2026-11-21T23:52:00Z")), { start: "08:00", end: "22:00" });
+  assert.deepEqual(seatQueryWindow({ ...segment, day: "2026-11-23" }, new Date("2026-11-22T04:52:00Z")), { start: "08:00", end: "22:00" });
+  assert.equal(seatQueryWindow(segment, new Date("2026-11-22T14:00:00Z")), null);
+  assert.equal(seatQueryWindow(segment, new Date("2026-11-22T17:00:00Z")), null);
+  assert.equal(seatQueryWindow({ ...segment, end: "" }), null);
+});
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
