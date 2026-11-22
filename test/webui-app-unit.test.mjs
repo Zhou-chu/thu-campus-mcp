@@ -1710,3 +1710,31 @@ test("app: 提供商缺字段时用可读兜底，不显示 undefined", async t 
   await flush();
   assert.match(form.querySelector(".inline-error").textContent, /请求失败|添加失败/);
 });
+
+test("app: 右侧栏归档、详情与刷新真实交互", async t => {
+  const items = [
+    { id: "h1", courseId: "c1", course: "电力电子", title: "作业一", submitted: false, deadline: checkedAt, deadlineMs: Date.parse(checkedAt), submitTime: null, submitMs: null, grade: null, ungraded: false },
+  ];
+  const routes = {
+    "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: items, expired: [], ungraded: [], courseErrors: [] },
+    "GET /api/sidebar/assignments/c1/h1": { ok: true, course: "电力电子", title: "作业一", description: "题目正文", attachments: [] },
+  };
+
+  // 归档：条目消失并提示可恢复。
+  const first = await app(t, { routes });
+  await until(() => /作业一/.test(first.$("#right-sidebar").textContent), "assignment rendered");
+  const archive = [...first.$("#right-sidebar").querySelectorAll("button")].find(node => node.textContent === "归档");
+  assert.ok(archive, "有待交作业时应有归档按钮");
+  first.click(archive);
+  await flush();
+  assert.match(first.document.body.textContent, /已归档/);
+
+  // 详情：走真实接口，打开后仍能关闭回到列表。
+  const second = await app(t, { routes });
+  await until(() => /作业一/.test(second.$("#right-sidebar").textContent), "assignment rendered again");
+  const detail = [...second.$("#right-sidebar").querySelectorAll("button")].find(node => node.textContent === "详情");
+  assert.ok(detail, "应有详情按钮");
+  second.click(detail);
+  await flush();
+  assert.equal(second.count("GET /api/sidebar/assignments/c1/h1"), 1, "详情走真实接口");
+});
