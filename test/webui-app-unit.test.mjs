@@ -1460,3 +1460,61 @@ test("app: 定时任务空态与读取失败都不伪装成功", async t => {
   await flush();
   assert.match(broken.$(".schedules-page").textContent, /状态目录不可写/);
 });
+
+test("app: 定时任务表单按频率切换字段并能创建与报错", async t => {
+  const created = [];
+  const a = await app(t, {
+    routes: {
+      "GET /api/schedules": { ok: true, tasks: [], runner: { running: true } },
+      "POST /api/schedules": request => {
+        created.push(request.body);
+        return created.length === 1 ? { ok: true, task: { id: "33333333-3333-4333-8333-333333333333", ...request.body, enabled: true } } : { ok: false, error: { code: "INVALID_ARGUMENTS", message: "时间格式应为 24 小时制 HH:MM。" } };
+      },
+    },
+  });
+  a.nav("schedules");
+  await flush();
+  const form = a.$(".schedules-page .card");
+  const select = form.querySelector("select");
+  const at = form.querySelector('input[type="datetime-local"]');
+  const time = form.querySelector('input[type="time"]');
+  const days = form.querySelector('input[aria-label="星期几"]');
+  assert.equal(at.hidden, false, "默认单次显示日期时间");
+  assert.equal(time.hidden, true);
+  a.input(select, "weekly", "change");
+  assert.equal(at.hidden, true);
+  assert.equal(time.hidden, false);
+  assert.equal(days.hidden, false);
+
+  a.input(form.querySelector('input[type="text"]'), "每周任务");
+  a.input(form.querySelector("textarea"), "整理周报");
+  a.input(days, "1,3");
+  a.click(form.querySelector("button.primary"));
+  await flush();
+  assert.equal(created.length, 1);
+  assert.deepEqual(created[0], { title: "每周任务", prompt: "整理周报", kind: "weekly", time: "08:30", days: [1, 3] });
+
+  // 第二次提交返回失败：重新取表单（成功后已重绘），保留输入、就地显示原因。
+  const fresh = a.$(".schedules-page .card");
+  a.input(fresh.querySelector('input[type="text"]'), "再试一次");
+  a.input(fresh.querySelector("textarea"), "整理周报");
+  a.click(fresh.querySelector("button.primary"));
+  await flush();
+  const error = fresh.querySelector(".inline-error");
+  assert.equal(error.hidden, false);
+  assert.match(error.textContent, /24 小时制/);
+  assert.equal(fresh.querySelector('input[type="text"]').value, "再试一次", "失败不清空输入");
+});
+
+test("app: 删除定时任务需要确认，取消时不发请求", async t => {
+  const task = { id: "44444444-4444-4444-8444-444444444444", title: "待删", prompt: "p", kind: "daily", time: "08:00", enabled: true, createdAt: checkedAt, lastRunAt: null, lastStatus: "", lastError: "", lastSessionId: "", nextRunAt: null };
+  const a = await app(t, { routes: { "GET /api/schedules": { ok: true, tasks: [task], runner: { running: true } } } });
+  a.nav("schedules");
+  await flush();
+  a.confirmResult = false;
+  const remove = [...a.$(".schedules-page").querySelectorAll("button")].find(node => node.textContent === "删除");
+  a.click(remove);
+  await flush();
+  assert.equal(a.confirmations.length, 1);
+  assert.equal(a.calls.filter(call => call.method === "DELETE").length, 0, "取消不删除");
+});

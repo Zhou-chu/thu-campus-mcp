@@ -94,3 +94,21 @@ test("定时工具拒绝未知工具与空 ID", async () => {
     assert.equal((await tools.call("schedule_create", { title: "t", prompt: "p", kind: "weekly", time: "08:00", days: [] })).error.code, "INVALID_ARGUMENTS");
   });
 });
+test("执行器 start 会立即检查一次，并在 stop 后不再触发", async () => {
+  await withStore(async ({ store }) => {
+    let dueCalls = 0;
+    const runner = createScheduleRunner({
+      store: { async due() { dueCalls += 1; return []; } },
+      sessions: { async create() { return { id: "s" }; } },
+      runTurn: async () => {},
+      intervalMs: 100000,
+    });
+    runner.start();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(dueCalls, 1, "start 时立即检查一次");
+    runner.stop();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(dueCalls, 1, "停止后不再检查");
+    assert.notEqual(runner.status().startedAt, null);
+  });
+});
