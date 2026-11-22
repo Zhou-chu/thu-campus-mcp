@@ -30,6 +30,10 @@ const state = {
   controller: null,
   tools: [],
   sessions: [],
+  schedules: [],
+  schedulesLoaded: false,
+  schedulesError: "",
+  schedulesRunner: null,
   sessionsError: "",
   settings: null,
   models: [],
@@ -1986,11 +1990,134 @@ function initSidebar() {
   refreshSidebar();
 }
 
+/* ---------------- 定时任务 ---------------- */
+function scheduleWhenText(task) {
+  if (task.kind === "once") return "单次 " + formatLocal(task.at);
+  if (task.kind === "daily") return "每天 " + task.time;
+  const days = (task.days || []).map(day => "一二三四五六日"[day - 1]).join("、");
+  return "每周" + days + " " + task.time;
+}
+function formatLocal(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "");
+  const pad = n => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+async function loadSchedules() {
+  try {
+    const data = await api("/api/schedules");
+    state.schedules = data.tasks || [];
+    state.schedulesError = "";
+    state.schedulesRunner = data.runner || null;
+  } catch (e) {
+    state.schedules = state.schedules || [];
+    state.schedulesError = e.message || "定时任务读取失败。";
+  }
+}
+function scheduleForm(onDone) {
+  const title = el("input", { type: "text", placeholder: "任务名称", "aria-label": "任务名称", maxlength: "60" });
+  const prompt = el("textarea", { rows: "3", placeholder: "到点后在新会话里执行的指令", "aria-label": "任务指令" });
+  const kind = el("select", { "aria-label": "频率" }, [
+    el("option", { value: "once", text: "单次" }),
+    el("option", { value: "daily", text: "每天" }),
+    el("option", { value: "weekly", text: "每周" }),
+  ]);
+  const at = el("input", { type: "datetime-local", "aria-label": "执行时间" });
+  const time = el("input", { type: "time", value: "08:30", "aria-label": "执行时刻" });
+  const days = el("input", { type: "text", placeholder: "星期几，如 1,3,5（1=周一）", "aria-label": "星期几" });
+  const error = el("p", { class: "error inline-error", role: "alert", hidden: true });
+  const submit = el("button", { class: "primary", type: "button", text: "创建任务" });
+  const sync = () => {
+    const value = kind.value;
+    at.hidden = value !== "once";
+    time.hidden = value === "once";
+    days.hidden = value !== "weekly";
+  };
+  kind.addEventListener("change", sync);
+  sync();
+  submit.addEventListener("click", () => runAction(submit, async () => {
+    error.hidden = true;
+    const body = { title: title.value.trim(), prompt: prompt.value.trim(), kind: kind.value };
+    if (kind.value === "once") body.at = at.value;
+    else body.time = time.value;
+    if (kind.value === "weekly") body.days = days.value.split(/[,，\s]+/).map(Number).filter(day => Number.isInteger(day) && day >= 1 && day <= 7);
+    try {
+      await api("/api/schedules", { method: "POST", body });
+      title.value = ""; prompt.value = ""; days.value = "";
+      onDone?.();
+    } catch (e) {
+      error.hidden = false;
+      error.textContent = e.message || "创建失败。";
+    }
+  }));
+  return el("div", { class: "stack card" }, [
+    el("h3", { text: "新建定时任务" }),
+    title, prompt,
+    el("div", { class: "form-row" }, [kind, time, at, days]),
+    error, submit,
+  ]);
+}
+function scheduleRow(task, reload) {
+  const detail = el("div", { class: "stack" }, [
+    el("strong", { text: task.title }),
+    el("span", { class: "small muted", text: scheduleWhenText(task) }),
+    el("span", { class: "small muted", text: task.nextRunAt ? "下次 " + formatLocal(task.nextRunAt) : "已停止，不会再执行" }),
+    task.lastStatus
+      ? el("span", { class: task.lastStatus === "failed" ? "small error" : "small muted", text: (task.lastStatus === "failed" ? "上次失败：" : "上次成功：") + formatLocal(task.lastRunAt) + (task.lastError ? "，" + task.lastError : "") })
+      : el("span", { class: "small muted", text: "还没执行过" }),
+  ]);
+  const toggle = el("input", { type: "checkbox", class: "switch-input", "aria-label": task.title + " 启用" });
+  toggle.checked = task.enabled !== false;
+  toggle.addEventListener("change", () => runAction(toggle, async () => {
+    try {
+      await api("/api/schedules/" + task.id, { method: "PATCH", body: { enabled: toggle.checked } });
+      reload?.();
+    } catch (e) {
+      toggle.checked = !toggle.checked;
+      toast(e.message || "保存失败。");
+    }
+  }));
+  const remove = el("button", { class: "ghost danger", type: "button", text: "删除" });
+  remove.addEventListener("click", () => runAction(remove, async () => {
+    if (!confirm("删除定时任务“" + task.title + "”？删除后不再执行。")) return;
+    try {
+      await api("/api/schedules/" + task.id, { method: "DELETE" });
+      reload?.();
+    } catch (e) {
+      toast(e.message || "删除失败。");
+    }
+  }));
+  return el("div", { class: "card" }, [
+    el("div", { class: "row between" }, [detail, el("div", { class: "row schedule-actions" }, [toggle, remove])]),
+  ]);
+}
+function schedulesView() {
+  const wrap = el("div", { class: "stack schedules-page" });
+  wrap.append(el("h2", { text: "定时任务" }));
+  if (state.schedulesError) wrap.append(el("p", { class: "error inline-error", role: "alert", text: state.schedulesError }));
+  const list = el("div", { class: "stack" });
+  const reload = () => void loadSchedules().then(() => render());
+  wrap.append(list, scheduleForm(reload));
+  const draw = () => {
+    clear(list);
+    if (!state.schedules.length) {
+      list.append(el("div", { class: "empty", text: "还没有定时任务。可以在这里创建，也可以直接让助手创建。" }));
+      return;
+    }
+    for (const task of state.schedules) list.append(scheduleRow(task, reload));
+  };
+  draw();
+  if (!state.schedulesLoaded) {
+    state.schedulesLoaded = true;
+    void loadSchedules().then(() => { if (state.view === "schedules") render(); });
+  }
+  return wrap;
+}
 function render() {
   jobPoller.stop();
   const view = $("#view");
   view.dataset.view = state.view;
-  $("#view-context").textContent = ({chat:"对话工作台",timetable:"课表",sports:"体育",seat:"图书馆",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置"})[state.view] || "对话工作台";
+  $("#view-context").textContent = ({chat:"对话工作台",timetable:"课表",sports:"体育",seat:"图书馆",sessions:"会话记录",services:"连接与服务",tools:"工具目录",settings:"偏好设置",schedules:"定时任务"})[state.view] || "对话工作台";
   clear(view);
   for (const tab of document.querySelectorAll(".tab"))
     tab.setAttribute("aria-current", tab.dataset.view === state.view ? "page" : "false");
@@ -2003,6 +2130,7 @@ function render() {
     services: servicesView,
     tools: toolsView,
     settings: settingsView,
+    schedules: schedulesView,
   };
   view.append((views[state.view] || chatView)());
   chatWidthUI.refresh();
