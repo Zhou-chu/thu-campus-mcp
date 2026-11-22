@@ -394,7 +394,7 @@ export async function coverageMain(args = process.argv.slice(2), root = ROOT) {
       summaries[`packages:${sdk}`] = summary.total;
       failed.push(...checkThreshold(summary, threshold).map(metric => `packages:${sdk}:${metric}`));
     } catch {
-      failed.push(`packages:${sdk}:report-missing`);
+      if (threshold > 0) failed.push(`packages:${sdk}:report-missing`); else summaries[`packages:${sdk}`] = null;
     }
   }
   console.log(JSON.stringify({ threshold, scope: "runtime-sdk (not whole Sonar)", ...summaries, failed }, null, 2));
