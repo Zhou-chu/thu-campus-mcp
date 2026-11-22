@@ -1,6 +1,173 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDate, normalizeSlots } from "../lib/app/sports.mjs";
+import { createSportsReader, createSportsReadRecovery, createSportsSlotReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+
+test("sports: concurrent expired queries recover once and only replay the original reads", async () => {
+  let active = false, logins = 0;
+  const calls = [];
+  const expired = { status: 200, ok: true, data: { success: false, errorCode: 1130002 } };
+  const ready = { status: 200, ok: true, data: { success: true } };
+  const read = createSportsReadRecovery({
+    read: async (name, body) => { calls.push([name, body]); return active ? ready : expired; },
+    login: async () => { logins++; active = true; return { ok: true }; },
+  });
+  assert.equal(await read("user"), expired);
+  assert.equal(logins, 0);
+  const query = { sceneUuid: "fixture", reserveDate: "2026-11-23" };
+  assert.deepEqual(await Promise.all([read("slots", query), read("menu")]), [ready, ready]);
+  assert.equal(logins, 1);
+  assert.deepEqual(calls, [["user", undefined], ["slots", query], ["menu", undefined], ["slots", query], ["menu", undefined]]);
+});
+
+test("sports: no login on throttling or unknown errors; manual verification is not retried immediately", async () => {
+  let now = 0, logins = 0, calls = 0, code = 1610001;
+  const read = createSportsReadRecovery({
+    now: () => now,
+    read: async () => { calls++; return { status: 200, ok: true, data: { success: false, errorCode: code } }; },
+    login: async () => { logins++; return { ok: false, code: "CAS_CAPTCHA_REQUIRED", message: "Manual check" }; },
+  });
+  await read("menu");
+  code = 0;
+  await read("menu");
+  assert.equal(logins, 0);
+  code = 1130002;
+  for (let i = 0; i < 2; i++) await assert.rejects(() => read("menu"), { code: "CAS_CAPTCHA_REQUIRED" });
+  assert.equal(logins, 1);
+  assert.equal(calls, 4);
+  now += 120001;
+  await assert.rejects(() => read("menu"), { code: "CAS_CAPTCHA_REQUIRED" });
+  assert.equal(logins, 2);
+});
+
+test("sports: a recovery followed by another expiry does not recurse", async () => {
+  let logins = 0, calls = 0;
+  const read = createSportsReadRecovery({
+    read: async () => { calls++; return { status: 401, ok: false }; },
+    login: async () => { logins++; return { ok: true }; },
+  });
+  await assert.rejects(() => read("menu"), { code: "SPORTS_LOGIN_REQUIRED" });
+  assert.equal(calls, 2);
+  assert.equal(logins, 1);
+});
+
+test("sports: direct slots require response evidence for the exact date, with no read for unsupported venues", async () => {
+  const day = "2026-11-23";
+  const menu = { success: true, data: [{ menuName: "场地预约", childrenVo: [
+    { menuName: "羽毛球", childrenVo: [{ menuName: "气膜馆", uuid: "scene-a", sceneUseType: 2 }] },
+    { menuName: "冰雪运动", childrenVo: [{ menuName: "冰场", uuid: "scene-b", sceneUseType: 6 }] },
+  ] }] };
+  const calls = [];
+  let payload = { success: true, data: [{ siteName: "场地1", sessionVo: [{ beginDate: "20261123", beginTime: "14:00", endTime: "15:00" }] }] };
+  const read = async (name, body) => { calls.push({ name, body }); return { ok: true, status: 200, data: name === "menu" ? menu : payload }; };
+  const slots = createSportsSlotReader({ read, today: () => day });
+  assert.equal((await slots({ sport: "羽毛球", venue: "气膜馆" })).sessions.length, 1);
+  assert.deepEqual(calls[1], { name: "slots", body: { sceneUuid: "scene-a", resvKind: "CURRENT_RESERVE", reserveDate: day, siteType: "ROOM", sceneUseType: "SPORT_GROUP", pageNum: 1, pageSize: 99 } });
+  await assert.rejects(() => slots({ sport: "羽毛球", venue: "气膜馆", date: "2026-11-24" }), { code: "SPORTS_DATE_MISMATCH" });
+  const count = calls.length;
+  await assert.rejects(() => slots({ sport: "冰雪运动", venue: "冰场" }), { code: "SPORTS_SLOTS_UNSUPPORTED" });
+  assert.equal(calls.length, count + 1);
+  payload = { success: true, data: [{ siteName: "场地1" }] };
+  await assert.rejects(() => slots({ sport: "羽毛球", venue: "气膜馆" }), { code: "SLOTS_UNAVAILABLE" });
+  payload = { success: false, errorCode: 1610001 };
+  await assert.rejects(() => slots({ sport: "羽毛球", venue: "气膜馆" }), { code: "SPORTS_THROTTLED" });
+});
+
+test("sports: personal swimming sessions use official building and equipment scope and exact date", async () => {
+  const day = "2026-11-23";
+  const origin = "https://www.sports.tsinghua.edu.cn";
+  const calls = [];
+  let ambiguous = false;
+  const read = createSportsReader({
+    snapshot: async () => ({ origins: [{ origin, localStorage: [{ name: "token", value: '"fixture-token"' }] }] }),
+    fetchImpl: async (url, request) => {
+      const route = new URL(url);
+      const path = route.pathname;
+      calls.push(path);
+      assert.equal(route.origin, origin);
+      assert.equal(request.headers["x-api-version"], "2.0.0");
+      assert.equal(request.redirect, "manual");
+      if (path.endsWith("/menu")) return Response.json({ success: true, data: [{ menuName: "场地预约", childrenVo: [
+        { menuName: "游泳", childrenVo: [{ menuName: "陈明游泳馆", uuid: "pool-scene", sceneUseType: 4 }] },
+      ] }] });
+      if (path.endsWith("/chooseByType")) {
+        assert.equal(request.method, "GET");
+        assert.deepEqual(Object.fromEntries(route.searchParams), { sceneUuid: "pool-scene", siteType: "BUILDING" });
+        return Response.json({ success: true, data: [{ uuid: "pool-building" }, ...(ambiguous ? [{ uuid: "other-building" }] : [])] });
+      }
+      if (path.endsWith("/devKind/list")) {
+        assert.deepEqual(Object.fromEntries(route.searchParams), { uuid: "pool-scene" });
+        return Response.json({ success: true, data: [{ uuid: "pool-kind" }] });
+      }
+      assert.equal(path, "/venue/site/api/reserve/current/page");
+      assert.equal(request.method, "POST");
+      assert.deepEqual(JSON.parse(request.body), {
+        sceneUuid: "pool-scene", resvKind: "CURRENT_RESERVE", reserveDate: day, pageNum: 1, pageSize: 999,
+        devKindUuid: "pool-kind", siteType: "DEV", searchValue: "", siteKindId: "", classTypeEnum: "BUILDING", classTypeUuid: "pool-building", sceneUseType: "SPORT_PERSON",
+      });
+      return Response.json({ success: true, data: [{ siteName: "陈明游泳馆", sessionVo: [
+        { beginDate: 20261123, beginTime: "12:00", endTime: "13:00", allowUserNum: 30, resvUserNum: 22, reserveStatus: "Y" },
+      ] }] });
+    },
+  });
+  const slots = createSportsSlotReader({ read });
+  const selected = { sport: "游泳", venue: "陈明游泳馆", date: day };
+  const result = await slots(selected);
+  assert.equal(result.sessions.length, 1);
+  assert.equal(result.sessions[0].date, day);
+  assert.equal(result.sessions[0].status, "Y");
+  ambiguous = true;
+  await assert.rejects(() => slots(selected), { code: "SLOTS_UNAVAILABLE" });
+  assert.equal(calls.filter(path => path.endsWith("/current/page")).length, 1);
+});
+
+test("sports: catalogue uses the official versioned group tree, without guessed venue categories", async () => {
+  const origin = "https://www.sports.tsinghua.edu.cn";
+  const snapshot = async () => ({ origins: [{ origin, localStorage: [{ name: "token", value: '"fixture-token"' }] }] });
+  const fetchImpl = async (url, request) => {
+    assert.equal(url, origin + "/venue/site/api/site/menu");
+    assert.equal(request.headers["x-api-version"], "2.0.0");
+    assert.equal(request.redirect, "manual");
+    return Response.json({ success: true, data: [
+      { menuName: "训练课" }, { menuName: "场地预约", childrenVo: [
+        { menuName: "羽毛球", childrenVo: [{ menuName: "气膜馆羽毛球", uuid: "scene-one" }, { menuName: "缺少标识" }] },
+        { menuName: "空类别", childrenVo: [] }, {},
+      ] },
+    ] });
+  };
+  const read = createSportsReader({ snapshot, fetchImpl });
+  assert.deepEqual(normalizeSportsMenu((await read("menu")).data), [{ sport: "羽毛球", venues: [{ name: "气膜馆羽毛球", uuid: "scene-one" }] }]);
+  await assert.rejects(() => read("https://other.example"), { code: "INVALID_ARGUMENTS" });
+  await assert.rejects(() => createSportsReader({ snapshot: async () => ({}) })("menu"), { code: "SPORTS_LOGIN_REQUIRED" });
+  assert.deepEqual(normalizeSportsMenu(null), []);
+});
+
+test("sports: status checks only the official origin with its saved token and never returns credentials", async () => {
+  const origin = "https://www.sports.tsinghua.edu.cn";
+  const snapshot = async () => ({ origins: [
+    { origin: "https://other.example", localStorage: [{ name: "token", value: JSON.stringify("unrelated") }] },
+    { origin, localStorage: [{ name: "token", value: JSON.stringify("fixture-token") }] },
+  ] });
+  const fetchImpl = async (url, request) => {
+    assert.equal(url, origin + "/venue/site/system/login/getLoginUser");
+    assert.deepEqual(request.headers, { token: "fixture-token" });
+    assert.equal(request.redirect, "manual");
+    assert.equal(request.method, "GET");
+    return Response.json({ success: true, data: { id: "fixture-id", token: "not-public" } });
+  };
+  assert.deepEqual(await sportsSessionStatus({ snapshot, fetchImpl, now: () => 0 }), {
+    state: "ready", code: "VERIFIED", verified: true, source: "protected-api:sports-current-user", checkedAt: "1970-01-01T00:00:00.000Z",
+  });
+  assert.equal((await sportsSessionStatus({ snapshot: async () => undefined, fetchImpl })).state, "unverified");
+  assert.equal((await sportsSessionStatus({ snapshot, fetchImpl: async () => Response.redirect("https://other.example") })).state, "unknown");
+});
+
+test("sports: HTTP 200 does not make an expired session or missing identity verified", () => {
+  assert.deepEqual(sportsLoginProof({ ok: true, status: 200, data: { success: false, errorCode: 1130002 } }), { state: "login-required", code: "SPORTS_LOGIN_REQUIRED" });
+  assert.equal(sportsLoginProof({ ok: false, status: 401 }).state, "login-required");
+  assert.equal(sportsLoginProof(null).state, "unknown");
+  assert.equal(sportsLoginProof({ ok: true, status: 200, data: { success: true, data: {} } }).state, "unknown");
+  assert.deepEqual(sportsLoginProof({ ok: true, status: 200, data: { success: true, data: { id: "fixture-user" } } }), { state: "ready", code: "VERIFIED" });
+});
 
 test("sports: 日期在紧凑数字与标准格式之间归一", () => {
   assert.equal(normalizeDate(20261117), "2026-11-17");

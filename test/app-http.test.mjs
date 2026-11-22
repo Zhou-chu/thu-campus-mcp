@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { request } from "node:http";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createAppServer } from "../lib/app/server.mjs";
@@ -154,6 +155,29 @@ async function pair(url, pairing, overrides = {}) {
   });
   return { status: response.status, body: await response.json() };
 }
+test("清华账号禁止通过远程HTTP主机名配置，不信任转发头", async (t) => {
+  const { url } = await boot(t, { token: "fixture-token" });
+  const denied = await new Promise((resolve, reject) => {
+    const req = request(url + "/api/account", {
+      method: "PUT", headers: { host: "test-host", authorization: "Bearer fixture-token", "x-forwarded-proto": "https" },
+    }, async res => {
+      try {
+        const chunks = [];
+        for await (const chunk of res) chunks.push(chunk);
+        resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(chunks)) });
+      } catch (error) { reject(error); }
+    });
+    req.on("error", reject).end();
+  });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.body.error.code, "ACCOUNT_HTTPS_REQUIRED");
+  const local = await fetch(url + "/api/account", {
+    method: "PUT", headers: { authorization: "Bearer fixture-token", "content-type": "application/json" }, body: "{}",
+  });
+  assert.equal(local.status, 400);
+  assert.equal((await local.json()).error.code, "ACCOUNT_INCOMPLETE");
+});
+
 test("健康检查公开，其余接口未配对时返回 401", async (t) => {
   const { url } = await boot(t);
   const health = await fetch(url + "/healthz");
@@ -1018,6 +1042,15 @@ test("app: session rename and delete use session ids honestly", async (t) => {
   assert.equal((await removed.json()).removed, sessionId);
   const again = await fetch(url + "/api/sessions/" + sessionId, { method: "DELETE", headers });
   assert.equal(again.status, 404, "重复删除如实返回不存在");
+});
+
+test("app: unified LearnX login requires authenticated access and a saved campus account", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const endpoint = url + "/api/auth/learnx";
+  assert.equal((await fetch(endpoint, { method: "POST" })).status, 401);
+  const result = await fetch(endpoint, { method: "POST", headers: { authorization: "Bearer t" } });
+  assert.equal(result.status, 409);
+  assert.equal((await result.json()).error.code, "ACCOUNT_NOT_CONFIGURED");
 });
 
 test("app: auth login validates service and reports job ids", async (t) => {

@@ -429,32 +429,27 @@ test("app: service login does not imply verified authentication; failed checks r
   a.routes.set("GET /api/auth/status", { ok: true }); a.click(a.button("核验登录状态")); await flush();
   assert.match(a.$(".auth-panel > .error").textContent, /认证状态响应无效/);
   assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unknown");
-  a.routes.set("POST /api/auth/login", { ok: false, error: { message: "fixture window unavailable" } });
+  a.routes.set("POST /api/auth/learnx", { ok: false, error: { message: "fixture window unavailable" } });
   a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
   assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /登录未完成.*fixture window unavailable/);
 });
 
-test("app: first learnx login exposes account failure, sends trimmed account and never stores it", async t => {
-  let completed = false;
+test("app: unified service rows need no second account field and retain failed verification", async t => {
   const a = await app(t, { routes: {
     "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "POST /api/auth/learnx": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要验证码" } },
     "POST /api/auth/login": { ok: true, jobId: "learnx-login" },
-    "GET /api/jobs/learnx-login": () => ({ ok: true, found: true, job: { service: "learnx", status: completed ? "complete" : "failed", error: "BROWSER_ACCOUNT_REQUIRED" } }),
+    "GET /api/jobs/learnx-login": { ok: true, found: true, job: { service: "learnx", status: "complete" } },
   } });
   a.nav("services"); await flush();
-  assert.equal(a.$('label.auth-account > span').textContent, "学号");
+  assert.ok(!a.$("#learnx-account"));
+  for (const name of ["seat", "sports", "gitlab"]) assert.ok(a.$('[data-service="' + name + '"]'));
+  assert.doesNotMatch(a.$(".account-card").textContent, /图书馆座位|体育场馆/);
   a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /需要填写学号/);
-  assert.equal(a.$("#learnx-account").hasAttribute("required"), true);
-  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.equal(a.count("POST /api/auth/login"), 1);
-  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /请先填写/);
-  a.input("#learnx-account", "  fixture-student  "); completed = true;
-  a.click(a.button("登录", a.$('[data-service="learnx"]'))); await flush();
-  assert.deepEqual(a.calls.filter(call => call.method === "POST").at(-1).body, { service: "learnx", account: "fixture-student" });
-  assert.equal(a.$("#learnx-account").value, "");
-  assert.equal(a.$('[data-service="learnx"] .state').dataset.s, "unverified");
-  assert.equal([...a.savedValues.values()].some(value => value.includes("fixture-student")), false);
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /验证码/);
+  a.click(a.button("人工验证", a.$('[data-service="learnx"]'))); await flush();
+  assert.deepEqual(a.calls.filter(call => call.method === "POST").at(-1).body, { service: "learnx" });
+  assert.notEqual(a.$('[data-service="learnx"] .state').dataset.s, "ready");
 });
 
 test("app: login polls queued, downloading and running without claiming a window or duplicate starts", async t => {
@@ -905,6 +900,39 @@ test("app: sports view asks for login instead of pretending there is no data", a
   assert.equal(a.all(".sports-site").length, 0, "没有数据时不画场地");
 });
 
+test("app: sports shows manual verification and exposes the matching login action", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/sports/sports": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要本人完成学校验证" } },
+    "POST /api/tools/campus_browser_open": { ok: true },
+  } });
+  a.nav("sports");
+  await until(() => !!a.$(".sports-login"), "sports login action");
+  assert.match(a.$(".sports-panel").textContent, /需要本人完成学校验证/);
+  a.click(".sports-login");
+  await until(() => /运行实例的电脑/.test(a.$(".sports-panel").textContent), "host login notification");
+  assert.equal(a.count("POST /api/tools/campus_browser_open"), 1);
+});
+
+test("app: refreshing a throttled sports venue preserves selected date and reloads only its slots", async t => {
+  const day = new Date().toLocaleDateString("sv-SE");
+  const slotKey = `GET /api/sports/slots?sport=${encodeURIComponent("游泳")}&venue=${encodeURIComponent("陈明游泳馆")}&date=${day}`;
+  const a = await app(t, { routes: {
+    "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
+    [`GET /api/sports/venues?sport=${encodeURIComponent("游泳")}`]: { ok: true, venues: ["陈明游泳馆"] },
+    [slotKey]: { ok: false, error: { code: "SPORTS_THROTTLED", message: "请稍后查询" } },
+  } });
+  a.nav("sports");
+  await until(() => /请稍后查询/.test(a.$(".sports-panel").textContent), "rate limit shown");
+  assert.equal(a.all(".sports-slot").length, 0);
+  assert.equal(a.$(".sports-panel a")?.textContent, "打开体育官网");
+  const pickedDate = a.$('.sports-date[aria-selected="true"]').textContent;
+  a.click(".sports-actions button");
+  await until(() => a.count("GET /api/sports/slots") === 2, "only selected query reloaded");
+  assert.ok(a.calls.filter(call => new URL(call.url).pathname === "/api/sports/slots").every(call => new URL(call.url).searchParams.get("date") === day));
+  assert.equal(a.count("GET /api/sports/sports"), 1);
+  assert.equal(a.$('.sports-date[aria-selected="true"]').textContent, pickedDate);
+});
+
 test("app: library seat view lists seats and surfaces the real booking error", async t => {
   const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, {
@@ -913,7 +941,7 @@ test("app: library seat view lists seats and surfaces the real booking error", a
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 10 }] },
       [`GET /api/seat/seats?section=96&date=${day}`]: {
-        ok: true,
+        ok: true, sectionId: 96, date: day,
         seats: [
           { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true },
           { id: 5123, name: "A002", segment: 1586205, begin: "08:00", end: "22:00", status: 0, available: false },
@@ -955,7 +983,7 @@ test("app: library seat view states an empty seat list honestly", async t => {
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 0 }] },
       "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
-      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, seats: [], available: 0 },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, sectionId: 96, date: day, seats: [], available: 0 },
     },
   });
   a.nav("seat");
@@ -1013,7 +1041,7 @@ test("app: seat view reports area and segment failures honestly", async t => {
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
     },
   });
-  a.routes.set("GET /api/seat/areas?floor=37", () => { throw Object.assign(new Error("bad"), { code: "SEAT_EMPTY" }); });
+  a.routes.set("GET /api/seat/areas?floor=37", () => { throw Object.assign(new Error("bad"), { code: "SEAT_UNREACHABLE" }); });
   a.nav("seat");
   await until(() => /暂时读不到分区/.test(a.$(".seat-panel").textContent), "area failure");
   assert.equal(a.all(".seat").length, 0);
@@ -1119,7 +1147,7 @@ test("app: seat reserve failure maps to an actionable hint", async t => {
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 2 }] },
       "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
-      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, seats: [{ id: 501, name: "NF3B001", segment: 1, available: true, begin: "08:00", end: "22:00" }], available: 1 },
+      [`GET /api/seat/seats?section=96&date=${day}`]: { ok: true, sectionId: 96, date: day, seats: [{ id: 501, name: "NF3B001", segment: 1, available: true, begin: "08:00", end: "22:00" }], available: 1 },
       "POST /api/seat/reserve/prepare": { ok: true, token: "t".repeat(48) },
       "POST /api/seat/reserve": () => { throw Object.assign(new Error("已存在预约"), { code: "SEAT_ALREADY_BOOKED" }); },
     },
@@ -1193,22 +1221,22 @@ test("app: assignment submission surfaces upload and confirm failures", async t 
   await until(() => /站点拒绝了提交|CONFIRM_FAILED|失败/.test(a.$(".rsidebar-detail").textContent), "confirm failure");
 });
 
-test("app: seat refresh keeps the current selection and reloads libraries", async t => {
+test("app: seat refresh keeps the current selection and reloads the current area", async t => {
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 1 }] },
       "GET /api/seat/segments?section=96": { ok: true, segments: [] },
-      [`GET /api/seat/seats?section=96&date=${new Date().toLocaleDateString("sv-SE")}`]: { ok: true, seats: [], available: 0 },
     },
   });
   a.nav("seat");
-  await until(() => /该分区当前没有可约座位|暂时读不到座位/.test(a.$(".seat-panel").textContent), "seat state");
+  await until(() => /未取得可预约日期/.test(a.$(".seat-panel").textContent), "seat state");
   const refresh = a.all(".seat-actions button").find(button => /刷新/.test(button.textContent));
   a.click(refresh);
   await flush();
-  assert.ok(a.calls.filter(call => call.url.includes("/api/seat/libraries")).length >= 2, "刷新会重新读取馆区");
+  assert.equal(a.count("GET /api/seat/libraries"), 1);
+  assert.equal(a.calls.filter(call => new URL(call.url).pathname === "/api/seat/segments" && new URL(call.url).searchParams.get("section") === "96").length, 2);
 });
 
 test("app: timetable add form posts and returns to grid", async t => {

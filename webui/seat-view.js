@@ -1,16 +1,40 @@
-const today = () => new Date().toLocaleDateString("sv-SE");
+const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+
+function drawSeatPlan(seats, makeButton, el) {
+  const positioned = seats.filter(seat => seat.position);
+  if (!positioned.length) return null;
+  const positions = positioned.map(seat => seat.position);
+  const minX = Math.min(...positions.map(p => p.x));
+  const minY = Math.min(...positions.map(p => p.y));
+  const width = Math.max(...positions.map(p => p.x + p.width)) - minX;
+  const height = Math.max(...positions.map(p => p.y + p.height)) - minY;
+  // Scale the two axes from the measured seats—not the viewport—so touch targets remain usable.
+  const sx = 64 / Math.min(...positions.map(p => p.width));
+  const sy = 54 / Math.min(...positions.map(p => p.height));
+  const plan = el("div", { class: "seat-plan", role: "group", "aria-label": "座位分布图" });
+  plan.style.width = (width * sx + 24) + "px";
+  plan.style.height = (height * sy + 24) + "px";
+  for (const seat of positioned) {
+    const p = seat.position;
+    const button = makeButton(seat, true);
+    button.style.left = ((p.x - minX) * sx + 12) + "px";
+    button.style.top = ((p.y - minY) * sy + 12) + "px";
+    plan.append(button);
+  }
+  return el("div", { class: "seat-plan-frame", tabIndex: 0, "aria-label": "可滚动的座位分布图" }, [plan]);
+}
 
 export function createSeatView({ el, api }) {
   const state = {
-    libraries: [], floors: [], areas: [], segments: [], seats: [],
+    libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
-    date: today(), days: [], loading: false, error: "", notice: "", loaded: false,
+    date: today(), days: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0,
   };
 
   return function seatPage() {
     const wrap = el("div", { class: "stack seat-page" });
     const header = el("div", { class: "page-header" });
-    const panel = el("div", { class: "seat-panel", role: "status" });
+    const panel = el("div", { class: "seat-panel" });
     wrap.append(header, panel);
 
     const chips = (items, active, label, onPick) => {
@@ -39,20 +63,58 @@ export function createSeatView({ el, api }) {
         return box;
       }
       if (!state.seats.length) return el("p", { class: "seat-empty", text: state.area ? "该分区当前没有可约座位。" : "先选择分区。" });
-      const grid = el("div", { class: "seat-grid" });
-      for (const seat of state.seats) {
-        grid.append(el("button", {
-          class: "seat",
-          type: "button",
-          disabled: !seat.available,
-          dataset: { open: String(seat.available), active: String(state.seat !== null && state.seat.id === seat.id) },
-          "aria-pressed": String(state.seat !== null && state.seat.id === seat.id),
-          title: seat.available ? "可预约" : "不可预约",
-          text: seat.name,
-          onclick: () => { state.seat = seat; state.notice = ""; render(); },
-        }));
+      const count = state.seats.filter(seat => seat.available === true).length;
+      const hasMap = state.seats.some(seat => seat.position);
+      const usingMap = hasMap && state.display === "map";
+      const selection = el("div", { class: "seat-selection" });
+      const display = el("div", { class: "seat-results" });
+      function updateSelection() {
+        selection.replaceChildren();
+        const block = confirmBlock();
+        if (block) selection.append(block);
       }
-      return grid;
+      function pickSeat(seat) {
+        if (!seat.available) return;
+        state.seat = seat;
+        state.notice = "";
+        panel.querySelector(".seat-notice")?.remove();
+        for (const button of display.querySelectorAll(".seat")) {
+          const active = button.dataset.seatId === String(seat.id);
+          button.dataset.active = String(active);
+          button.setAttribute("aria-pressed", String(active));
+        }
+        updateSelection();
+      }
+      const makeButton = (seat, onMap = false) => {
+        const status = seat.available ? "可预约" : seat.statusLabel || "不可预约";
+        const active = seat.id === state.seat?.id;
+        return el("button", {
+          class: "seat", type: "button", disabled: !seat.available,
+          dataset: { seatId: String(seat.id), open: String(seat.available), active: String(active) },
+          "aria-pressed": String(active), "aria-label": seat.name + "，" + status,
+          title: seat.name + " · " + status,
+          onclick: () => pickSeat(seat),
+        }, [el("span", { text: seat.name }), el("span", { class: "seat-status", text: onMap && seat.available ? "可选" : status })]);
+      };
+      const key = el("div", { class: "seat-key", role: "status" }, [
+        el("span", { dataset: { open: "true" }, text: `可预约 ${count}` }),
+        el("span", { dataset: { open: "false" }, text: `不可预约 ${state.seats.length - count}` }),
+      ]);
+      const controlBar = el("div", { class: "seat-result-bar" }, [key]);
+      if (state.queryWindow) controlBar.append(el("span", { class: "seat-window", text: state.queryWindow.start + "–" + state.queryWindow.end + "（北京时间）" }));
+      if (hasMap) controlBar.append(el("div", { class: "seat-view-switch", role: "group", "aria-label": "座位显示方式" }, [
+        ["map", "分布图"], ["list", "列表"],
+      ].map(([mode, label]) => el("button", { class: "ghost", type: "button", text: label, "aria-pressed": String(state.display === mode),
+        onclick: () => { state.display = mode; render(); panel.querySelector('.seat-view-switch [aria-pressed="true"]')?.focus(); },
+      }))));
+      if (usingMap) display.append(drawSeatPlan(state.seats, makeButton, el));
+      const listed = usingMap ? state.seats.filter(seat => !seat.position) : state.seats;
+      if (listed.length) {
+        if (usingMap) display.append(el("h4", { class: "seat-label", text: "无位置数据的座位" }));
+        display.append(el("div", { class: "seat-grid" }, listed.map(seat => makeButton(seat))));
+      }
+      updateSelection();
+      return el("div", { class: "stack seat-results-section" }, [controlBar, selection, display]);
     };
 
     const confirmBlock = () => {
@@ -67,18 +129,16 @@ export function createSeatView({ el, api }) {
 
     function render() {
       header.replaceChildren(
-        el("div", { class: "stack" }, [el("p", { class: "eyebrow", text: "图书馆" }), el("h2", { text: "座位预约" })]),
+        el("h2", { text: "座位预约" }),
         el("div", { class: "seat-actions" }, [
-          el("button", { class: "ghost", type: "button", text: state.loading ? "读取中…" : "刷新", disabled: state.loading, onclick: () => { void loadLibraries(); } }),
+          el("button", { class: "ghost", type: "button", text: state.loading ? "读取中…" : "刷新", disabled: state.loading, onclick: () => { void (state.area ? state.days.length ? loadSeats() : loadSegments() : state.floor ? loadAreas() : state.library ? loadFloors() : loadLibraries()); } }),
         ]),
       );
       const children = [];
-      const block = confirmBlock();
-      if (block) children.push(block);
       children.push(el("h3", { class: "seat-label", text: "馆区" }));
       children.push(state.libraries.length
         ? chips(state.libraries, state.library, "馆区", item => { state.library = item; void loadFloors(); })
-        : el("p", { class: "seat-empty", text: state.loading ? "正在读取馆区（首次需先登录座位系统，约 30 秒）" : state.error || "暂无馆区。" }));
+        : el("p", { class: "seat-empty", text: state.loading ? "正在读取馆区…" : state.error || "暂无馆区。" }));
       children.push(el("h3", { class: "seat-label", text: "楼层" }));
       children.push(state.floors.length
         ? chips(state.floors, state.floor, "楼层", item => { state.floor = item; void loadAreas(); })
@@ -94,13 +154,13 @@ export function createSeatView({ el, api }) {
             },
           }, state.areas.map(item => el("option", {
             value: String(item.id),
-            text: item.free !== null && item.free !== undefined ? `${item.name}（空位 ${item.free}）` : item.name,
+            text: item.name,
             selected: state.area !== null && item.id === state.area.id,
           })))
         : el("p", { class: "seat-empty", text: state.floor ? "该楼层没有分区。" : "先选择楼层。" }));
       children.push(el("h3", { class: "seat-label", text: "日期" }));
       const strip = el("div", { class: "seat-dates", role: "group", "aria-label": "日期" });
-      const candidates = state.days.length ? state.days : Array.from({ length: 7 }, (_, index) => new Date(Date.now() + index * 86400000).toLocaleDateString("sv-SE"));
+      const candidates = state.days;
       for (const value of candidates) {
         strip.append(el("button", {
           class: "seat-chip",
@@ -111,7 +171,7 @@ export function createSeatView({ el, api }) {
           onclick: () => { state.date = value; state.seat = null; state.notice = ""; void loadSeats(); },
         }));
       }
-      children.push(strip);
+      children.push(candidates.length ? strip : el("p", { class: "seat-empty", text: state.area ? "未取得可预约日期。" : "先选择分区。" }));
       children.push(el("h3", { class: "seat-label", text: "座位" }));
       children.push(seatGrid());
       if (state.notice) children.push(el("p", { class: "seat-notice", text: state.notice }));
@@ -128,103 +188,87 @@ export function createSeatView({ el, api }) {
       render();
     }
 
-    async function loadLibraries() {
+    function beginRead() {
+      const request = ++state.request;
       state.loading = true;
+      state.seat = null;
       state.error = "";
+      state.queryWindow = null;
+      state.seats = [];
+      return request;
+    }
+
+    async function readScoped(path, apply, fallback) {
+      const request = beginRead();
       render();
       try {
-        const data = await api("/api/seat/libraries");
-        state.libraries = Array.isArray(data.libraries) ? data.libraries : [];
-        const usable = state.libraries.filter(item => item.valid !== false);
-  state.library = state.libraries.find(item => item.id === 35) ?? usable[0] ?? state.libraries[0] ?? null;
+        const data = await api(path);
+        if (request !== state.request) return false;
+        apply(data);
+        return true;
       } catch (error) {
-        state.error = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "暂时读不到馆区。";
+        if (request !== state.request) return false;
+        const hints = {
+          SEAT_LOGIN_REQUIRED: "需要先登录图书馆座位系统。",
+          SEAT_WINDOW_CLOSED: "系统开放预约时间为06:00-23:00（北京时间）。",
+          CAS_CAPTCHA_REQUIRED: "校方登录需要人工验证。",
+        };
+        state.error = hints[error?.code] ?? (["SEAT_EMPTY", "ACCOUNT_NOT_CONFIGURED"].includes(error?.code) ? error.message : fallback);
+        return false;
       } finally {
-        state.loading = false;
-        state.loaded = true;
-        render();
+        if (request === state.request) { state.loading = false; render(); }
       }
-      if (state.library) await loadFloors();
+    }
+
+    async function loadLibraries() {
+      state.loaded = true;
+      const ok = await readScoped("/api/seat/libraries", data => {
+        state.libraries = (Array.isArray(data.libraries) ? data.libraries : []).filter(item => item.valid !== false);
+        state.library = state.libraries.find(item => item.id === 35) ?? state.libraries[0] ?? null;
+      }, "暂时读不到馆区。");
+      if (ok && state.library) await loadFloors();
     }
 
     async function loadFloors() {
-      state.floors = [];
-      state.areas = [];
-      state.segments = [];
-      state.seats = [];
-      state.floor = null;
-      state.area = null;
-      state.seat = null;
-      state.error = "";
-      render();
+      Object.assign(state, { floors: [], areas: [], days: [], floor: null, area: null });
       if (!state.library) return;
-      try {
-        const data = await api(`/api/seat/floors?library=${state.library.id}`);
+      const ok = await readScoped("/api/seat/floors?library=" + state.library.id, data => {
         state.floors = (Array.isArray(data.floors) ? data.floors : []).filter(item => item.valid !== false);
         state.floor = state.floors[0] ?? null;
-      } catch (error) {
-        state.error = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "暂时读不到楼层。";
-      }
-      render();
-      if (state.floor) await loadAreas();
+      }, "暂时读不到楼层。");
+      if (ok && state.floor) await loadAreas();
     }
 
     async function loadAreas() {
-      state.areas = [];
-      state.segments = [];
-      state.seats = [];
-      state.area = null;
-      state.seat = null;
-      render();
+      Object.assign(state, { areas: [], days: [], area: null });
       if (!state.floor) return;
-      try {
-        const data = await api(`/api/seat/areas?floor=${state.floor.id}`);
-        state.areas = (Array.isArray(data.areas) ? data.areas : []).filter(item => (item.total ?? 1) > 0);
+      const ok = await readScoped("/api/seat/areas?floor=" + state.floor.id, data => {
+        state.areas = (Array.isArray(data.areas) ? data.areas : []).filter(item => item.valid !== false && (item.total ?? 1) > 0);
         state.area = state.areas[0] ?? null;
-      } catch {
-        state.error = "暂时读不到分区。";
-      }
-      render();
-      if (state.area) await loadSegments();
+      }, "暂时读不到分区。");
+      if (ok && state.area) await loadSegments();
     }
 
     async function loadSegments() {
-      state.segments = [];
       state.days = [];
-      state.seats = [];
-      state.seat = null;
-      state.error = "";
-      render();
       if (!state.area) return;
-      try {
-        const data = await api(`/api/seat/segments?section=${state.area.id}`);
-        state.segments = Array.isArray(data.segments) ? data.segments : [];
-        state.days = [...new Set(state.segments.map(item => item.day))].filter(day => day >= today());
+      const ok = await readScoped("/api/seat/segments?section=" + state.area.id, data => {
+        const segments = Array.isArray(data.segments) ? data.segments : [];
+        state.days = [...new Set(segments.map(item => item.day))].filter(day => day >= today());
         if (state.days.length && !state.days.includes(state.date)) state.date = state.days[0];
-      } catch (error) {
-        state.error = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "";
-      }
-      render();
-      await loadSeats();
+      }, "暂时读不到预约日期。");
+      if (ok && state.days.length) await loadSeats();
     }
 
     async function loadSeats() {
-      if (!state.area) return;
-      state.loading = true;
-      state.error = "";
-      render();
-      try {
-        const data = await api(`/api/seat/seats?section=${state.area.id}&date=${state.date}`);
+      if (!state.area || !state.days.includes(state.date)) return;
+      const { id } = state.area;
+      const date = state.date;
+      await readScoped("/api/seat/seats?" + new URLSearchParams({ section: id, date }), data => {
+        if (data.sectionId !== id || data.date !== date) throw new Error("Seat scope mismatch");
         state.seats = Array.isArray(data.seats) ? data.seats : [];
-      } catch (error) {
-        state.seats = [];
-        state.error = error?.code === "SEAT_WINDOW_CLOSED"
-          ? "系统开放预约时间为 06:00-23:00（北京时间），请在开放时段操作。"
-          : error?.code === "SEAT_EMPTY" ? "该分区当天不可预约。" : "暂时读不到座位。";
-      } finally {
-        state.loading = false;
-        render();
-      }
+        state.queryWindow = data.queryWindow ?? null;
+      }, "暂时读不到座位。");
     }
 
     async function submitReserve() {

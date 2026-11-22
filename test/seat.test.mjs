@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache, seatQueryWindow } from "../lib/app/seat.mjs";
+
+test("seat: 当天从北京时间现在查，未来从官方起始时间查", () => {
+  const segment = { id: 123, day: "2026-11-22", start: "08:00", end: "22:00" };
+  assert.deepEqual(seatQueryWindow(segment, new Date("2026-11-22T04:52:00Z")), { start: "12:52", end: "22:00" });
+  assert.deepEqual(seatQueryWindow(segment, new Date("2026-11-21T23:52:00Z")), { start: "08:00", end: "22:00" });
+  assert.deepEqual(seatQueryWindow({ ...segment, day: "2026-11-23" }, new Date("2026-11-22T04:52:00Z")), { start: "08:00", end: "22:00" });
+  assert.equal(seatQueryWindow(segment, new Date("2026-11-22T14:00:00Z")), null);
+  assert.equal(seatQueryWindow(segment, new Date("2026-11-22T17:00:00Z")), null);
+  assert.equal(seatQueryWindow({ ...segment, end: "" }), null);
+});
 
 test("seat: 场馆树按层级排序并保留有效性", () => {
   const data = {
@@ -62,6 +72,20 @@ test("seat: 时段解析出 segment 与真实时间", () => {
   assert.equal(items[0].end, "22:00");
   assert.equal(items[1].start, "22:00", "字符串时间同样解析");
   assert.deepEqual(normalizeSegments({ list: [{ day: "", id: 2 }] }), []);
+});
+
+test("seat: 保留官网座位坐标和状态，不生成缺失位置", () => {
+  const [maintenance, unknown, occupied] = normalizeSeats({ list: [
+    { id: 1, name: "A01", status: 4, status_name: " 维护 ", point_x: 22.1, point_y: "71.1", width: 2, height: 4 },
+    { id: 2, name: "A02", point_x: null, point_y: 40, width: 2, height: 3 },
+    { id: 3, name: "A03", status: 6, status_name: "使用中", point_x: 99, point_y: 30, width: 2, height: 3 },
+  ] });
+  assert.deepEqual(maintenance.position, { x: 22.1, y: 71.1, width: 2, height: 4 });
+  assert.equal(maintenance.statusLabel, "维护");
+  assert.equal(maintenance.available, false);
+  assert.equal(unknown.position, null);
+  assert.equal(occupied.position, null);
+  assert.equal(occupied.statusLabel, "使用中");
 });
 
 test("seat: 座位列表按可用性归一，不把缺 status 当成可用", () => {
