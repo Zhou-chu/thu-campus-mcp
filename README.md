@@ -40,7 +40,7 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 运行时的 HTTP/SSE 契约见 [设计契约](docs/superpowers/specs/2026-11-11-campus-agent-app.md)，实施计划见 [实施计划](docs/superpowers/plans/2026-11-11-campus-agent-app.md)。新增需求与状态见[功能点清单](<docs/app-features.md>)：模型思考强度选择与审批模式选择均为待实现，不能把现有思考展示或启动审批开关当成已接通的控件。
 
-默认只监听本机。想在任意网络下用手机接入时，见 [托管部署](docs/app-hosting.md)：`THU_CAMPUS_APP_ALLOW_REMOTE=1` + `PUBLIC_URL`，推荐让 Nginx/Caddy 终止 TLS（`proxy_buffering off` 是必须的）。
+默认只监听本机。想在任意网络下用手机接入时，见 [托管部署](docs/app-hosting.md)：必须 HTTPS（本机证书，或回环监听 + `THU_CAMPUS_APP_TLS_PROXY=1` 交给 Nginx/Caddy/Tailscale 终止 TLS；`proxy_buffering off` 是必须的）。托管形态缺 TLS 会直接拒绝启动。
 
 ```powershell
 node bin/thu-campus.mjs app status           # 脱敏状态，不联网

@@ -205,11 +205,31 @@ test("app serve real startup/shutdown wires fake keepalive, private workspace an
   assert.equal(h.runtime, undefined); assert(h.calls.some((c) => c[0] === "keep.stop")); assert(h.calls.some((c) => c[0] === "app.close")); assert(h.calls.some((c) => c[0] === "host.close"));
 });
 
-test("remote app startup warns about plaintext and survives a failed initial keepalive", async (t) => {
-  const h = await appFixture(t); h.config.host = "0.0.0.0"; h.config.token = "unit-token"; h.config.publicUrl = "https://unit.invalid"; h.keepError = new Error("fixture");
+test("remote app rejects plaintext before acquiring resources; loopback TLS proxy startup tolerates failed keepalive", async (t) => {
+  const h = await appFixture(t);
+  h.config.host = "0.0.0.0"; h.config.token = "fixture-not-for-logs"; h.config.publicUrl = "https://unit.invalid";
+  const before = h.calls.length;
+  await assert.rejects(h.command(["serve"]), error => error.code === "TLS_REQUIRED" && !error.message.includes(h.config.token));
+  assert.equal(h.calls.length, before);
+  h.config.tlsProxy = true;
+  await assert.rejects(h.command(["serve"]), { code: "INVALID_TLS_PROXY" });
+  h.config.tlsProxy = false;
+  h.config.host = "127.0.0.1"; h.config.tlsProxy = true; h.keepError = new Error("fixture");
   let failure; void h.command(["serve"]).catch((error) => { failure = error; });
   await settled(() => h.signals.has("SIGINT") || failure); assert.equal(failure, undefined);
-  assert.match(h.io.err, /app-insecure-remote/); assert.equal(h.runtime.publicUrl, "https://unit.invalid"); assert.doesNotMatch(h.io.out, /首次配对码/);
+  assert.equal(h.runtime.publicUrl, "https://unit.invalid");
+  assert.doesNotMatch(h.io.out + h.io.err, /首次配对码|fixture-not-for-logs|app-plaintext-legacy/);
+  h.signals.get("SIGINT")(); await settled(() => h.exit === 0);
+});
+
+test("an already-running plaintext deployment can migrate explicitly and says so", async (t) => {
+  const h = await appFixture(t);
+  h.config.host = "0.0.0.0"; h.config.token = "fixture-not-for-logs"; h.config.publicUrl = "https://unit.invalid";
+  h.config.plaintextLegacy = true;
+  let failure; void h.command(["serve"]).catch((error) => { failure = error; });
+  await settled(() => h.signals.has("SIGINT") || failure); assert.equal(failure, undefined);
+  assert.match(h.io.err, /app-plaintext-legacy/);
+  assert.doesNotMatch(h.io.out + h.io.err, /fixture-not-for-logs/);
   h.signals.get("SIGINT")(); await settled(() => h.exit === 0);
 });
 

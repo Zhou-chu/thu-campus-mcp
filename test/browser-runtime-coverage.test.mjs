@@ -18,8 +18,8 @@ import { SessionManager } from "../lib/madmodel/auth.mjs";
 const json = value => JSON.stringify(value);
 const cookie = (name, domain, value = "fixture-value", expires = -1) => ({ name, domain, value, path: "/", expires, secure: true, httpOnly: true, sameSite: "Lax" });
 const baseCookies = () => [cookie("learn", "learn.tsinghua.edu.cn"), cookie("sso", ".id.tsinghua.edu.cn"), cookie("seahub_auth", "cloud.tsinghua.edu.cn", "fixture@fixture_cloud_token_1234567890"), cookie("sessionid", "pro.yuketang.cn"), cookie("shared", ".yuketang.cn"), cookie("ignored", "example.invalid")];
-async function until(fn) {
-  const deadline = performance.now() + 3000;
+async function until(fn, timeoutMs = 3000) {
+  const deadline = performance.now() + timeoutMs;
   while (performance.now() < deadline) { if (await fn()) return; await new Promise(resolve => setTimeout(resolve, 5)); }
   assert.fail("owned fixture did not settle");
 }
@@ -184,7 +184,10 @@ test("job catalog reuses only the same target, records spawn errors, and persist
   const first = await jobs.startBrowserJob("login", "learnx", "fixture-account"); assert.equal((await jobs.startBrowserJob("login", "learnx", "fixture-account")).reused, true); assert.equal((await jobs.startBrowserJob("open", "cloud")).status, "busy");
   assert.equal((await jobs.closeBrowserJobs()).stopRequested, 1); const file = `state/jobs/${first.id}.json`; assert.equal(JSON.parse(await readFile(f.path(file), "utf8")).stop, true);
   await f.put(file, { id: first.id, status: "complete", updatedAt: "0" }); f.spawn = () => { const c = child(); queueMicrotask(() => c.emit("error", new Error("must not be disclosed"))); return c; };
-  const failed = await jobs.startBrowserJob("open", "madmodel"); await until(async () => JSON.parse(await readFile(f.path(`state/jobs/${failed.id}.json`), "utf8")).status === "failed"); assert.equal((await jobs.browserJobs())[0].error, "WORKER_START");
+  const failed = await jobs.startBrowserJob("open", "madmodel");
+  assert.equal(failed.status, "failed", "a spawn error is reported to the caller, not only persisted later");
+  assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${failed.id}.json`), "utf8")).status, "failed");
+  assert.equal((await jobs.browserJobs())[0].error, "WORKER_START");
 });
 test("worker simulation, stopped download and four-site open execute real orchestration with fakes", async t => {
   const f = await fixture(t); const save = async (extra = {}) => { const job = { id: randomUUID(), status: "queued", action: "open", service: "all", updatedAt: "0", ...extra }; await f.put(`state/jobs/${job.id}.json`, job); return job; };
