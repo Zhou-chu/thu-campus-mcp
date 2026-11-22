@@ -48,6 +48,7 @@ export const DEFAULT_SCOPE = Object.freeze([
   'lib/app/workspace-http.mjs',
   'lib/app/sandbox.mjs',
   'lib/app/states.mjs',
+  'lib/app/server.mjs',
   'lib/app/keepalive.mjs',
   'lib/madmodel/status.mjs',
   'packages/thu-cloud/src/status.ts',
