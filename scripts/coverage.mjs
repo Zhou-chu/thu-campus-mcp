@@ -11,6 +11,7 @@ import libCoverage from "istanbul-lib-coverage";
 import libReport from "istanbul-lib-report";
 import reports from "istanbul-reports";
 import v8ToIstanbul from "v8-to-istanbul";
+import { auditIgnores } from "./audit-ignores.mjs";
 
 export const ROOT = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 export const SDKS = ["hetang", "learnx", "thu-cloud"];
@@ -397,7 +398,9 @@ export async function coverageMain(args = process.argv.slice(2), root = ROOT) {
       if (threshold > 0) failed.push(`packages:${sdk}:report-missing`); else summaries[`packages:${sdk}`] = null;
     }
   }
-  console.log(JSON.stringify({ threshold, scope: "runtime-sdk (not whole Sonar)", ...summaries, failed }, null, 2));
+  const ignores = await auditIgnores(root);
+  failed.push(...ignores.findings.map(finding => `ignore:${finding.file}:${finding.rule}`));
+  console.log(JSON.stringify({ threshold, scope: "runtime-sdk (not whole Sonar)", ...summaries, ignores: ignores.stats, failed }, null, 2));
   return failed.length ? 1 : 0;
 }
 if (isMain(import.meta.url)) coverageMain().then(code => { process.exitCode = code; }).catch(error => { console.error(`Coverage failed: ${error.message}`); process.exitCode = 1; });

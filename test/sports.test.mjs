@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSportsReader, createSportsReadRecovery, createSportsSlotReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+import { reserveRequest, createSportsReader, createSportsReadRecovery, createSportsSlotReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
 
 test("sports: concurrent expired queries recover once and only replay the original reads", async () => {
   let active = false, logins = 0;
@@ -378,4 +378,15 @@ test("seat: 未开放时段可被识别，不再误报为需要人工登录", as
   assert.equal(seatPageState("登录 座位预约 图书馆"), "login");
   assert.equal(seatPageState("座位预约 已登录"), "ready");
   assert.equal(seatPageState(""), "ready");
+});
+
+test("reserveRequest 校验参数并生成官方表单时间", () => {
+  const request = reserveRequest({ sceneUuid: "s", siteUuid: "t", siteType: "游泳", day: "2026-11-24", startTime: "19:00:30", endTime: "20:00", members: ["a"], formId: "f1", deployUuid: "d1" });
+  assert.equal(request.date, "2026-11-24");
+  assert.deepEqual(request.payload.reserveTime, [{ startTime: "2026-11-24 19:00:00", endTime: "2026-11-24 20:00:00" }]);
+  assert.deepEqual(request.payload.resvMember, ["a"]);
+  assert.deepEqual(request.payload.formParam, { formId: "f1", deployUuid: "d1" });
+  for (const broken of [{}, { sceneUuid: "s" }, { sceneUuid: "s", siteUuid: "t" }, { sceneUuid: "s", siteUuid: "t", startTime: "19:00" }]) {
+    assert.throws(() => reserveRequest(broken), (error) => error.code === "ARGUMENT_REQUIRED");
+  }
 });
