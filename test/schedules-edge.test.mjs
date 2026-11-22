@@ -10,7 +10,7 @@ import { createScheduleTools } from "../lib/app/schedule-tools.mjs";
 async function withStore(run) {
   const dir = await mkdtemp(path.join(tmpdir(), "sched-edge-"));
   try {
-    let nowMs = new Date("2026-11-22T10:00:00+09:00").getTime();
+    let nowMs = new Date(2026, 10, 22, 10, 0, 0, 0).getTime();
     const store = new ScheduleStore(dir, { now: () => new Date(nowMs) });
     return await run({ store, advance: ms => { nowMs += ms; }, dir });
   } finally {
@@ -20,11 +20,11 @@ async function withStore(run) {
 
 test("周任务的描述与最近一次发生时间", () => {
   const weekly = { kind: "weekly", time: "19:00", days: [5], enabled: true };
-  assert.equal(describeSchedule(weekly, new Date("2026-11-22T10:00:00+09:00")).when, "每周 五 19:00");
+  assert.equal(describeSchedule(weekly, new Date(2026, 10, 22, 10, 0)).when, "每周 五 19:00");
   // 2026-11-20 是周五 19:00，最近一次已经发生。
-  assert.equal(lastOccurrence(weekly, new Date("2026-11-22T10:00:00+09:00")), new Date("2026-11-20T19:00:00+09:00").getTime());
-  assert.equal(lastOccurrence({ ...weekly, enabled: false }, new Date("2026-11-22T10:00:00+09:00")), null);
-  assert.equal(lastOccurrence({ kind: "once", at: "2026-12-01T08:00:00+09:00", enabled: true }, new Date("2026-11-22T10:00:00+09:00")), null, "未来单次任务不该被判定为已到点");
+  assert.equal(lastOccurrence(weekly, new Date(2026, 10, 22, 10, 0)), new Date(2026, 10, 20, 19, 0).getTime());
+  assert.equal(lastOccurrence({ ...weekly, enabled: false }, new Date(2026, 10, 22, 10, 0)), null);
+  assert.equal(lastOccurrence({ kind: "once", at: "2026-12-01T08:00:00+09:00", enabled: true }, new Date(2026, 10, 22, 10, 0)), null, "未来单次任务不该被判定为已到点");
   assert.equal(lastOccurrence({ kind: "daily", time: "bad", enabled: true }, new Date()), null);
 });
 

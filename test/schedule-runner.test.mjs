@@ -10,7 +10,7 @@ import { createScheduleTools, withScheduleTools } from "../lib/app/schedule-tool
 async function withStore(run) {
   const dir = await mkdtemp(path.join(tmpdir(), "runner-"));
   try {
-    let nowMs = new Date("2026-11-22T10:00:00+09:00").getTime();
+    let nowMs = new Date(2026, 10, 22, 10, 0, 0, 0).getTime();
     const store = new ScheduleStore(dir, { now: () => new Date(nowMs) });
     return await run({ store, advance: ms => { nowMs += ms; } });
   } finally {

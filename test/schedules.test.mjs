@@ -5,26 +5,27 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ScheduleStore, describeSchedule, nextRunAt, normalizeSchedule, parseOnce } from "../lib/app/schedules.mjs";
 
-const at = text => new Date(text);
+// 全部用本地时间构造，避免测试在 UTC 的 CI runner 上把 JST 墙钟当成不同瞬间。
+const local = (month, day, hour, minute) => new Date(2026, month - 1, day, hour, minute, 0, 0);
 
 test("单次任务只接受未来时间，并给出可读错误", () => {
-  const now = at("2026-11-22T10:00:00+09:00");
-  assert.equal(parseOnce("2026-11-22 11:00", now)?.getTime(), at("2026-11-22T11:00:00+09:00").getTime());
+  const now = local(11, 22, 10, 0);
+  assert.equal(parseOnce("2026-11-22 11:00", now)?.getTime(), local(11, 22, 11, 0).getTime());
   assert.equal(parseOnce("2026-11-22T09:00", now), null, "过去的时间拒绝");
   assert.equal(parseOnce("明天早上", now), null);
-  const bad = normalizeSchedule({ title: "备份", prompt: "整理作业", kind: "once", at: "2026-11-01 08:00" });
+  const bad = normalizeSchedule({ title: "备份", prompt: "整理作业", kind: "once", at: "2026-11-01 08:00" }, now);
   assert.equal(bad.error.code, "INVALID_ARGUMENTS");
   assert.match(bad.error.message, /未来/);
 });
 
 test("每天与每周的下次执行时间按本地时间推进", () => {
   const daily = { kind: "daily", time: "08:30", enabled: true };
-  assert.equal(nextRunAt(daily, at("2026-11-22T07:00:00+09:00")), at("2026-11-22T08:30:00+09:00").toISOString());
-  assert.equal(nextRunAt(daily, at("2026-11-22T09:00:00+09:00")), at("2026-11-23T08:30:00+09:00").toISOString());
+  assert.equal(nextRunAt(daily, local(11, 22, 7, 0)), local(11, 22, 8, 30).toISOString());
+  assert.equal(nextRunAt(daily, local(11, 22, 9, 0)), local(11, 23, 8, 30).toISOString());
   const weekly = { kind: "weekly", time: "19:00", days: [1, 3], enabled: true }; // 周一、周三
   // 2026-11-22 是周日，下一次是周一 11-23 19:00
-  assert.equal(nextRunAt(weekly, at("2026-11-22T20:00:00+09:00")), at("2026-11-23T19:00:00+09:00").toISOString());
-  assert.equal(nextRunAt({ ...weekly, enabled: false }, at("2026-11-22T20:00:00+09:00")), null);
+  assert.equal(nextRunAt(weekly, local(11, 22, 20, 0)), local(11, 23, 19, 0).toISOString());
+  assert.equal(nextRunAt({ ...weekly, enabled: false }, local(11, 22, 20, 0)), null);
 });
 
 test("时间与星期校验拒绝含糊输入", () => {
@@ -43,11 +44,11 @@ test("时间与星期校验拒绝含糊输入", () => {
 test("计划落盘后可读回，更新与删除都持久化", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "schedules-"));
   try {
-    const now = () => at("2026-11-22T10:00:00+09:00");
+    const now = () => local(11, 22, 10, 0);
     const store = new ScheduleStore(dir, { now });
     const created = await store.create({ title: "每天整理", prompt: "汇总今天的作业", kind: "daily", time: "08:30" });
     assert.ok(created.id);
-    assert.equal(created.nextRunAt, at("2026-11-23T08:30:00+09:00").toISOString());
+    assert.equal(created.nextRunAt, local(11, 23, 8, 30).toISOString());
 
     const reopened = new ScheduleStore(dir, { now });
     const list = await reopened.list();
@@ -69,14 +70,14 @@ test("计划落盘后可读回，更新与删除都持久化", async () => {
 test("到期任务只取一次，执行后单次任务自动停用", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "schedules-due-"));
   try {
-    let nowMs = at("2026-11-22T10:00:00+09:00").getTime();
+    let nowMs = local(11, 22, 10, 0).getTime();
     const store = new ScheduleStore(dir, { now: () => new Date(nowMs) });
     const once = await store.create({ title: "一次性", prompt: "跑一次", kind: "once", at: "2026-11-22 10:30" });
     const saw = describeSchedule((await store.get(once.id)), new Date(nowMs));
-    assert.equal(saw.when, at("2026-11-22T10:30:00+09:00").toISOString());
+    assert.equal(saw.when, local(11, 22, 10, 30).toISOString());
 
     assert.deepEqual(await store.due(), [], "未到点不执行");
-    nowMs = at("2026-11-22T10:31:00+09:00").getTime();
+    nowMs = local(11, 22, 10, 31).getTime();
     const due = await store.due();
     assert.deepEqual(due.map(task => task.id), [once.id]);
     assert.deepEqual(await store.due(), [], "同一次到期不会重复取");
