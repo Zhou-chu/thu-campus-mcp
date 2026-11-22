@@ -285,7 +285,7 @@ async function main() {
     check("窄屏深色仍可达且无横向溢出", await page.evaluate(() => document.documentElement.dataset.theme === "dark" && document.documentElement.scrollWidth <= innerWidth && document.querySelector(".composer").getBoundingClientRect().bottom <= innerHeight));
     await page.locator("#composer").focus();
     const keyboardOrder = [];
-    for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-send']) {
+    for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-effort', '#chat-send']) {
       await page.keyboard.press('Tab');
       keyboardOrder.push(await page.locator(selector).evaluate(node => node === document.activeElement));
     }
