@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDate, normalizeSlots, sportsLoginProof } from "../lib/app/sports.mjs";
+import { normalizeDate, normalizeSlots, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+
+test("sports: status checks only the official origin with its saved token and never returns credentials", async () => {
+  const origin = "https://www.sports.tsinghua.edu.cn";
+  const snapshot = async () => ({ origins: [
+    { origin: "https://other.example", localStorage: [{ name: "token", value: JSON.stringify("unrelated") }] },
+    { origin, localStorage: [{ name: "token", value: JSON.stringify("fixture-token") }] },
+  ] });
+  const fetchImpl = async (url, request) => {
+    assert.equal(url, origin + "/venue/site/system/login/getLoginUser");
+    assert.deepEqual(request.headers, { token: "fixture-token" });
+    assert.equal(request.redirect, "manual");
+    assert.equal(request.method, "GET");
+    return Response.json({ success: true, data: { id: "fixture-id", token: "not-public" } });
+  };
+  assert.deepEqual(await sportsSessionStatus({ snapshot, fetchImpl, now: () => 0 }), {
+    state: "ready", code: "VERIFIED", verified: true, source: "protected-api:sports-current-user", checkedAt: "1970-01-01T00:00:00.000Z",
+  });
+  assert.equal((await sportsSessionStatus({ snapshot: async () => undefined, fetchImpl })).state, "unverified");
+  assert.equal((await sportsSessionStatus({ snapshot, fetchImpl: async () => Response.redirect("https://other.example") })).state, "unknown");
+});
 
 test("sports: HTTP 200 does not make an expired session or missing identity verified", () => {
   assert.deepEqual(sportsLoginProof({ ok: true, status: 200, data: { success: false, errorCode: 1130002 } }), { state: "login-required", code: "SPORTS_LOGIN_REQUIRED" });

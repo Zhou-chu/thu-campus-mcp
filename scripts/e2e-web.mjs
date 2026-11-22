@@ -174,16 +174,19 @@ async function main() {
     timeout: 20000,
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  let expectedModelError = false;
+  let expectedModelError = false, expectedCampusChallenge = false;
   const consoleErrors = [];
   page.on("console", (message) => {
-    const expected = expectedModelError && message.location().url.includes("/api/models") && message.text().includes("502");
+    const expected = (expectedModelError && message.location().url.includes("/api/models") && message.text().includes("502")) ||
+      (expectedCampusChallenge && message.location().url.endsWith("/api/auth/learnx") && message.text().includes("409"));
     if (message.type() === "error" && !expected) consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error)));
   const badResponses = [];
   page.on("response", (response) => {
-    const expected = expectedModelError && new URL(response.url()).pathname === "/api/models" && response.status() === 502;
+    const path = new URL(response.url()).pathname;
+    const expected = (expectedModelError && path === "/api/models" && response.status() === 502) ||
+      (expectedCampusChallenge && path === "/api/auth/learnx" && response.status() === 409);
     if (response.status() >= 400 && !expected) badResponses.push(`${response.status()} ${response.url()}`);
   });
 
@@ -271,7 +274,7 @@ async function main() {
     // 4. 服务页：四行服务 + 编号
     await page.click('button[data-view="services"]');
     await page.waitForSelector(".auth-service");
-    record("服务行数为 5", (await page.locator(".auth-service").count()) === 5);
+    record("服务行数为 7", (await page.locator(".auth-service").count()) === 7);
   record("服务页包含图书馆座位", (await page.locator('.auth-service[data-service="seat"]').count()) === 1);
     record("服务名称与核验入口存在", (await page.locator('.auth-service[data-service="learnx"]').innerText()).includes("网络学堂") && await page.getByRole("button", { name: "核验登录状态", exact: true }).isVisible());
 
@@ -477,18 +480,20 @@ async function main() {
     );
     record("视图容器不整块播报", (await page.locator("#view").getAttribute("aria-live")) === null);
 
-    // 首次学堂登录：只拦截认证任务，绝不向真实校园提交测试学号。
-    step("登录任务失败与学号恢复");
+    // 统一登录与人工验证：使用受控响应，不向校方发登录请求。
+    step("统一账号登录与人工验证");
+    expectedCampusChallenge = true;
     const loginPosts = [];
     let loginStep = 0;
+    await page.route("**/api/auth/learnx", route => route.fulfill({ status: 409, json: { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要验证码" } } }));
     await page.route("**/api/auth/login", async route => {
       loginPosts.push(route.request().postDataJSON()); loginStep = 0;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, jobId: "login-e2e-fixture", job: { status: "queued" } }) });
+      await route.fulfill({ status: 200, json: { ok: true, jobId: "login-e2e-fixture", job: { status: "queued" } } });
     });
     await page.route("**/api/jobs/login-e2e-fixture", async route => {
       const stages = [{ status: "queued" }, { status: "running", phase: "downloading" }, { status: "running", phase: "login" }, { status: "complete" }];
-      const job = loginPosts.at(-1)?.account ? stages[Math.min(loginStep++, stages.length - 1)] : { status: "failed", error: "BROWSER_ACCOUNT_REQUIRED" };
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, found: true, job: { service: "learnx", ...job } }) });
+      const job = stages[Math.min(loginStep++, stages.length - 1)];
+      await route.fulfill({ status: 200, json: { ok: true, found: true, job: { service: "learnx", ...job } } });
     });
     for (const width of [1280, 398]) {
       await page.setViewportSize({ width, height: 900 });
@@ -496,18 +501,18 @@ async function main() {
       const row = page.locator('[data-service="learnx"]');
       const before = loginPosts.length;
       await row.getByRole("button", { name: "登录", exact: true }).click();
-      await row.locator(".auth-notice.error").filter({ hasText: "需要填写学号" }).waitFor();
-      record(`学号缺失明确失败 ${width}`, await page.locator("#learnx-account").evaluate(input => input.required));
-      await row.getByRole("button", { name: "登录", exact: true }).click();
-      record(`空学号不重复提交 ${width}`, loginPosts.length === before + 1);
-      record(`登录表单无横向溢出 ${width}`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-      await page.getByLabel("学号", { exact: true }).fill(" fixture-e2e-account ");
-      await row.getByRole("button", { name: "登录", exact: true }).click();
+      await row.locator(".auth-notice.error").filter({ hasText: "需要验证码" }).waitFor();
+      record(`无需单独输入学号 ${width}`, await page.locator("#learnx-account").count() === 0);
+      record(`人工验证前不启动窗口 ${width}`, loginPosts.length === before);
+      record(`服务页无横向溢出 ${width}`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await row.getByRole("button", { name: "人工验证", exact: true }).click();
       await row.locator(".auth-notice").filter({ hasText: "任务运行中" }).waitFor();
       record(`运行任务不假报已打开 ${width}`, !/窗口已打开|已登录/.test(await row.innerText()));
       await row.locator(".auth-notice").filter({ hasText: "任务已结束" }).waitFor();
-      record(`学号已传参且不持久保存 ${width}`, loginPosts.at(-1).account === "fixture-e2e-account" && await page.locator("#learnx-account").inputValue() === "" && !(await page.evaluate(() => JSON.stringify(localStorage))).includes("fixture-e2e-account"));
+      record(`人工验证由服务端取账号 ${width}`, JSON.stringify(loginPosts.at(-1)) === JSON.stringify({ service: "learnx" }));
     }
+    await page.unroute("**/api/auth/learnx");
+    expectedCampusChallenge = false;
     await page.unroute("**/api/auth/login");
     await page.unroute("**/api/jobs/login-e2e-fixture");
     await page.setViewportSize({ width: 1280, height: 900 });
