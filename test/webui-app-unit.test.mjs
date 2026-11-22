@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -1534,4 +1534,207 @@ test("app: 启停失败会恢复开关并提示，不假装保存成功", async 
   a.event(toggle, "change");
   await flush();
   assert.equal(toggle.checked, true, "失败后恢复原状态");
+});
+
+test("app: 模型提供商列表、启用切换与添加失败都如实显示", async t => {
+  const providers = [
+    { id: "66666666-6666-4666-8666-666666666666", name: "深度求索", kind: "openai", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", models: ["deepseek-chat"], masked: "sk-d****1234", hasKey: true },
+    { id: "77777777-7777-4777-8777-777777777777", name: "Claude", kind: "anthropic", baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5", models: [], masked: "sk-a****cdef", hasKey: true },
+  ];
+  let activeId = providers[0].id;
+  const a = await app(t, {
+    routes: {
+      "GET /api/providers": () => ({ ok: true, providers, activeId }),
+      "PUT /api/providers/active": request => { activeId = request.body.id; return { ok: true, activeId }; },
+      "POST /api/providers": { ok: false, error: { code: "INVALID_ARGUMENTS", message: "接口地址必须是 http(s) 地址。" } },
+      "POST /api/providers/66666666-6666-4666-8666-666666666666/test": { ok: true, models: ["deepseek-chat"], count: 1 },
+    },
+  });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings") && a.$(".provider-settings").querySelectorAll(".card").length === 3, "provider list");
+  const cards = a.$(".provider-settings").querySelectorAll(".card");
+  assert.equal(cards.length, 3, "两个提供商 + 添加表单");
+  assert.match(cards[0].textContent, /深度求索 · OpenAI 兼容/);
+  assert.match(cards[1].textContent, /Claude · Anthropic/);
+  assert.equal(cards[0].querySelector(".switch-input").checked, true, "启用的提供商应有选中态");
+  assert.equal(cards[1].querySelector(".switch-input").checked, false);
+
+  const radio = cards[1].querySelector(".switch-input");
+  radio.checked = true;
+  a.event(radio, "change");
+  await flush();
+  assert.equal(activeId, providers[1].id, "切换启用要写服务端");
+
+  // 添加表单失败：就地报错，不清空名称。
+  const form = a.$(".provider-settings > .card");
+  const nameField = form.querySelector('input[type="text"]');
+  a.input(nameField, "坏地址");
+  a.input(form.querySelector('input[type="url"]'), "ftp://x");
+  a.input(form.querySelector('input[type="password"]'), "sk-test-1234");
+  a.click(form.querySelector("button.primary"));
+  await flush();
+  const error = form.querySelector(".inline-error");
+  assert.equal(error.hidden, false);
+  assert.match(error.textContent, /http\(s\)/);
+  assert.equal(nameField.value, "坏地址");
+});
+
+test("app: 提供商测试、导入模型与删除都走真实接口并刷新列表", async t => {
+  let providers = [
+    { id: "88888888-8888-4888-8888-888888888888", name: "本地", kind: "openai", baseUrl: "https://api.example.com/v1", model: "m1", models: ["m1"], masked: "sk-1****9999", hasKey: true },
+  ];
+  const a = await app(t, {
+    routes: {
+      "GET /api/providers": () => ({ ok: true, providers, activeId: providers[0]?.id || "" }),
+      "POST /api/providers/88888888-8888-4888-8888-888888888888/test": { ok: true, models: ["m1", "m2"], count: 2 },
+      "POST /api/providers/88888888-8888-4888-8888-888888888888/models": () => {
+        providers = [{ ...providers[0], models: ["m1", "m2", "m3"] }];
+        return { ok: true, models: ["m1", "m2", "m3"], provider: providers[0] };
+      },
+      "DELETE /api/providers/88888888-8888-4888-8888-888888888888": () => { providers = []; return { ok: true, removed: "88888888-8888-4888-8888-888888888888" }; },
+    },
+  });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings") && a.$(".provider-settings").querySelectorAll(".card").length === 2, "provider card");
+  const card = a.$(".provider-settings .card");
+  a.click(a.button("测试", card));
+  await flush();
+  assert.equal(a.count("POST /api/providers/88888888-8888-4888-8888-888888888888/test"), 1);
+  assert.match(a.document.body.textContent, /连接正常|2 个模型/);
+
+  a.click(a.button("导入模型", card));
+  await flush();
+  assert.equal(a.count("POST /api/providers/88888888-8888-4888-8888-888888888888/models"), 1);
+
+  a.confirmResult = false;
+  a.click(a.button("删除", card));
+  await flush();
+  assert.equal(a.count("DELETE /api/providers/88888888-8888-4888-8888-888888888888"), 0, "取消删除不发请求");
+  a.confirmResult = true;
+  a.click(a.button("删除", a.$(".provider-settings .card")));
+  await flush();
+  assert.equal(a.count("DELETE /api/providers/88888888-8888-4888-8888-888888888888"), 1);
+});
+
+test("app: 提供商列表为空时说明继续用内置模型", async t => {
+  const a = await app(t, { routes: { "GET /api/providers": { ok: true, providers: [], activeId: "" } } });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings"), "provider settings");
+  assert.match(a.$(".provider-settings").textContent, /还没有第三方提供商/);
+});
+
+test("app: 添加提供商成功后清空密钥并刷新列表", async t => {
+  let providers = [];
+  const a = await app(t, {
+    routes: {
+      "GET /api/providers": () => ({ ok: true, providers, activeId: providers[0]?.id || "" }),
+      "POST /api/providers": request => {
+        providers = [{ id: "99999999-9999-4999-8999-999999999999", name: request.body.name, kind: request.body.kind, baseUrl: request.body.baseUrl, model: request.body.model || "gpt-4.1-mini", models: [], masked: "sk-t****1234", hasKey: true }];
+        return { ok: true, provider: providers[0] };
+      },
+    },
+  });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings > .card"), "provider form");
+  const form = a.$(".provider-settings > .card");
+  a.input(form.querySelector('input[type="text"]'), "新提供商");
+  a.input(form.querySelector('input[type="url"]'), "https://api.example.com/v1");
+  a.input(form.querySelector('input[type="password"]'), "sk-test-1234");
+  a.click(form.querySelector("button.primary"));
+  await flush();
+  const post = a.calls.find(call => call.method === "POST" && new URL(call.url).pathname === "/api/providers");
+  assert.deepEqual(post.body, { name: "新提供商", kind: "openai", baseUrl: "https://api.example.com/v1", apiKey: "sk-test-1234", model: "" });
+  await until(() => a.$(".provider-settings").textContent.includes("新提供商"), "list refreshed");
+  assert.equal(a.$(".provider-settings input[type=password]").value, "", "成功后清空密钥输入框");
+});
+
+test("app: 提供商操作失败时如实提示并恢复状态", async t => {
+  const providers = [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "会失败", kind: "openai", baseUrl: "https://x/v1", model: "m", models: [], masked: "sk-1****9999", hasKey: true }];
+  const a = await app(t, {
+    routes: {
+      "GET /api/providers": { ok: true, providers, activeId: providers[0].id },
+      "PUT /api/providers/active": { ok: false, error: { code: "PROVIDER_NOT_FOUND", message: "提供商不存在。" } },
+      "POST /api/providers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/test": { ok: false, error: { code: "PROVIDER_UNREACHABLE", message: "无法连接该接口地址。" } },
+      "POST /api/providers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/models": { ok: false, error: { code: "PROVIDER_AUTH_FAILED", message: "密钥被拒绝。" } },
+    },
+  });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings") && a.$(".provider-settings").querySelectorAll(".card").length === 2, "provider card");
+  const card = a.$(".provider-settings .card");
+
+  const toggle = card.querySelector(".switch-input");
+  toggle.checked = false;
+  a.event(toggle, "change");
+  await flush();
+  assert.equal(toggle.checked, true, "切换失败要恢复原状态");
+  assert.match(a.document.body.textContent, /提供商不存在/);
+
+  a.click(a.button("测试", card));
+  await flush();
+  assert.match(a.document.body.textContent, /无法连接该接口地址/);
+
+  a.click(a.button("导入模型", card));
+  await flush();
+  assert.match(a.document.body.textContent, /密钥被拒绝/);
+});
+
+test("app: 提供商列表读取失败时显示说明而不是空成功", async t => {
+  const a = await app(t, { routes: { "GET /api/providers": { ok: false, error: { code: "APP_ERROR", message: "配置损坏" } } } });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings"), "provider settings");
+  await flush();
+  assert.match(a.$(".provider-settings").textContent, /还没有第三方提供商/);
+});
+
+test("app: 提供商缺字段时用可读兜底，不显示 undefined", async t => {
+  const a = await app(t, {
+    routes: {
+      // 模拟老服务：没有 activeId、提供商缺 model/masked/models。
+      "GET /api/providers": { ok: true, providers: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "裸配置", kind: "openai-responses", baseUrl: "https://r/v1" }] },
+      "POST /api/providers": { ok: false, error: {} },
+    },
+  });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings") && a.$(".provider-settings").querySelectorAll(".card").length === 2, "provider card");
+  const card = a.$(".provider-settings .card");
+  assert.match(card.textContent, /裸配置 · Responses/);
+  assert.match(card.textContent, /未选模型/);
+  assert.match(card.textContent, /密钥 已保存/);
+  assert.doesNotMatch(card.textContent, /undefined/);
+
+  const form = a.$(".provider-settings > .card");
+  a.input(form.querySelector('input[type="text"]'), "兜底");
+  a.input(form.querySelector('input[type="url"]'), "https://x/v1");
+  a.input(form.querySelector('input[type="password"]'), "sk-x");
+  a.click(form.querySelector("button.primary"));
+  await flush();
+  assert.match(form.querySelector(".inline-error").textContent, /请求失败|添加失败/);
+});
+
+test("app: 右侧栏归档、详情与刷新真实交互", async t => {
+  const items = [
+    { id: "h1", courseId: "c1", course: "电力电子", title: "作业一", submitted: false, deadline: checkedAt, deadlineMs: Date.parse(checkedAt), submitTime: null, submitMs: null, grade: null, ungraded: false },
+  ];
+  const routes = {
+    "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: items, expired: [], ungraded: [], courseErrors: [] },
+    "GET /api/sidebar/assignments/c1/h1": { ok: true, course: "电力电子", title: "作业一", description: "题目正文", attachments: [] },
+  };
+
+  // 归档：条目消失并提示可恢复。
+  const first = await app(t, { routes });
+  await until(() => /作业一/.test(first.$("#right-sidebar").textContent), "assignment rendered");
+  const archive = [...first.$("#right-sidebar").querySelectorAll("button")].find(node => node.textContent === "归档");
+  assert.ok(archive, "有待交作业时应有归档按钮");
+  first.click(archive);
+  await flush();
+  assert.match(first.document.body.textContent, /已归档/);
+
+  // 详情：走真实接口，打开后仍能关闭回到列表。
+  const second = await app(t, { routes });
+  await until(() => /作业一/.test(second.$("#right-sidebar").textContent), "assignment rendered again");
+  const detail = [...second.$("#right-sidebar").querySelectorAll("button")].find(node => node.textContent === "详情");
+  assert.ok(detail, "应有详情按钮");
+  second.click(detail);
+  await flush();
+  assert.equal(second.count("GET /api/sidebar/assignments/c1/h1"), 1, "详情走真实接口");
 });

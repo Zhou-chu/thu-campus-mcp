@@ -31,6 +31,9 @@ const state = {
   tools: [],
   sessions: [],
   schedules: [],
+  providers: [],
+  providersLoaded: false,
+  providersActiveId: "",
   schedulesLoaded: false,
   schedulesError: "",
   schedulesRunner: null,
@@ -1819,6 +1822,113 @@ function gitlabCard() {
   ]);
 }
 
+/* ---------------- 第三方模型提供商 ---------------- */
+function providerRow(provider, reload) {
+  const active = el("input", { type: "checkbox", class: "switch-input", "aria-label": "启用 " + provider.name, title: "启用后对话改走该提供商" });
+  active.checked = state.providersActiveId === provider.id;
+  active.addEventListener("change", () => runAction(active, async () => {
+    try {
+      // 取消勾选即停用，回到内置路由。
+      await api("/api/providers/active", { method: "PUT", body: { id: active.checked ? provider.id : "" } });
+      reload();
+    } catch (e) {
+      active.checked = !active.checked;
+      toast(e.message || "切换失败。");
+    }
+  }));
+  const detail = el("div", { class: "stack" }, [
+    el("strong", { text: provider.name + (provider.kind === "anthropic" ? " · Anthropic" : provider.kind === "openai-responses" ? " · Responses" : " · OpenAI 兼容") }),
+    el("span", { class: "small muted", text: provider.baseUrl }),
+    el("span", { class: "small muted", text: (provider.model ? "默认模型 " + provider.model : "未选模型") + (provider.models?.length ? ` · 已导入 ${provider.models.length} 个` : "") + ` · 密钥 ${provider.masked || "已保存"}` }),
+  ]);
+  const test = el("button", { class: "ghost", type: "button", text: "测试" });
+  test.addEventListener("click", () => runAction(test, async () => {
+    const data = await api(`/api/providers/${provider.id}/test`, { method: "POST" });
+    toast(`连接正常，上游有 ${data.count} 个模型。`);
+    return data;
+  }));
+  const importModels = el("button", { class: "ghost", type: "button", text: "导入模型" });
+  importModels.addEventListener("click", () => runAction(importModels, async () => {
+    const data = await api(`/api/providers/${provider.id}/models`, { method: "POST" });
+    toast(`已导入 ${data.models.length} 个模型，可在对话页选择。`);
+    reload();
+    return data;
+  }));
+  const remove = el("button", { class: "ghost danger", type: "button", text: "删除" });
+  remove.addEventListener("click", () => runAction(remove, async () => {
+    if (!confirm(`删除提供商“${provider.name}”？`)) return;
+    await api(`/api/providers/${provider.id}`, { method: "DELETE" });
+    reload();
+  }));
+  return el("div", { class: "card" }, [
+    el("div", { class: "row between" }, [detail, el("div", { class: "row schedule-actions" }, [active, test, importModels, remove])]),
+  ]);
+}
+function providerCard() {
+  const list = el("div", { class: "stack" });
+  const nameInput = el("input", { type: "text", placeholder: "名称，如 深度求索", "aria-label": "提供商名称", maxlength: "40" });
+  const kindSelect = el("select", { "aria-label": "协议" }, [
+    el("option", { value: "openai", text: "OpenAI 兼容（/chat/completions）" }),
+    el("option", { value: "openai-responses", text: "OpenAI Responses（/v1/responses）" }),
+    el("option", { value: "anthropic", text: "Anthropic（/v1/messages）" }),
+  ]);
+  const baseInput = el("input", { type: "url", placeholder: "https://api.openai.com/v1", "aria-label": "接口地址" });
+  const keyInput = el("input", { type: "password", placeholder: "API 密钥", "aria-label": "API 密钥", autocomplete: "off", spellcheck: "false" });
+  const modelInput = el("input", { type: "text", placeholder: "默认模型（导入后可留空）", "aria-label": "默认模型" });
+  const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });
+  const submit = el("button", { class: "primary", type: "button", text: "添加提供商" });
+  const reload = () => { state.providersLoaded = false; refreshProviders(); };
+  submit.addEventListener("click", () => runAction(submit, async () => {
+    errorNode.hidden = true;
+    const body = { name: nameInput.value.trim(), kind: kindSelect.value, baseUrl: baseInput.value.trim(), apiKey: keyInput.value, model: modelInput.value.trim() };
+    try {
+      await api("/api/providers", { method: "POST", body });
+      keyInput.value = "";
+      reload();
+    } catch (e) {
+      errorNode.hidden = false;
+      errorNode.textContent = e.message || "添加失败。";
+    }
+  }, { pending: "保存中…", errorNode }));
+  const draw = () => {
+    clear(list);
+    if (!state.providers.length) {
+      list.append(el("p", { class: "small muted", text: "还没有第三方提供商；不添加时继续使用内置 MadModel。" }));
+      return;
+    }
+    for (const provider of state.providers) list.append(providerRow(provider, reload));
+  };
+  const refreshProviders = () => {
+    void api("/api/providers").then(data => {
+      state.providers = data.providers || [];
+      state.providersActiveId = data.activeId || "";
+      draw();
+    }).catch(() => { state.providers = state.providers || []; });
+  };
+  draw();
+  if (!state.providersLoaded) {
+    state.providersLoaded = true;
+    void api("/api/providers").then(data => {
+      state.providers = data.providers || [];
+      state.providersActiveId = data.activeId || "";
+      // 只刷新这一块，避免整页重绘把用户正在操作的其它设置卡换掉。
+      draw();
+    }).catch(() => { state.providers = []; draw(); });
+  }
+  return el("div", { class: "stack provider-settings" }, [
+    list,
+    el("div", { class: "card stack" }, [
+      el("h3", { text: "添加提供商" }),
+      nameInput,
+      el("div", { class: "form-row" }, [kindSelect, baseInput]),
+      keyInput,
+      modelInput,
+      submit,
+      errorNode,
+      el("p", { class: "small muted", text: "密钥只保存在本机；启用后对话改走该提供商，停用即回到 MadModel。" }),
+    ]),
+  ]);
+}
 function settingsView() {
   const wrap = el("div", { class: "stack settings-page" });
   wrap.append(el("h2", { text: "设置" }));
@@ -1859,6 +1969,7 @@ function settingsView() {
   });
   surface.append(settingsSection("接入其它设备", [inviteButton, errorNode, codeNode, validity, linkBox]));
   diagnostics.append(residentCard(), el("a", { href: "/preview.html", target: "_blank", rel: "noreferrer", text: "设计目录" }));
+  surface.append(settingsSection("模型提供商", [providerCard()], "settings-providers"));
   surface.append(settingsSection("GitLab", [gitlabCard()], "settings-gitlab"));
 surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
   surface.append(settingsSection("设备安全", [rotateTokenButton(), el("button", {

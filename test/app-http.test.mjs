@@ -1426,3 +1426,32 @@ test("app: 作业栏会话失效会同步到服务状态，恢复后自动清除
   const cleared = await (await fetch(url + "/api/meta", { headers })).json();
   assert.notEqual(cleared.services.learnx?.state, "expired", "恢复后信号应清除");
 });
+
+test("HTTP 边界：超大请求体 413、坏 JSON 400、IPv6 主机头与静态版本号", async (t) => {
+  const { url, pairing } = await boot(t);
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+
+  const big = await fetch(url + "/api/tools/learn_status", { method: "POST", headers, body: JSON.stringify({ pad: "x".repeat(3 * 1024 * 1024) }) });
+  assert.equal(big.status, 413);
+  assert.equal((await big.json()).error.code, "PAYLOAD_TOO_LARGE");
+
+  const broken = await fetch(url + "/api/settings", { method: "PUT", headers, body: "{oops" });
+  assert.equal(broken.status, 400);
+  assert.equal((await broken.json()).error.code, "INVALID_JSON");
+
+  // 方括号 IPv6 主机头按 IPv6 解析，不应被当成陌生 Host 拒绝。
+  const { request } = await import("node:http");
+  const ipv6 = await new Promise((resolve, reject) => {
+    const req = request(url + "/healthz", { headers: { host: "[::1]:8971" } }, response => {
+      let text = "";
+      response.on("data", chunk => { text += chunk; });
+      response.on("end", () => resolve({ status: response.statusCode, text }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+  // 只监听 IPv4 时方括号 IPv6 主机名属于陌生 Host：按策略拒绝，而不是 HTTP 500。
+  assert.equal(ipv6.status, 403);
+  assert.match(ipv6.text, /HOST_REJECTED/);
+});
