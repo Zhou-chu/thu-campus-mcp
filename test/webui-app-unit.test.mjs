@@ -914,7 +914,7 @@ test("app: sports shows manual verification and exposes the matching login actio
 });
 
 test("app: refreshing a throttled sports venue preserves selected date and reloads only its slots", async t => {
-  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  const day = new Date().toLocaleDateString("sv-SE");
   const slotKey = `GET /api/sports/slots?sport=${encodeURIComponent("游泳")}&venue=${encodeURIComponent("陈明游泳馆")}&date=${day}`;
   const a = await app(t, { routes: {
     "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
@@ -1330,7 +1330,7 @@ test("app: sports view reports empty catalog and venue failures honestly", async
 });
 
 test("app: sports sessions show price, capacity and status truthfully", async t => {
-  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, {
     routes: {
       "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
@@ -1397,7 +1397,7 @@ test("app: gitlab settings surface save and connection failures instead of prete
 
 
 test("app: sports booking buttons report the prepared step and failures honestly", async t => {
-  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, {
     routes: {
       "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
