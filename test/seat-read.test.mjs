@@ -1,6 +1,33 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSeatReader, createSeatReadSession, SeatError } from "../lib/app/seat-read.mjs";
+import { createSeatLogin, createSeatReader, createSeatReadSession, SeatError } from "../lib/app/seat-read.mjs";
+
+test("seat login: uses verified active snapshot without opening a browser; network failure never resets it", async () => {
+  for (const state of ["ready", "unknown"]) {
+    const login = createSeatLogin({ probe: async () => ({ state, verified: state === "ready" }), open: () => assert.fail("must not open browser") });
+    const result = await login();
+    assert.equal(result.ok, state === "ready");
+    if (!result.ok) assert.equal(result.code, "PROBE_FAILED");
+  }
+});
+
+test("seat login: confirmed expiry triggers one reset and requires a protected response before checkpoint", async () => {
+  for (const result of [{ ok: true }, { ok: false, code: "CAS_CAPTCHA_REQUIRED" }, { ok: true, failProbe: true }]) {
+    const steps = [];
+    let checks = 0;
+    const login = createSeatLogin({
+      probe: async () => ({ state: "login-required" }),
+      open: fn => fn({ browser: { checkpoint: async () => { steps.push("checkpoint"); } } }),
+      verify: async () => { steps.push("verify"); if (++checks === 1 || result.failProbe) throw new SeatError("SEAT_LOGIN_REQUIRED", "expired"); },
+      reset: async () => { steps.push("reset"); },
+      authenticate: async () => { steps.push("authenticate"); return result; },
+    });
+    const [a, b] = await Promise.all([login(), login()]);
+    assert.equal(a, b);
+    assert.deepEqual(steps, ["verify", "reset", "authenticate", ...(result.ok ? ["verify"] : []), ...(result.ok && !result.failProbe ? ["checkpoint"] : [])]);
+    assert.equal(a.ok, result.ok && !result.failProbe);
+  }
+});
 
 const validPayload = { status: 1, data: { list: [] } };
 const seatCookie = { domain: "seat.lib.tsinghua.edu.cn", expires: -1, path: "/", name: "seat", value: "session" };

@@ -42,8 +42,17 @@ test("browser-lock: 任务抛错后队列仍可继续，深度归零", async () 
   assert.equal(value, "ok");
 });
 
-test("browser-lock: 超时返回 BROWSER_BUSY", async () => {
-  const slow = withBrowserLock("超时任务", () => new Promise(resolve => setTimeout(() => resolve("late"), 120)), { timeoutMs: 20 });
-  await assert.rejects(() => slow, error => error.code === "BROWSER_BUSY");
-  await new Promise(resolve => setTimeout(resolve, 140));
+test("browser-lock: 超时只取消排队，已启动任务不会被误报失败", async () => {
+  let release;
+  const hold = new Promise(resolve => { release = resolve; });
+  const running = withBrowserLock("执行中", () => hold, { timeoutMs: 5 });
+  let skippedTaskRuns = 0;
+  const queued = withBrowserLock("排队中", () => { skippedTaskRuns++; }, { timeoutMs: 10 });
+  await assert.rejects(() => queued, { code: "BROWSER_BUSY" });
+  assert.equal(browserQueueDepth(), 1);
+  release("done");
+  assert.equal(await running, "done");
+  assert.equal(await withBrowserLock("后续", async () => "ok"), "ok");
+  assert.equal(skippedTaskRuns, 0);
+  assert.equal(browserQueueDepth(), 0);
 });
