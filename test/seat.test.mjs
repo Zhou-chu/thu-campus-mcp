@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache, seatQueryWindow } from "../lib/app/seat.mjs";
+import { normalizeBuckets, normalizeDays, normalizeFloors, normalizeLibraries, normalizeReserve, normalizeSections, normalizeSeats, normalizeRules, normalizeSegments, reserveErrorCode, assertBookingWindow, bookingWindowOpen, createTtlCache, createSeatSections, seatQueryWindow } from "../lib/app/seat.mjs";
 
 test("seat: 当天从北京时间现在查，未来从官方起始时间查", () => {
   const segment = { id: 123, day: "2026-11-22", start: "08:00", end: "22:00" };
@@ -206,6 +206,28 @@ test("seat: 分区扫描结果按 TTL 复用", () => {
   cache.set("k", 2);
   cache.clear();
   assert.equal(cache.get("k"), null, "清理后为空");
+});
+
+test("seat: 分区扫描的缓存按实例注入，两个实例不会共享结果", async () => {
+  let calls = 0;
+  const read = fn => fn({ call: async path => {
+    calls += 1;
+    if (path === "/api.php/v3areas/35") return { data: { areaInfo: { id: 35, name: "馆" }, childArea: [{ id: 2, name: "二层", isValid: 1 }] } };
+    if (path === "/api.php/v3areas/2") return { data: { areaInfo: { id: 2, name: "二层" }, childArea: [{ id: 3, name: "A区", isValid: 1, TotalCount: 40, UnavailableSpace: 35 }] } };
+    assert.equal(path, "/api.php/areadays/3");
+    return { data: { list: [{ id: 9, day: "2026-11-22", startTime: "08:00", endTime: "22:00" }] } };
+  } });
+  const first = createSeatSections({ read, today: () => "2026-11-22" });
+  const second = createSeatSections({ read, today: () => "2026-11-22" });
+  const one = await first(35);
+  assert.equal(one.sections.length, 1);
+  assert.equal(calls, 3, "楼层 + 分区 + 日期共三次只读请求");
+  const again = await first(35);
+  assert.equal(again.cached, true, "同一实例内命中缓存");
+  assert.equal(calls, 3, "命中缓存后不再请求");
+  const other = await second(35);
+  assert.equal(other.cached, undefined, "另一个实例独立缓存");
+  assert.equal(calls, 6);
 });
 
 test("seat: 规则文本提取开放时段与当日次日规则", () => {
