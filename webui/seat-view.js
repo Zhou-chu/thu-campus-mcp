@@ -1,4 +1,36 @@
-const today = () => new Date().toLocaleDateString("sv-SE");
+const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+
+function drawSeatPlan(seats, selected) {
+  const positioned = seats.filter(seat => seat.position);
+  if (!positioned.length) return null;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  const xs = positioned.map(({ position: p }) => [p.x, p.x + p.width]);
+  const ys = positioned.map(({ position: p }) => [p.y, p.y + p.height]);
+  const minX = Math.min(...xs.map(([a]) => a)) - 2;
+  const maxX = Math.max(...xs.map(([, b]) => b)) + 2;
+  const minY = Math.min(...ys.map(([a]) => a)) - 2;
+  const maxY = Math.max(...ys.map(([, b]) => b)) + 2;
+  svg.setAttribute("viewBox", `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
+  svg.setAttribute("class", "seat-plan");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `座位分布图，已定位${positioned.length}个座位，共${seats.length}个`);
+  for (const seat of positioned) {
+    const rect = document.createElementNS(NS, "rect");
+    rect.setAttribute("x", seat.position.x);
+    rect.setAttribute("y", seat.position.y);
+    rect.setAttribute("width", seat.position.width);
+    rect.setAttribute("height", seat.position.height);
+    rect.setAttribute("rx", "0.25");
+    rect.setAttribute("data-open", String(seat.available === true));
+    rect.setAttribute("data-active", String(seat.id === selected?.id));
+    const title = document.createElementNS(NS, "title");
+    title.textContent = `${seat.name} · ${seat.available === true ? "可预约" : seat.statusLabel || "不可预约"}`;
+    rect.append(title);
+    svg.append(rect);
+  }
+  return svg;
+}
 
 export function createSeatView({ el, api }) {
   const state = {
@@ -39,20 +71,28 @@ export function createSeatView({ el, api }) {
         return box;
       }
       if (!state.seats.length) return el("p", { class: "seat-empty", text: state.area ? "该分区当前没有可约座位。" : "先选择分区。" });
+      const count = state.seats.filter(seat => seat.available === true).length;
+      const contents = el("div", { class: "stack" }, [el("p", { class: "seat-key" }, [
+        el("span", { dataset: { open: "true" }, text: `可预约 ${count}` }),
+        el("span", { dataset: { open: "false" }, text: `不可预约 ${state.seats.length - count}` }),
+      ])]);
+      const plan = drawSeatPlan(state.seats, state.seat);
+      if (plan) contents.append(el("details", { class: "seat-plan-card" }, [el("summary", { text: "座位分布图" }), plan]));
       const grid = el("div", { class: "seat-grid" });
       for (const seat of state.seats) {
+        const status = seat.available === true ? "可预约" : `不可预约${seat.statusLabel ? " · " + seat.statusLabel : ""}`;
         grid.append(el("button", {
           class: "seat",
           type: "button",
           disabled: !seat.available,
           dataset: { open: String(seat.available), active: String(state.seat !== null && state.seat.id === seat.id) },
           "aria-pressed": String(state.seat !== null && state.seat.id === seat.id),
-          title: seat.available ? "可预约" : "不可预约",
-          text: seat.name,
+          "aria-label": `${seat.name}，${status}`,
           onclick: () => { state.seat = seat; state.notice = ""; render(); },
-        }));
+        }, [el("span", { text: seat.name }), el("span", { class: "seat-status", text: status })]));
       }
-      return grid;
+      contents.append(grid);
+      return contents;
     };
 
     const confirmBlock = () => {
@@ -94,7 +134,7 @@ export function createSeatView({ el, api }) {
             },
           }, state.areas.map(item => el("option", {
             value: String(item.id),
-            text: item.free !== null && item.free !== undefined ? `${item.name}（空位 ${item.free}）` : item.name,
+            text: item.name,
             selected: state.area !== null && item.id === state.area.id,
           })))
         : el("p", { class: "seat-empty", text: state.floor ? "该楼层没有分区。" : "先选择楼层。" }));

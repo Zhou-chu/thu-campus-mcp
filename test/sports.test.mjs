@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeDate, normalizeSlots } from "../lib/app/sports.mjs";
+import { normalizeDate, normalizeSlots, sportsLoginProof } from "../lib/app/sports.mjs";
+
+test("sports: HTTP 200 does not make an expired session or missing identity verified", () => {
+  assert.deepEqual(sportsLoginProof({ ok: true, status: 200, data: { success: false, errorCode: 1130002 } }), { state: "login-required", code: "SPORTS_LOGIN_REQUIRED" });
+  assert.equal(sportsLoginProof({ ok: false, status: 401 }).state, "login-required");
+  assert.equal(sportsLoginProof(null).state, "unknown");
+  assert.equal(sportsLoginProof({ ok: true, status: 200, data: { success: true, data: {} } }).state, "unknown");
+  assert.deepEqual(sportsLoginProof({ ok: true, status: 200, data: { success: true, data: { id: "fixture-user" } } }), { state: "ready", code: "VERIFIED" });
+});
 
 test("sports: 日期在紧凑数字与标准格式之间归一", () => {
   assert.equal(normalizeDate(20261117), "2026-11-17");

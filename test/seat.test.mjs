@@ -64,6 +64,20 @@ test("seat: 时段解析出 segment 与真实时间", () => {
   assert.deepEqual(normalizeSegments({ list: [{ day: "", id: 2 }] }), []);
 });
 
+test("seat: 保留官网座位坐标和状态，不生成缺失位置", () => {
+  const [maintenance, unknown, occupied] = normalizeSeats({ list: [
+    { id: 1, name: "A01", status: 4, status_name: " 维护 ", point_x: 22.1, point_y: "71.1", width: 2, height: 4 },
+    { id: 2, name: "A02", point_x: null, point_y: 40, width: 2, height: 3 },
+    { id: 3, name: "A03", status: 6, status_name: "使用中", point_x: 99, point_y: 30, width: 2, height: 3 },
+  ] });
+  assert.deepEqual(maintenance.position, { x: 22.1, y: 71.1, width: 2, height: 4 });
+  assert.equal(maintenance.statusLabel, "维护");
+  assert.equal(maintenance.available, false);
+  assert.equal(unknown.position, null);
+  assert.equal(occupied.position, null);
+  assert.equal(occupied.statusLabel, "使用中");
+});
+
 test("seat: 座位列表按可用性归一，不把缺 status 当成可用", () => {
   const data = {
     list: [
