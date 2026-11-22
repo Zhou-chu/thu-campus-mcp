@@ -162,6 +162,8 @@ function bootToken() {
   const urlTokenRaw = hash.get("token") || query.get("token") || "";
   const urlBaseRaw = hash.get("base") || query.get("base") || "";
   const code = sanitizePairCode(hash.get("code") || query.get("code") || "");
+  // 桌面启动器用一次性会话码代替令牌：码出现在 URL 里但没有长期价值。
+  state.sessionCode = String(hash.get("session") || query.get("session") || "").slice(0, 120);
   let storedRaw = "", legacyTokenRaw = "", legacyBaseRaw = "";
   try {
     storedRaw = localStorage.getItem(CONNECTION_KEY) || "";
@@ -177,12 +179,34 @@ function bootToken() {
   writeConnection(localStorage, { base: connection.base, token: connection.token });
   if (connection.cleared) state.pairNotice = "服务器地址已更换，旧令牌不会沿用，请重新配对。";
   if (code) state.deeplinkCode = code;
-  if (urlTokenRaw || code || urlBaseRaw || location.search || location.hash)
+  if (urlTokenRaw || code || state.sessionCode || urlBaseRaw || location.search || location.hash)
     history.replaceState(null, "", location.pathname);
 }
 function forgetToken() {
   state.token = "";
   writeConnection(localStorage, { base: state.base, token: "" });
+}
+async function redeemSessionCode() {
+  if (!state.sessionCode) return false;
+  const code = state.sessionCode;
+  state.sessionCode = "";
+  try {
+    const response = await fetch((state.base || location.origin) + "/api/session/redeem", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "omit",
+      body: JSON.stringify({ code }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const token = sanitizeToken(String(data?.token ?? ""));
+    if (!response.ok || !data.ok || !token) throw new Error(data?.error?.message || "会话码无效或已过期。");
+    state.token = token;
+    writeConnection(localStorage, { base: state.base || location.origin, token });
+    return true;
+  } catch (e) {
+    state.pairNotice = e.message || "会话码无效，请从电脑上重新打开。";
+    return false;
+  }
 }
 /* ---------------- 配对 ---------------- */
 function showPair(message) {
@@ -1832,7 +1856,7 @@ function settingsView() {
   diagnostics.append(residentCard(), el("a", { href: "/preview.html", target: "_blank", rel: "noreferrer", text: "设计目录" }));
   surface.append(settingsSection("GitLab", [gitlabCard()], "settings-gitlab"));
 surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
-  surface.append(settingsSection("设备安全", [el("button", {
+  surface.append(settingsSection("设备安全", [rotateTokenButton(), el("button", {
     class: "ghost danger", type: "button", text: "清除本地令牌并退出",
     onclick: () => { forgetToken(); showPair("已清除本地令牌。"); },
   })], "settings-security"));
@@ -1840,6 +1864,31 @@ surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
   return wrap;
 }
 
+function rotateTokenButton() {
+  const status = el("p", { class: "small muted", role: "status", hidden: true });
+  const button = el("button", {
+    class: "ghost", type: "button", text: "重新签发本机令牌",
+    onclick: () => runAction(button, async () => {
+      if (!confirm("重新签发后，其它已配对设备与本机旧令牌都会立即失效，需要用新令牌重新连接。继续？")) return;
+      status.hidden = false;
+      status.textContent = "正在签发新令牌…";
+      try {
+        const data = await api("/api/session/rotate", { method: "POST", body: {} });
+        const token = sanitizeToken(String(data.token ?? ""));
+        if (!token) throw new Error("服务返回的令牌不合法，未保存。");
+        state.token = token;
+        writeConnection(localStorage, { base: state.base || location.origin, token });
+        status.textContent = "新令牌已保存，本机继续可用；旧令牌与其它设备已失效。";
+        toast("本机令牌已重新签发。");
+      } catch (e) {
+        status.textContent = e.code === "ROTATION_FIXED_TOKEN"
+          ? "当前使用固定令牌，需在运行配置里更换后重新配对。"
+          : e.message || "令牌签发失败，旧令牌仍然有效。";
+      }
+    }),
+  });
+  return el("div", { class: "stack" }, [button, status]);
+}
 async function loadSessions() {
   try {
     const data = await api("/api/sessions");
@@ -1952,6 +2001,7 @@ async function start() {
     for (const popover of document.querySelectorAll(".composer-popover[open]")) { popover.open = false; popover.querySelector("summary").focus(); }
   });
   bootToken();
+  if (!state.token) await redeemSessionCode();
   document.addEventListener("visibilitychange", () => jobPoller.sync());
   window.addEventListener("pagehide", () => jobPoller.stop());
   for (const tab of document.querySelectorAll(".tab"))
