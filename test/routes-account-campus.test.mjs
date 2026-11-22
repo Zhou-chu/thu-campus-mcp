@@ -307,3 +307,64 @@ test("预约准备与状态、关闭接口都返回真实数据", async () => {
     assert.equal(result.status, status, code);
   }
 });
+test("座位与体育的全部只读端点都能返回真实数据", async () => {
+  const { base } = campusFixture();
+  const handler = createCampusRoutes(base);
+  const seatPaths = ["libraries", "floors", "areas", "rules", "segments", "days", "seats", "sections"];
+  for (const name of seatPaths) {
+    const result = await call(handler, { pathname: "/api/seat/" + name });
+    assert.equal(result.status, 200, name);
+    assert.equal(result.body.ok, true, name);
+  }
+  const sportsPaths = ["sports", "venues", "scenes", "available", "slots"];
+  for (const name of sportsPaths) {
+    const result = await call(handler, { pathname: "/api/sports/" + name });
+    assert.equal(result.status, 200, name);
+    assert.equal(result.body.ok, true, name);
+  }
+});
+
+test("预约准备接受全部可选字段，缺省时给默认运动与场馆", async () => {
+  const full = campusFixture();
+  const prepared = await call(createCampusRoutes(full.base), {
+    method: "POST",
+    pathname: "/api/sports/reserve/prepare",
+    body: { sceneUuid: "s", siteUuid: "t", startTime: "19:00", endTime: "20:00", siteType: " 泳道 ", members: ["a", "b"], formId: " f1 ", deployUuid: " d1 " },
+  });
+  assert.equal(prepared.status, 200);
+  assert.equal(prepared.body.args.siteType, "泳道");
+  assert.deepEqual(prepared.body.args.members, ["a", "b"]);
+  assert.equal(prepared.body.args.formId, "f1");
+  assert.equal(prepared.body.args.deployUuid, "d1");
+
+  const defaults = campusFixture();
+  const fallback = await call(createCampusRoutes(defaults.base), { method: "POST", pathname: "/api/sports/booking/prepare", body: {} });
+  assert.equal(fallback.status, 200);
+  assert.equal(fallback.body.prepared, true);
+});
+
+test("登录成功与未知异常分别返回成功或向上抛出", async () => {
+  const ok = campusFixture({ seatLogin: { ok: true, verified: true }, sportsLogin: { ok: true } });
+  const handler = createCampusRoutes(ok.base);
+  assert.equal((await call(handler, { method: "POST", pathname: "/api/seat/login" })).status, 200);
+  assert.equal((await call(handler, { method: "POST", pathname: "/api/sports/login" })).status, 200);
+
+  const seatBoom = campusFixture();
+  seatBoom.base.seatLogin = async () => { throw new Error("未预期"); };
+  await assert.rejects(() => call(createCampusRoutes(seatBoom.base), { method: "POST", pathname: "/api/seat/login" }), /未预期/);
+
+  const readBoom = campusFixture();
+  readBoom.base.seat.libraries = async () => { throw new Error("读取炸了"); };
+  await assert.rejects(() => call(createCampusRoutes(readBoom.base), { pathname: "/api/seat/libraries" }), /读取炸了/);
+
+  const sportsBoom = campusFixture();
+  sportsBoom.base.sports.list = async () => { throw new Error("体育炸了"); };
+  await assert.rejects(() => call(createCampusRoutes(sportsBoom.base), { pathname: "/api/sports/sports" }), /体育炸了/);
+});
+
+test("座位预约成功路径返回下单结果", async () => {
+  const { base } = campusFixture({ approve: true, seatReserve: { ok: true, message: "已预约 A001" } });
+  const result = await call(createCampusRoutes(base), { method: "POST", pathname: "/api/seat/reserve" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.message, "已预约 A001");
+});
