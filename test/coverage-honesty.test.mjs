@@ -28,8 +28,12 @@ test("生产代码不再用覆盖率注释隐藏不可达声明", async () => {
   assert.deepEqual(found, [], "不要用 c8 ignore 掩盖路径；改为可注入依赖并补测试");
 });
 
-test("危险浏览器路径所在模块确实计入覆盖率报告", async () => {
-  const report = JSON.parse(await readFile("coverage/unit/coverage-final.json", "utf8"));
+test("危险浏览器路径所在模块确实计入覆盖率报告", async t => {
+  // 普通 npm test 不生成覆盖率报告；报告由 npm run test:coverage 产出。
+  let raw;
+  try { raw = await readFile("coverage/unit/coverage-final.json", "utf8"); }
+  catch { t.skip("尚未生成覆盖率报告：先运行 npm run test:coverage"); return; }
+  const report = JSON.parse(raw);
   for (const file of ["lib/app/seat.mjs", "lib/app/sports.mjs"]) {
     const data = report[file];
     assert.ok(data, `${file} 必须出现在覆盖率报告里`);
