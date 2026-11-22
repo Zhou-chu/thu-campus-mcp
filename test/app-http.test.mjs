@@ -299,6 +299,14 @@ test("定时任务可通过 HTTP 创建、修改、停用与删除", async (t) =
   assert.equal(patched.status, 200);
   assert.equal((await patched.json()).task.enabled, false);
 
+  const badPatch = await fetch(url + "/api/schedules/" + task.id, { method: "PATCH", headers, body: JSON.stringify({ time: "25:00" }) });
+  assert.equal(badPatch.status, 400);
+  const brokenPatch = await fetch(url + "/api/schedules/" + task.id, { method: "PATCH", headers, body: "[]" });
+  assert.equal(brokenPatch.status, 400);
+  const putAlias = await fetch(url + "/api/schedules/" + task.id, { method: "PUT", headers, body: JSON.stringify({ enabled: false, id: "should-not-change" }) });
+  assert.equal(putAlias.status, 200);
+  assert.equal((await putAlias.json()).task.id, task.id, "不能通过 body 改主键");
+
   const missing = await fetch(url + "/api/schedules/00000000-0000-4000-8000-000000000000", { method: "DELETE", headers });
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).error.code, "SCHEDULE_NOT_FOUND");

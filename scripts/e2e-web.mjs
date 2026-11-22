@@ -217,7 +217,7 @@ async function main() {
     await page.goto(`${base}/?e2e=1#token=${TOKEN}`, { waitUntil: "load" });
     await page.waitForSelector("#app .tab", { state: "visible", timeout: 10000 });
     record("主应用可见", await page.locator("#app").isVisible());
-    record("八个导航标签", (await page.locator(".tabbar .tab").count()) === 8);
+    record("九个导航标签", (await page.locator(".tabbar .tab").count()) === 9);
     await page.click('button[data-view="timetable"]');
     await page.waitForSelector(".timetable-page");
     record("课表视图可打开且无横向溢出", (await page.locator("#view-context").innerText()) === "课表" && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -281,7 +281,8 @@ async function main() {
     // 5. 工具页：编号索引与写入标记
     await page.click('button[data-view="tools"]');
     await page.waitForSelector(".list > .card");
-    record("工具条数正确", (await page.locator(".list > .card").count()) === TOOLS.length);
+    // 应用自身还会附加四个定时任务工具（见 lib/app/schedule-tools.mjs）。
+    record("工具条数正确", (await page.locator(".list > .card").count()) === TOOLS.length + 4);
     // 浏览器不会把 counter() 解析成数字，只能确认伪元素真的挂了计数器。
     const pseudo = await page.evaluate(() => {
       const style = getComputedStyle(document.querySelector(".list > .card"), "::before");

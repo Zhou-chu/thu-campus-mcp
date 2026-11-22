@@ -1419,3 +1419,44 @@ test("app: sports booking buttons report the prepared step and failures honestly
   a.click(a.$(".sports-prepare"));
   await until(() => /打开窗口失败/.test(a.$(".sports-panel").textContent), "prepare failure");
 });
+
+test("app: 定时任务页展示真实计划与失败原因，并能启停", async t => {
+  const tasks = [
+    { id: "11111111-1111-4111-8111-111111111111", title: "每日汇总", prompt: "汇总作业", kind: "daily", time: "08:30", enabled: true, createdAt: checkedAt, lastRunAt: null, lastStatus: "", lastError: "", lastSessionId: "", nextRunAt: null },
+    { id: "22222222-2222-4222-8222-222222222222", title: "失败的任务", prompt: "x", kind: "weekly", time: "19:00", days: [5], enabled: false, createdAt: checkedAt, lastRunAt: checkedAt, lastStatus: "failed", lastError: "INVALID_REQUEST：模型服务暂不可用", lastSessionId: "s1", nextRunAt: null },
+  ];
+  const a = await app(t, {
+    routes: {
+      "GET /api/schedules": { ok: true, tasks, runner: { running: true, intervalMs: 20000 } },
+      "PATCH /api/schedules/22222222-2222-4222-8222-222222222222": { ok: true, task: { ...tasks[1], enabled: true } },
+    },
+  });
+  a.nav("schedules");
+  await flush();
+  const view = a.$(".schedules-page");
+  assert.ok(view, "应渲染定时任务页");
+  assert.equal(view.querySelectorAll(".card").length, 3, "两条任务 + 新建表单");
+  assert.match(view.textContent, /每天 08:30/);
+  assert.match(view.textContent, /INVALID_REQUEST：模型服务暂不可用/);
+  const toggle = view.querySelectorAll(".switch-input")[1];
+  assert.equal(toggle.checked, false);
+  toggle.checked = true;
+  a.event(toggle, "change");
+  await flush();
+  const patch = a.calls.find(call => call.method === "PATCH");
+  assert.ok(patch, "启停要发 PATCH");
+  assert.equal(patch.body.enabled, true);
+});
+
+test("app: 定时任务空态与读取失败都不伪装成功", async t => {
+  const empty = await app(t, { routes: { "GET /api/schedules": { ok: true, tasks: [], runner: { running: true } } } });
+  empty.nav("schedules");
+  await flush();
+  assert.match(empty.$(".schedules-page").textContent, /还没有定时任务/);
+  assert.equal(empty.$(".schedules-page").querySelectorAll(".card").length, 1);
+
+  const broken = await app(t, { routes: { "GET /api/schedules": { ok: false, error: { code: "APP_ERROR", message: "状态目录不可写" } } } });
+  broken.nav("schedules");
+  await flush();
+  assert.match(broken.$(".schedules-page").textContent, /状态目录不可写/);
+});
