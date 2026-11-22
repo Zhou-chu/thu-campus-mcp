@@ -116,6 +116,13 @@ export async function saveSnapshot(options, state) {
     await dpapi(Buffer.from(JSON.stringify(state))),
   );
 }
+// Playwright exports localStorage/IndexedDB for the browser's observed origins, not the entire persistent profile.
+export function preserveUnvisitedOrigins(state, previous, visited) {
+  const current = new Set(state.origins.map(item => item.origin));
+  const carried = (previous?.origins ?? []).filter(item => !current.has(item.origin) && !visited.has(item.origin));
+  return carried.length ? { ...state, origins: [...state.origins, ...carried] } : state;
+}
+
 export async function openBrowser(options = {}) {
   const lease = await profileLease(options),
     cfg = lease.config;
@@ -152,6 +159,20 @@ export async function openBrowser(options = {}) {
       timeout: 30000,
     });
     const saved = await readSnapshot(cfg);
+    const trusted = priorMeta?.clean ? saved : undefined;
+    const visited = new Set();
+    const mark = frame => {
+      try {
+        const url = new URL(frame.url());
+        if (url.protocol === "https:" || url.protocol === "http:") visited.add(url.origin);
+      } catch { /* Ignore initial blank or invalid frame URLs. */ }
+    };
+    const observe = page => {
+      page.frames().forEach(mark);
+      page.on("framenavigated", mark);
+    };
+    context.pages().forEach(observe);
+    context.on("page", observe);
     if (saved && priorMeta?.clean) {
       if (emptyProfile) await context.setStorageState(saved);
       else {
@@ -184,7 +205,7 @@ export async function openBrowser(options = {}) {
         .catch(() => {})
         .then(async () => {
           if (closing) return;
-          const state = await context.storageState({ indexedDB: true });
+          const state = preserveUnvisitedOrigins(await context.storageState({ indexedDB: true }), trusted, visited);
           const hash = createHash("sha256")
             .update(JSON.stringify(state))
             .digest("hex");

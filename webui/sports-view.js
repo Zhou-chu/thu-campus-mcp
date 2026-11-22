@@ -134,8 +134,10 @@ export function createSportsView({ el, api }) {
         state.sport = state.sports.includes(state.sport) ? state.sport : state.sports[0] || "";
       } catch (error) {
         state.sports = [];
-        state.loginRequired = error?.code === "SPORTS_LOGIN_REQUIRED";
-        state.error = state.loginRequired ? "需要先登录体育场馆：登录完成后回到这里点刷新。" : "暂时读不到运动项目。";
+        state.loginRequired = ["SPORTS_LOGIN_REQUIRED", "CAS_CAPTCHA_REQUIRED"].includes(error?.code);
+        state.error = error?.code === "SPORTS_LOGIN_REQUIRED" ? "需要先登录体育场馆：登录完成后回到这里点刷新。"
+          : ["CAS_CAPTCHA_REQUIRED", "ACCOUNT_NOT_CONFIGURED", "SPORTS_THROTTLED", "BROWSER_BUSY"].includes(error?.code) ? error.message
+          : "暂时读不到运动项目。";
       } finally {
         state.loading = false;
         state.loaded = true;
@@ -165,7 +167,7 @@ export function createSportsView({ el, api }) {
     async function openLogin() {
       try {
         await api("/api/tools/campus_browser_open", { method: "POST", body: { service: "sports" } });
-        state.error = "登录窗口已打开，完成登录后回到这里点刷新。";
+        state.error = "已请求打开登录窗口，请在运行实例的电脑上完成后刷新。";
       } catch {
         state.error = "打不开登录窗口，稍后再试。";
       }

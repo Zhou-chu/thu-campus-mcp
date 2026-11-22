@@ -62,6 +62,18 @@ test("profile lease rejects a second owner and survives reopen with encrypted se
     await rm(dir, { recursive: true, force: true });
   }
 });
+test("browser checkpoint retains only previously saved, unvisited origins absent from its export", async () => {
+  const { preserveUnvisitedOrigins } = await import("../profile.mjs");
+  const seat = { origin: "https://seat.lib.tsinghua.edu.cn", localStorage: [{ name: "area", value: "35" }] };
+  const other = { origin: "https://www.sports.tsinghua.edu.cn", localStorage: [{ name: "token", value: "fixture-only" }] };
+  const oldSeat = { ...seat, localStorage: [{ name: "area", value: "22" }] };
+  const current = { cookies: [], origins: [seat] };
+  const previous = { cookies: [{ name: "old-cookie" }], origins: [oldSeat, other] };
+  assert.deepEqual(preserveUnvisitedOrigins(current, previous, new Set([seat.origin])), { cookies: [], origins: [seat, other] });
+  assert.equal(preserveUnvisitedOrigins(current, previous, new Set([other.origin])), current);
+  assert.equal(preserveUnvisitedOrigins(current, undefined, new Set()), current);
+});
+
 test("runtime manifest uses relative paths and rejects traversal", async () => {
   const { runtimeInfo } = await import("../index.mjs");
   const dir = await mkdtemp(path.join(tmpdir(), "campus-runtime-test-"));

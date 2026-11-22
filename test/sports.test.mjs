@@ -1,6 +1,54 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSportsReader, createSportsSlotReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+import { createSportsReader, createSportsReadRecovery, createSportsSlotReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+
+test("sports: concurrent expired queries recover once and only replay the original reads", async () => {
+  let active = false, logins = 0;
+  const calls = [];
+  const expired = { status: 200, ok: true, data: { success: false, errorCode: 1130002 } };
+  const ready = { status: 200, ok: true, data: { success: true } };
+  const read = createSportsReadRecovery({
+    read: async (name, body) => { calls.push([name, body]); return active ? ready : expired; },
+    login: async () => { logins++; active = true; return { ok: true }; },
+  });
+  assert.equal(await read("user"), expired);
+  assert.equal(logins, 0);
+  const query = { sceneUuid: "fixture", reserveDate: "2026-11-23" };
+  assert.deepEqual(await Promise.all([read("slots", query), read("menu")]), [ready, ready]);
+  assert.equal(logins, 1);
+  assert.deepEqual(calls, [["user", undefined], ["slots", query], ["menu", undefined], ["slots", query], ["menu", undefined]]);
+});
+
+test("sports: no login on throttling or unknown errors; manual verification is not retried immediately", async () => {
+  let now = 0, logins = 0, calls = 0, code = 1610001;
+  const read = createSportsReadRecovery({
+    now: () => now,
+    read: async () => { calls++; return { status: 200, ok: true, data: { success: false, errorCode: code } }; },
+    login: async () => { logins++; return { ok: false, code: "CAS_CAPTCHA_REQUIRED", message: "Manual check" }; },
+  });
+  await read("menu");
+  code = 0;
+  await read("menu");
+  assert.equal(logins, 0);
+  code = 1130002;
+  for (let i = 0; i < 2; i++) await assert.rejects(() => read("menu"), { code: "CAS_CAPTCHA_REQUIRED" });
+  assert.equal(logins, 1);
+  assert.equal(calls, 4);
+  now += 120001;
+  await assert.rejects(() => read("menu"), { code: "CAS_CAPTCHA_REQUIRED" });
+  assert.equal(logins, 2);
+});
+
+test("sports: a recovery followed by another expiry does not recurse", async () => {
+  let logins = 0, calls = 0;
+  const read = createSportsReadRecovery({
+    read: async () => { calls++; return { status: 401, ok: false }; },
+    login: async () => { logins++; return { ok: true }; },
+  });
+  await assert.rejects(() => read("menu"), { code: "SPORTS_LOGIN_REQUIRED" });
+  assert.equal(calls, 2);
+  assert.equal(logins, 1);
+});
 
 test("sports: direct slots require response evidence for the exact date, with no read for unsupported venues", async () => {
   const day = "2026-11-23";
