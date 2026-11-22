@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ScheduleStore, describeSchedule, lastOccurrence } from "../lib/app/schedules.mjs";
+import { ScheduleStore, describeSchedule, lastOccurrence, nextRunAt } from "../lib/app/schedules.mjs";
 import { createScheduleRunner } from "../lib/app/schedule-runner.mjs";
 import { createScheduleTools } from "../lib/app/schedule-tools.mjs";
 
@@ -110,5 +110,25 @@ test("执行器 start 会立即检查一次，并在 stop 后不再触发", asyn
     await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(dueCalls, 1, "停止后不再检查");
     assert.notEqual(runner.status().startedAt, null);
+  });
+});
+
+test("describeSchedule 覆盖三种频率，坏数据不抛错", async () => {
+  await withStore(async ({ store }) => {
+    const daily = await store.create({ title: "每天", prompt: "p", kind: "daily", time: "07:15" });
+    assert.match(describeSchedule(daily, new Date()).when, /每天 07:15/);
+    const once = await store.create({ title: "一次", prompt: "p", kind: "once", at: new Date(Date.now() + 86400000).toISOString() });
+    assert.equal(describeSchedule(once, new Date()).when, once.at, "单次任务的 when 就是定点时间");
+    assert.equal(nextRunAt({ kind: "daily", time: "bad", enabled: true }), null);
+    assert.equal(lastOccurrence({ kind: "once", at: "not-a-date", enabled: true }), null);
+  });
+});
+
+test("损坏的计划文件按空计划处理，不阻塞应用", async () => {
+  await withStore(async ({ dir }) => {
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(path.join(dir, "schedules.json"), "{broken", "utf8");
+    const store = new ScheduleStore(dir);
+    assert.deepEqual(await store.list(), []);
   });
 });

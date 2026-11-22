@@ -1518,3 +1518,20 @@ test("app: 删除定时任务需要确认，取消时不发请求", async t => {
   assert.equal(a.confirmations.length, 1);
   assert.equal(a.calls.filter(call => call.method === "DELETE").length, 0, "取消不删除");
 });
+
+test("app: 启停失败会恢复开关并提示，不假装保存成功", async t => {
+  const task = { id: "55555555-5555-4555-8555-555555555555", title: "开关", prompt: "p", kind: "daily", time: "08:00", enabled: true, createdAt: checkedAt, lastRunAt: null, lastStatus: "", lastError: "", lastSessionId: "", nextRunAt: null };
+  const a = await app(t, {
+    routes: {
+      "GET /api/schedules": { ok: true, tasks: [task], runner: { running: true } },
+      "PATCH /api/schedules/55555555-5555-4555-8555-555555555555": { ok: false, error: { code: "APP_ERROR", message: "写盘失败" } },
+    },
+  });
+  a.nav("schedules");
+  await flush();
+  const toggle = a.$(".schedules-page .switch-input");
+  toggle.checked = false;
+  a.event(toggle, "change");
+  await flush();
+  assert.equal(toggle.checked, true, "失败后恢复原状态");
+});
