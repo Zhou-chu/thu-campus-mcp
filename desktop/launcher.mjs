@@ -83,6 +83,31 @@ export async function requestSessionCode({ port, token, fetchImpl = fetch } = {}
   if (!body?.ok || !code) throw Object.assign(new Error("会话码缺失"), { code: "EXCHANGE_FAILED" });
   return code;
 }
+/**
+ * 轮换桌面配置里的本机令牌。没有配置时返回一个新值供环境变量部署使用。
+ * 返回的 token 用于一次性展示，调用方负责不落日志。
+ */
+export async function rotateDesktopToken({ dir = stateDir } = {}) {
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, "desktop.json");
+  let existing = null;
+  try {
+    existing = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    existing = null;
+  }
+  const token = randomBytes(32).toString("base64url");
+  if (!existing && !process.env.THU_CAMPUS_APP_TOKEN) {
+    return { rotated: false, reason: "没有桌面配置，也没有固定令牌", token };
+  }
+  if (!existing) {
+    return { rotated: false, reason: "固定令牌来自环境变量，服务端无法安全改写", token };
+  }
+  const next = { ...existing, token, rotatedAt: new Date().toISOString() };
+  await writeFile(file, JSON.stringify(next, null, 2), { mode: 0o600 });
+  await chmod(file, 0o600).catch(() => {});
+  return { rotated: true, file, token };
+}
 export function redact(text, token) {
   const value = String(text ?? "");
   if (!token) return value;

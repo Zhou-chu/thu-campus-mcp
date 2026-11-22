@@ -187,3 +187,19 @@ node bin/thu-campus.mjs browser login learnx --account <你的学号>
 - [ ] 日志里不要出现令牌：启动器与运行时都已做脱敏，排查问题时仍然先看 `desktop.log` 的脱敏形态。
 
 
+
+
+## Tailscale 证书与续期
+
+Tailscale 可以为 tailnet 内的机器签发被公共信任的证书（Let's Encrypt），不需要自己维护 CA：
+
+```powershell
+tailscale cert --cert-file .local/tls/campus.crt --key-file .local/tls/campus.key desktop-uq2emap.tailf544a4.ts.net
+$env:THU_CAMPUS_APP_TLS_CERT = "D:\path\campus.crt"
+$env:THU_CAMPUS_APP_TLS_KEY = "D:\path\campus.key"
+$env:THU_CAMPUS_APP_PUBLIC_URL = "https://desktop-uq2emap.tailf544a4.ts.net:8973"
+```
+
+设置 TLS 后同一端口只接受 HTTPS：明文请求不会被处理，也不再需要 `THU_CAMPUS_APP_ALLOW_PLAINTEXT`。证书有效期约 90 天，到期前重新执行 `tailscale cert` 覆盖两个文件并重启运行时；也可以放进计划任务每月续期一次。浏览器与 Node 客户端都会按系统信任链校验，不需要 `--insecure`。
+
+配对与会话码兑换要求密文通道：HTTPS 下远程客户端可以正常换码；明文远程仍会得到 `PAIRING_HTTPS_REQUIRED`，这是刻意保留的拒绝，不是缺陷。
