@@ -266,31 +266,41 @@ test("ToolHost.start wires owned environment and drains mocked transport stderr 
     "@modelcontextprotocol/sdk/client/stdio.js": { StdioClientTransport: class { constructor(options) { this.options = options; this.stderr = { resume: () => calls.push(["resume"]) }; } } },
     "lib/services.mjs": { root, serviceEnvironment: (env) => ({ ...env, UNIT_ONLY: "1" }) },
   });
-  const host = await ToolHost.start({ env: { UNIT_STATE: dir }, timeoutMs: 99 });
+  const host = await ToolHost.start({ env: { UNIT_STATE: dir, THU_CAMPUS_APP_TOOLHOST: "stdio" }, timeoutMs: 99 });
   assert.equal(host.timeoutMs, 99); assert.equal(host.tools[0].name, "unit_tool");
   assert.deepEqual(calls.find((c) => c[0] === "connect")[1].options.env, { UNIT_STATE: dir, UNIT_ONLY: "1" }); assert(calls.findIndex((c) => c[0] === "resume") < calls.findIndex((c) => c[0] === "connect"));
 });
 
-async function gatewayFixture(t, { duplicate = false, failedConnect = false } = {}) {
-  const h = { clients: [], handlers: new Map(), calls: [], restored: true };
+async function gatewayFixture(t, { duplicate = false, failService = false } = {}) {
+  const h = { handlers: new Map(), calls: [], restored: true, toolResults: [], serviceResults: new Map() };
   const schemaNames = ["ListToolsRequestSchema", "CallToolRequestSchema", "ListPromptsRequestSchema", "GetPromptRequestSchema"];
   const sdkTypes = Object.fromEntries(schemaNames.map((name) => [name, name]));
+  const toolsFor = service => service === "learnx"
+    ? [{ name: "learn_read", description: "读", jsonSchema: () => ({ type: "object" }), readOnly: true, destructive: false }]
+    : [{ name: duplicate ? "learn_read" : "cloud_write", description: "写", jsonSchema: () => ({ type: "object" }), readOnly: false, destructive: true }];
   const mod = await realModule(t, "lib/gateway.mjs", {
     "@modelcontextprotocol/sdk/server/index.js": { Server: class { constructor(info, capabilities) { h.server = this; h.info = info; h.capabilities = capabilities; } setRequestHandler(schema, handler) { h.handlers.set(schema, handler); } async connect(transport) { h.transport = transport; } } },
     "@modelcontextprotocol/sdk/server/stdio.js": { StdioServerTransport: class {} },
-    "@modelcontextprotocol/sdk/client/index.js": { Client: class {
-      constructor() { this.index = h.clients.length; h.clients.push(this); }
-      async connect(transport) { this.transport = transport; if (failedConnect) throw new Error("connect fixture"); }
-      async listTools() { return { tools: [{ name: this.index && !duplicate ? "cloud_write" : "learn_read", annotations: { readOnlyHint: this.index === 0 } }] }; }
-      getServerCapabilities() { return this.index ? {} : { prompts: {} }; }
-      async listPrompts() { return { prompts: [{ name: "unit_prompt" }] }; }
-      async getPrompt(args) { h.calls.push(["prompt", args]); return { messages: [] }; }
-      async callTool(...args) { h.calls.push(["tool", ...args]); if (h.toolError) throw h.toolError; return h.toolResults?.shift() || { structuredContent: { ok: true } }; }
-      async close() { this.closed = true; }
-    } },
-    "@modelcontextprotocol/sdk/client/stdio.js": { StdioClientTransport: class { constructor(options) { this.options = options; } } },
     "@modelcontextprotocol/sdk/types.js": sdkTypes,
-    "lib/services.mjs": { services: [{ name: "learnx" }, { name: "cloud" }], modulePath: (service) => "unit/" + service.name, serviceEnvironment: () => ({ UNIT_ONLY: "1" }) },
+    "lib/services.mjs": {
+      services: [{ name: "learnx" }, { name: "cloud" }],
+      loadModule: async (service, filename) => filename === "config.js"
+        ? { loadConfig: () => ({ service: service.name }) }
+        : {
+            createService: async config => {
+              if (failService && service.name === "cloud") throw new Error("service fixture");
+              return {
+                tools: toolsFor(service.name),
+                call: async (name, args) => {
+                  h.calls.push(["service", service.name, name, args, config]);
+                  const queued = h.serviceResults.get(name)?.shift();
+                  if (queued) return queued;
+                  return { ok: true, data: { ok: true, service: service.name } };
+                },
+              };
+            },
+          },
+    },
     "lib/madmodel/mcp.mjs": { madmodelTools: [{ name: "madmodel_unit" }], callMadmodelTool: async (name, args) => ({ name, args }) },
     "lib/browser.mjs": {
       browserOverview: async () => { if (h.browserError) throw h.browserError; return { running: false }; },
@@ -304,12 +314,16 @@ async function gatewayFixture(t, { duplicate = false, failedConnect = false } = 
   return h;
 }
 
-test("gateway registers real handlers, delegates tools/prompts and rejects browser credential-shaped input", async (t) => {
+test("gateway registers real handlers, delegates tools and prompts, and rejects browser credential-shaped input", async (t) => {
   const h = await gatewayFixture(t); await h.mod.serveGateway();
-  assert.equal(h.info.name, "thu-campus-mcp"); assert.equal(h.clients[0].transport.options.stderr, "pipe");
-  const listed = await h.handlers.get("ListToolsRequestSchema")(); assert.equal(listed.tools.length, 29); assert(listed.tools.some((tool) => tool.name === "campus_browser_login"));
-  assert.deepEqual((await h.handlers.get("ListPromptsRequestSchema")()).prompts, [{ name: "unit_prompt" }]);
-  assert.deepEqual(await h.handlers.get("GetPromptRequestSchema")({ params: { name: "unit_prompt", arguments: { x: "1" } } }), { messages: [] });
+  assert.equal(h.info.name, "thu-campus-mcp");
+  const listed = await h.handlers.get("ListToolsRequestSchema")();
+  assert.equal(listed.tools.length, 29);
+  assert(listed.tools.some((tool) => tool.name === "campus_browser_login"));
+  assert.equal(listed.tools.find((tool) => tool.name === "learn_read")._meta.service, "learnx");
+  assert.deepEqual((await h.handlers.get("ListPromptsRequestSchema")()).prompts.map(p => p.name), ["attend_and_answer"]);
+  const prompt = await h.handlers.get("GetPromptRequestSchema")({ params: { name: "attend_and_answer", arguments: { lessonId: "unit-1" } } });
+  assert.match(prompt.messages[0].content.text, /unit-1/);
   await assert.rejects(h.handlers.get("GetPromptRequestSchema")({ params: { name: "missing" } }), /Unknown prompt/);
   assert.deepEqual((await h.call("madmodel_unit", { unit: true })).structuredContent, { name: "madmodel_unit", args: { unit: true } });
   for (const args of [null, [], { password: "not-a-secret" }, { service: "foreign" }, { account: 1 }, { account: " " }, { account: "x".repeat(129) }, {}]) assert.equal((await h.call("campus_browser_login", args)).structuredContent.code, "INVALID_ARGUMENTS");
@@ -319,23 +333,29 @@ test("gateway registers real handlers, delegates tools/prompts and rejects brows
   assert.deepEqual(h.calls.findLast((c) => c[0] === "browser"), ["browser", "login", "learnx", "unit-only"]);
   assert.equal((await h.call("campus_browser_close")).structuredContent.closed, true);
   assert.equal((await h.call("missing_tool")).isError, true);
-  assert.equal((await h.call("learn_read", { x: 1 })).structuredContent.ok, true);
-  assert.deepEqual(h.calls.findLast((c) => c[0] === "tool").slice(1), [{ name: "learn_read", arguments: { x: 1 } }, undefined, { timeout: 180000 }]);
+  assert.deepEqual((await h.call("learn_read", { x: 1 })).structuredContent, { ok: true, service: "learnx" });
+  assert.deepEqual(h.calls.findLast((c) => c[0] === "service").slice(1), ["learnx", "learn_read", { x: 1 }, { service: "learnx" }]);
   for (const code of ["BROWSER_BUSY", "unsafe-code"]) { h.browserError = Object.assign(new Error("secret fixture"), { code }); const reply = await h.call("campus_browser_status"); assert.equal(reply.structuredContent.code, code === "BROWSER_BUSY" ? code : "GATEWAY_ERROR"); assert.doesNotMatch(reply.content[0].text, /secret/); }
-  h.server.onclose(); await nextTurn(); assert(h.clients.every((client) => client.closed));
+  h.server.onclose(); await nextTurn();
 });
 
-test("gateway recovers reads once, never repeats writes, and closes clients on duplicate/connect failure", async (t) => {
+test("gateway recovers reads once, never repeats writes, and reports service construction failures", async (t) => {
   const h = await gatewayFixture(t); await h.mod.serveGateway();
-  h.toolResults = [{ isError: true, structuredContent: { code: "AUTH_REQUIRED" } }, { structuredContent: { replayed: true } }];
-  assert.equal((await h.call("learn_read")).structuredContent.replayed, true); assert.equal(h.calls.filter((c) => c[0] === "restore").length, 1);
-  h.toolResults = [{ isError: true, structuredContent: { code: "AUTH_EXPIRED" } }];
-  assert.equal((await h.call("cloud_write")).isError, true); assert.equal(h.calls.filter((c) => c[0] === "restore").length, 1);
+  h.serviceResults.set("learn_read", [{ ok: false, error: { code: "AUTH_REQUIRED", message: "unit" } }, { ok: true, data: { replayed: true } }]);
+  assert.deepEqual((await h.call("learn_read")).structuredContent, { replayed: true });
+  assert.equal(h.calls.filter((c) => c[0] === "restore").length, 1);
+  h.serviceResults.set("cloud_write", [{ ok: false, error: { code: "AUTH_EXPIRED", message: "unit" } }]);
+  const write = await h.call("cloud_write");
+  assert.equal(write.isError, true);
+  assert.equal(h.calls.filter((c) => c[0] === "restore").length, 1);
   const bad = { isError: true, content: [{ type: "text", text: "not-json" }] };
   assert.equal(await h.mod.invokeWithRecovery({ annotations: { readOnlyHint: true } }, async () => bad, async () => { throw new Error("must not recover malformed payload"); }), bad);
-  const absent = { isError: true }; assert.equal(await h.mod.invokeWithRecovery({ annotations: { readOnlyHint: true } }, async () => absent, async () => true), absent);
-  const duplicate = await gatewayFixture(t, { duplicate: true }); await assert.rejects(duplicate.mod.serveGateway(), /Duplicate/); assert(duplicate.clients.every((client) => client.closed));
-  const failed = await gatewayFixture(t, { failedConnect: true }); await assert.rejects(failed.mod.serveGateway(), /connect fixture/); assert(failed.clients.every((client) => client.closed));
+  const absent = { isError: true };
+  assert.equal(await h.mod.invokeWithRecovery({ annotations: { readOnlyHint: true } }, async () => absent, async () => true), absent);
+  const duplicate = await gatewayFixture(t, { duplicate: true });
+  await assert.rejects(duplicate.mod.serveGateway(), /Duplicate/);
+  const failed = await gatewayFixture(t, { failService: true });
+  await assert.rejects(failed.mod.serveGateway(), /service fixture/);
 });
 
 test("model routes normalize mocked catalogs, preserve abort and sanitize failures/status without real accounts", async (t) => {
