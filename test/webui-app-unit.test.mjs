@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -1534,4 +1534,47 @@ test("app: 启停失败会恢复开关并提示，不假装保存成功", async 
   a.event(toggle, "change");
   await flush();
   assert.equal(toggle.checked, true, "失败后恢复原状态");
+});
+
+test("app: 模型提供商列表、启用切换与添加失败都如实显示", async t => {
+  const providers = [
+    { id: "66666666-6666-4666-8666-666666666666", name: "深度求索", kind: "openai", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", models: ["deepseek-chat"], masked: "sk-d****1234", hasKey: true },
+    { id: "77777777-7777-4777-8777-777777777777", name: "Claude", kind: "anthropic", baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5", models: [], masked: "sk-a****cdef", hasKey: true },
+  ];
+  let activeId = providers[0].id;
+  const a = await app(t, {
+    routes: {
+      "GET /api/providers": () => ({ ok: true, providers, activeId }),
+      "PUT /api/providers/active": request => { activeId = request.body.id; return { ok: true, activeId }; },
+      "POST /api/providers": { ok: false, error: { code: "INVALID_ARGUMENTS", message: "接口地址必须是 http(s) 地址。" } },
+      "POST /api/providers/66666666-6666-4666-8666-666666666666/test": { ok: true, models: ["deepseek-chat"], count: 1 },
+    },
+  });
+  a.nav("settings");
+  await until(() => a.$(".provider-settings") && a.$(".provider-settings").querySelectorAll(".card").length === 3, "provider list");
+  const cards = a.$(".provider-settings").querySelectorAll(".card");
+  assert.equal(cards.length, 3, "两个提供商 + 添加表单");
+  assert.match(cards[0].textContent, /深度求索 · OpenAI 兼容/);
+  assert.match(cards[1].textContent, /Claude · Anthropic/);
+  assert.equal(cards[0].querySelector(".switch-input").checked, true, "启用的提供商应有选中态");
+  assert.equal(cards[1].querySelector(".switch-input").checked, false);
+
+  const radio = cards[1].querySelector(".switch-input");
+  radio.checked = true;
+  a.event(radio, "change");
+  await flush();
+  assert.equal(activeId, providers[1].id, "切换启用要写服务端");
+
+  // 添加表单失败：就地报错，不清空名称。
+  const form = a.$(".provider-settings > .card");
+  const nameField = form.querySelector('input[type="text"]');
+  a.input(nameField, "坏地址");
+  a.input(form.querySelector('input[type="url"]'), "ftp://x");
+  a.input(form.querySelector('input[type="password"]'), "sk-test-1234");
+  a.click(form.querySelector("button.primary"));
+  await flush();
+  const error = form.querySelector(".inline-error");
+  assert.equal(error.hidden, false);
+  assert.match(error.textContent, /http\(s\)/);
+  assert.equal(nameField.value, "坏地址");
 });

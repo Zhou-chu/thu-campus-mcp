@@ -10,8 +10,23 @@
 | TIMETABLE | 同级的“课表”视图：周视图（7 天 × 6 大节）、窄屏日程、课程详情 | 已实现，验收见[课表验证](#timetable课表视图) |
 | SPORTS-BOOKING | 清华体育场馆预约：运动 → 场馆 → 日期 → 场次，一键登录 | **部分实现**：只读链路已上线，下单与支付未做 |
 | LIBRARY-SEAT | 图书馆座位预约：分区 → 座位 → 预约 / 取消 | **可用**：读取、预约、取消、界面与工具均已打通 |
+| MODEL-PROVIDERS | 第三方模型提供商：OpenAI 兼容 / Responses / Anthropic，支持导入模型与启用切换 | 已实现，验收见[模型提供商](#model-providers第三方模型提供商) |
 | SCHEDULED-TASKS | 定时任务：界面创建/修改/删除，到点新建会话执行；模型也可创建 | 已实现，验收见[定时任务](#scheduled-tasks定时任务) |
 | TOOL-COMPACT-MODE | 精简工具模式：用检索/调用两个入口替代 86 个工具的完整清单 | 已实现，验收见[精简工具模式](#tool-compact-mode精简工具模式) |
+
+## MODEL-PROVIDERS：第三方模型提供商
+
+设置页「模型提供商」可以添加任意接口，三类协议：
+
+| 类型 | 上游端点 | 说明 |
+| --- | --- | --- |
+| `openai` | `/models`、`/chat/completions` | OpenAI、DeepSeek、Moonshot、通义、vLLM、Ollama 等兼容端点 |
+| `openai-responses` | `/models`、`/responses` | OpenAI Responses API；请求翻译成 input 项，语义事件流翻译回增量 |
+| `anthropic` | `/models`、`/messages` | Claude 原生协议；`system`、`tool_use`/`tool_result`、图片均双向翻译 |
+
+启用某个提供商后，模型路由按需切换（无需重启）：`/api/meta` 与对话都走该提供商；停用后回到 `THU_CAMPUS_APP_MODEL_ROUTE` 指定的内置路由。密钥只在本机 `model-providers.json`，HTTP 只返回掩码。
+
+验收：`test/providers.test.mjs`（校验、持久化、模型导入）、`test/anthropic*.test.mjs`、`test/responses.test.mjs`（两套协议的双向翻译与错误映射）、`test/routes-providers.test.mjs`（路由增删改、连接测试、启用切换、chat 走对端点）。真实 8973：创建提供商返回掩码、非法地址 400、不可达地址测试返回 `PROVIDER_UNREACHABLE`、停用后 `activeId` 为空。
 
 ## SCHEDULED-TASKS：定时任务
 
