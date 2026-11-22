@@ -36,6 +36,8 @@ const state = {
   selectedModel: "",
   modelsLoading: false,
   modelSaving: false,
+  effort: undefined,
+  effortSaving: false,
   modelsError: "",
   authChecking: false,
   authError: "",
@@ -262,6 +264,10 @@ async function submitPair() {
 async function refreshMeta() {
   try {
     state.meta = await api("/api/meta");
+    // 思考强度来自服务端持久化设置，首次加载时同步到本地状态。
+    state.settings = { ...(state.settings || {}), modelName: state.meta.model?.name || "", reasoningEffort: state.meta.model?.reasoningEffort || "" };
+    // 只在首次加载采用服务端值；用户刚保存的值不被并发中的旧 meta 覆盖。
+    if (state.effort === undefined) state.effort = state.meta.model?.reasoningEffort || "";
     acceptModels(state.meta.models, state.meta.model?.name);
     $("#health-dot").className = "dot ok";
     $("#account").textContent = "服务运行中";
@@ -363,6 +369,38 @@ function workspaceStorageCard() {
 }
 
 /* ---------------- 模型目录与选择 ---------------- */
+const EFFORTS = [["", "默认"], ["low", "低"], ["medium", "中"], ["high", "高"]];
+function effortPicker(id, compact = false) {
+  const select = el("select", { id, "aria-label": "思考强度" });
+  for (const [value, text] of EFFORTS) select.append(el("option", { value, text }));
+  const field = el("label", { class: "model-field effort-field" + (compact ? " compact" : ""), htmlFor: id, title: "思考强度" }, [el("span", { text: "思考强度" }), select]);
+  const node = el("div", { class: "effort-picker" }, [field]);
+  node.updateEffort = () => {
+    select.value = state.effort ?? "";
+    select.disabled = state.effortSaving;
+    field.title = select.value ? "思考强度会随每次模型请求发送" : "默认：不发送思考强度参数";
+  };
+  select.addEventListener("change", async () => {
+    const previous = state.effort ?? "";
+    const chosen = select.value;
+    state.effortSaving = true;
+    node.updateEffort();
+    try {
+      const data = await api("/api/settings", { method: "PUT", body: { reasoningEffort: chosen } });
+      state.settings = data.settings;
+      state.effort = data.settings.reasoningEffort ?? "";
+      toast(state.effort ? "思考强度已设为" + (EFFORTS.find(([value]) => value === state.effort)?.[1] || state.effort) : "已改回默认思考强度");
+    } catch (e) {
+      state.effort = previous;
+      toast(e.message);
+    } finally {
+      state.effortSaving = false;
+      node.updateEffort();
+    }
+  });
+  node.updateEffort();
+  return node;
+}
 function acceptModels(models, current) {
   state.models = Array.isArray(models) ? models.filter((model) => model?.id) : [];
   state.selectedModel = current || state.selectedModel || state.models[0]?.id || "";
@@ -382,6 +420,7 @@ function syncModelPickers() {
   if (stop) { stop.hidden = !state.busy; stop.disabled = state.stopping; }
   for (const panel of document.querySelectorAll(".turn-queue")) panel.draw();
   for (const picker of document.querySelectorAll(".model-picker")) picker.updateModels();
+  for (const picker of document.querySelectorAll(".effort-picker")) picker.updateEffort();
 }
 async function refreshModels() {
   if (state.modelsLoading || state.modelSaving) return;
@@ -880,7 +919,7 @@ function chatView() {
   const stopButton = el("button", { id: "chat-stop", class: "ghost danger composer-stop", type: "button", "aria-label": "停止", title: "停止", hidden: true }, [homeIcon("stop")]);
   const actions = el("div", { class: "composer-actions" }, [composerAddMenu(textarea), workspaceStorageSummary()]);
   const submit = el("div", { class: "composer-submit" }, [sendButton, stopButton]);
-  const footer = el("div", { class: "composer-footer" }, [actions, modelPicker("chat-model", true), submit]);
+  const footer = el("div", { class: "composer-footer" }, [actions, modelPicker("chat-model", true), effortPicker("chat-effort", true), submit]);
   const composer = el("div", { class: "composer" }, [textarea, footer]);
   const quick = el("div", { class: "home-shortcuts", role: "group", "aria-label": "常用指令" });
   for (const action of HOME_ACTIONS) quick.append(el("button", {
@@ -1765,7 +1804,7 @@ function settingsView() {
     ]),
   ]);
   const surface = el("div", { class: "settings-surface" });
-  surface.append(workspaceStorageCard(), settingsSection("对话模型", [modelPicker("settings-model")]));
+  surface.append(workspaceStorageCard(), settingsSection("对话模型", [modelPicker("settings-model"), effortPicker("settings-effort")]));
   const codeNode = el("output", { class: "pair-code", "aria-label": "一次性配对码", hidden: true });
   const validity = el("span", { class: "small muted", hidden: true });
   const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });

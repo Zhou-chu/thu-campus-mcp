@@ -179,7 +179,7 @@ async function main() {
     await page.screenshot({ path: path.join(screenshotDir, "cloud-dark-390.png") });
     await page.locator("#composer").focus();
     const keyboardOrder = [];
-    for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-send']) {
+    for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-effort', '#chat-send']) {
       if (await page.locator(selector).isDisabled()) continue;
       await page.keyboard.press('Tab');
       keyboardOrder.push(await page.locator(selector).evaluate(node => node === document.activeElement));
