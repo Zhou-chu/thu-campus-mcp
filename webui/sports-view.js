@@ -53,7 +53,12 @@ export function createSportsView({ el, api }) {
 
     function sessionList() {
       if (state.loading) return el("p", { class: "sports-empty", text: "正在读取场次…" });
-      if (state.error) return el("p", { class: "sports-empty", text: state.error });
+      if (state.error) {
+        const message = el("p", { class: "sports-empty", text: state.error });
+        return state.openOfficial ? el("div", { class: "stack" }, [message,
+          el("a", { class: "ghost", href: "https://www.sports.tsinghua.edu.cn/venue/mobile/index.html", target: "_blank", rel: "noopener noreferrer", text: "打开体育官网" }),
+        ]) : message;
+      }
       if (!state.venue) return el("p", { class: "sports-empty", text: "先选一个场馆。" });
       if (!state.sessions.length) return el("p", { class: "sports-empty", text: "该场馆当天没有放出场次。" });
       const list = el("div", { class: "sports-sessions" });
@@ -167,20 +172,27 @@ export function createSportsView({ el, api }) {
       render();
     }
 
+    let slotRequest = 0;
     async function loadSlots() {
       if (!state.sport || !state.venue) return;
+      const id = ++slotRequest;
+      const { sport, venue, date } = state;
+      const isCurrent = () => id === slotRequest && state.sport === sport && state.venue === venue && state.date === date;
       state.loading = true;
       state.error = "";
+      state.openOfficial = false;
+      state.sessions = [];
       render();
       try {
-        const data = await api(`/api/sports/slots?sport=${encodeURIComponent(state.sport)}&venue=${encodeURIComponent(state.venue)}&date=${state.date}`);
-        state.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        const data = await api(`/api/sports/slots?sport=${encodeURIComponent(sport)}&venue=${encodeURIComponent(venue)}&date=${date}`);
+        if (isCurrent()) state.sessions = Array.isArray(data.sessions) ? data.sessions : [];
       } catch (error) {
-        state.sessions = [];
-    state.error = error?.code === "SPORTS_MAINTENANCE" ? error.message : error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到场次。";
+        if (!isCurrent()) return;
+        const officialErrors = ["SPORTS_SLOTS_UNSUPPORTED", "SLOTS_UNAVAILABLE", "SPORTS_THROTTLED", "SPORTS_DATE_MISMATCH", "SPORTS_MAINTENANCE", "SPORTS_LOGIN_REQUIRED"];
+        state.openOfficial = officialErrors.includes(error?.code);
+        state.error = state.openOfficial ? error.message : error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到场次。";
       } finally {
-        state.loading = false;
-        render();
+        if (isCurrent()) { state.loading = false; render(); }
       }
     }
 
