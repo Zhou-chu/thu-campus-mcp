@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { envelopeProblems } from "../lib/app/http-envelope.mjs";
 import path from "node:path";
 import { request } from "node:http";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
@@ -370,6 +371,54 @@ test("设置接口只接受白名单字段并持久化", async (t) => {
   assert.equal(Object.hasOwn((await cleared.json()).settings, "reasoningEffort"), false);
   assert.equal(Object.hasOwn(JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8")), "reasoningEffort"), false);
 });
+test("每个 JSON 接口都符合统一响应契约（成功与失败）", async (t) => {
+  const host = fakeHost();
+  const { url, pairing } = await boot(t, { host });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token };
+  const cases = [
+    { path: "/healthz" },
+    { path: "/api/meta" },
+    { path: "/api/tools" },
+    { path: "/api/settings" },
+    { path: "/api/auth/status" },
+    { path: "/api/keepalive" },
+    { path: "/api/service" },
+    { path: "/api/devices" },
+    { path: "/api/models" },
+    { path: "/api/sidebar/assignments" },
+    { path: "/api/sessions" },
+    { path: "/api/does-not-exist", expectStatus: 404 },
+    { path: "/api/settings", method: "PUT", body: { reasoningEffort: "minimal" }, expectStatus: 400 },
+    { path: "/api/tools/learn_submit_assignment", method: "POST", body: { preparationId: "p" }, expectStatus: 428 },
+    { path: "/api/chat/not-a-session", method: "POST", body: { text: "x" }, expectStatus: 404 },
+    { path: "/api/pair/redeem", method: "POST", body: { code: "000000" }, expectStatus: 403 },
+  ];
+  const seen = [];
+  for (const item of cases) {
+    const response = await fetch(url + item.path, {
+      method: item.method || "GET",
+      headers: item.body === undefined ? headers : { ...headers, "content-type": "application/json" },
+      body: item.body === undefined ? undefined : JSON.stringify(item.body),
+    });
+    if (item.expectStatus !== undefined) assert.equal(response.status, item.expectStatus, `${item.method || "GET"} ${item.path} 状态码`);
+    const type = response.headers.get("content-type") || "";
+    assert.ok(type.includes("application/json"), `${item.path} 必须返回 JSON，实际 ${type}`);
+    const payload = await response.json();
+    assert.deepEqual(envelopeProblems(payload), [], `${item.path} 不符合响应契约：${JSON.stringify(payload).slice(0, 180)}`);
+    seen.push(payload.ok);
+  }
+  assert.ok(seen.includes(true) && seen.includes(false), "成功与失败两类都必须被覆盖");
+  assert.ok(seen.filter(Boolean).length >= 6, "至少覆盖六个成功接口");
+
+  const anonymous = await fetch(url + "/api/tools");
+  assert.equal(anonymous.status, 401);
+  const unauth = await anonymous.json();
+  assert.equal(unauth.ok, false);
+  assert.equal(unauth.error.code, "AUTH_REQUIRED");
+  assert.deepEqual(envelopeProblems(unauth), []);
+});
+
 test("静态资源不回退到目录外，缺 WebUI 时给出可读占位页", async (t) => {
   const { url } = await boot(t);
   const root = await fetch(url + "/");
