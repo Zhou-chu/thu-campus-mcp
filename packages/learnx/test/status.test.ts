@@ -6,6 +6,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from '../src/server.js';
 import { loadConfig } from '../src/config.js';
+import { learnStatus } from '../src/status.js';
 
 for (const mock of [false, true]) it(`learn_status接受verify且${mock ? '模拟不冒已登录' : '缺凭据不自动登录'}`, async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'learn-status-'));
@@ -25,4 +26,16 @@ for (const mock of [false, true]) it(`learn_status接受verify且${mock ? '模�
       expect(value.authentication).not.toHaveProperty('accountId');
     }
   } finally { await client.close(); await server.close(); expect(path.isAbsolute(root)).toBe(true); expect(path.basename(root)).toMatch(/^learn-status-/); await rm(root, { recursive: true, force: true }); }
+});
+
+it('登录超时页面按会话过期处理，触发自动恢复而不是上游协议错误', async () => {
+  const store = {
+    async version() { return 'v1'; },
+    async load() { return { cookieJar: { cookies: [{ key: 'JSESSIONID', value: 'stale', domain: 'learn.tsinghua.edu.cn', path: '/' }] } } as any; },
+  };
+  const fetcher = (async () => new Response('<!DOCTYPE html><title>登录超时</title><a href="/login">重新登录</a>', { status: 200, headers: { 'content-type': 'text/html' } })) as any;
+  const out = await learnStatus(loadConfig({ stateDir: '.', mock: false }), { store, fetcher });
+  expect(out.code).toBe('AUTH_EXPIRED');
+  expect(out.sessionValidity).toBe('expired');
+  expect(out.source).toBe('protected-api:learn-user-home');
 });

@@ -35,7 +35,9 @@ export async function learnStatus(config: Config, { verify = true, store = new A
     }
     if (!response.ok) { await response.body?.cancel(); return { ...online, code: 'UPSTREAM_HTTP', sessionValidity: 'unknown' }; }
     const html = await response.text();
-    if (/<input[^>]+(?:type=["']?password|name=["']?(?:i_pass|i_user))/i.test(html)) return { ...online, code: 'AUTH_EXPIRED', sessionValidity: 'expired' };
+    // 上游过期时会返回 200 的“登录超时”页面，而不是 401/跳转；这类页面必须按过期处理，否则不会触发自动恢复。
+    if (/<input[^>]+(?:type=["']?password|name=["']?(?:i_pass|i_user))/i.test(html)
+      || /登录超时|请重新登录|统一身份认证|id\.tsinghua\.edu\.cn/i.test(html)) return { ...online, code: 'AUTH_EXPIRED', sessionValidity: 'expired' };
     const $ = cheerio.load(html);
     // 与上游getUserInfo相同的已登录用户区，另要求会话CSRF标记。不返回身份正文。
     const csrf = $('meta[name="_csrf"]').attr('content') || $('input[name="_csrf"]').attr('value') || /[?&]_csrf=([^\s"'<>&]+)/.test(html);
