@@ -203,3 +203,7 @@ $env:THU_CAMPUS_APP_PUBLIC_URL = "https://desktop-uq2emap.tailf544a4.ts.net:8973
 设置 TLS 后同一端口只接受 HTTPS：明文请求不会被处理，也不再需要 `THU_CAMPUS_APP_ALLOW_PLAINTEXT`。证书有效期约 90 天，到期前重新执行 `tailscale cert` 覆盖两个文件并重启运行时；也可以放进计划任务每月续期一次。浏览器与 Node 客户端都会按系统信任链校验，不需要 `--insecure`。
 
 配对与会话码兑换要求密文通道：HTTPS 下远程客户端可以正常换码；明文远程仍会得到 `PAIRING_HTTPS_REQUIRED`，这是刻意保留的拒绝，不是缺陷。
+
+## 打开界面而不暴露令牌
+
+`node bin/thu-campus.mjs app link --url https://<host>:<port>` 会向运行中的实例换取一次性会话码并打印 `https://…/?session=<code>`，有效 60 秒、只能用一次；输出里不含令牌。浏览器与移动端都支持 `?session=`，桌面启动器已自动使用它。

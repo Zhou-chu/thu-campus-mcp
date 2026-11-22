@@ -54,6 +54,7 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 node bin/thu-campus.mjs app status           # 脱敏状态，不联网
 node bin/thu-campus.mjs app devices          # 已配对设备
 node bin/thu-campus.mjs app token rotate     # 轮换桌面端本机令牌（旧令牌失效）
+node bin/thu-campus.mjs app link             # 打印一次性会话链接（令牌不进 URL）
 node bin/thu-campus.mjs app invite           # 设置固定令牌后可在运行中生成配对码
 npm run app:smoke                            # 真实启动运行时跑一遍配对与工具调用
 npm run verify:clients                       # 核对四端：静态资源、启动器、APK/HAP 结构与大小
