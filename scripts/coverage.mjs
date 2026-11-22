@@ -14,7 +14,11 @@ import v8ToIstanbul from "v8-to-istanbul";
 
 export const ROOT = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 export const SDKS = ["hetang", "learnx", "thu-cloud"];
-export const SOURCE_ROOTS = ["lib", "bin", "webui", "desktop", "packages/browser", ...SDKS.map(name => `packages/${name}/src`)];
+export const SOURCE_ROOTS = ["lib", "bin", "webui", "desktop", "packages/browser"];
+/** 三个业务包由各自 vitest 套件计量；合并进 v8 报告会因两套插桩口径不同而虚增语句数。 */
+export const PACKAGE_ROOTS = SDKS.map(name => `packages/${name}/src`);
+/** 夹具与历史报告可以显式要求全量作用域；生产收集默认只用应用源码。 */
+export const ALL_ROOTS = [...SOURCE_ROOTS, ...PACKAGE_ROOTS];
 export const TOOLING_ROOTS = ["scripts"];
 export const E2E_SCRIPTS = ["e2e-web.mjs", "e2e-streaming.mjs", "e2e-workspace.mjs", "e2e-auth-workspace.mjs"];
 const EXCLUDED_PARTS = new Set(["node_modules", "vendor", "runtime", ".runtime", "dist", "coverage", "test", "tests", "__tests__"]);
@@ -51,7 +55,7 @@ async function walkSources(root, relative, files, scope) {
   }
 }
 function validateScope(scope) {
-  if (![SOURCE_ROOTS, TOOLING_ROOTS].some(allowed => JSON.stringify(scope) === JSON.stringify(allowed))) throw new Error("INVALID_COVERAGE_SCOPE");
+  if (![SOURCE_ROOTS, PACKAGE_ROOTS, ALL_ROOTS, TOOLING_ROOTS].some(allowed => JSON.stringify(scope) === JSON.stringify(allowed))) throw new Error("INVALID_COVERAGE_SCOPE");
 }
 export async function snapshotSources(root = ROOT, scope = SOURCE_ROOTS) {
   validateScope(scope);
@@ -154,8 +158,9 @@ async function ensureOutput(root) {
 /** LCOV is emitted before any gate. SF paths must be real repository-relative sources. */
 export async function writeReports(root, result, metadata = {}, phase = "") {
   if (!["", "unit", "tooling", "tooling/unit"].includes(phase)) throw new Error("INVALID_REPORT_PHASE");
-  const scope = phase.startsWith("tooling") ? TOOLING_ROOTS : SOURCE_ROOTS;
-  if (JSON.stringify(result.manifest.scope) !== JSON.stringify(scope)) throw new Error("REPORT_SCOPE_MISMATCH");
+  const scope = phase.startsWith("tooling") ? TOOLING_ROOTS : result.manifest.scope;
+  const known = phase.startsWith("tooling") ? TOOLING_ROOTS : ALL_ROOTS;
+  if (!Array.isArray(scope) || scope.some(entry => !known.includes(entry))) throw new Error("REPORT_SCOPE_MISMATCH");
   const output = await ensureOutput(root), directory = phase ? path.join(output, phase) : output;
   await mkdir(directory, { recursive: true });
   const context = libReport.createContext({ dir: directory, coverageMap: result.map, sourceFinder: file => readFileSync(path.resolve(root, file), "utf8") });
@@ -200,7 +205,8 @@ export async function runNode(args, { cwd = ROOT, env = process.env, spawnImpl =
 }
 export function nativeCoverageArgs(root, runDirectory, cli = localCli(root, "c8", "bin/c8.js")) {
   const args = [cli, `--config=${path.join(runDirectory, "c8-config.json")}`, "--all=true", "--clean=true", "--merge-async", "--exclude-after-remap", "--reporter=json", `--reports-dir=${path.join(runDirectory, "native")}`, `--temp-directory=${path.join(runDirectory, "native/raw")}`];
-  for (const directory of SOURCE_ROOTS) {
+  // 原始采集覆盖全部根（业务包执行也记录），但应用报告只合并 SOURCE_ROOTS。
+  for (const directory of ALL_ROOTS) {
     args.push(`--src=${path.join(root, directory)}`);
     for (const ext of EXTENSIONS) args.push(`--include=${directory}/**/*${ext}`);
   }
@@ -336,11 +342,22 @@ export async function collectCoverage(root, { run = runNode, resolveCli = localC
   unitErrors.push(...stages.filter(stage => stage.name !== "native+e2e" && stage.code !== 0).map(stage => `STAGE_FAILED:${stage.name}`));
   const sdkInputs = [];
   for (const sdk of SDKS) sdkInputs.push(await readInput(path.join(runDirectory, "vitest", sdk, "coverage-final.json"), `vitest:${sdk}`, unitErrors));
+  const packageSummaries = {};
+  for (const [index, sdk] of SDKS.entries()) {
+    const input = sdkInputs[index];
+    if (!isRecord(input.data) || !Object.keys(input.data).length) { packageSummaries[sdk] = null; continue; }
+    const map = libCoverage.createCoverageMap(input.data);
+    const directory = path.join(root, "coverage", "packages", sdk);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "coverage-final.json"), JSON.stringify(map.toJSON()));
+    await writeFile(path.join(directory, "coverage-summary.json"), JSON.stringify({ total: map.getCoverageSummary().toJSON() }, null, 2));
+    packageSummaries[sdk] = map.getCoverageSummary().toJSON();
+  }
   const unitInput = await readInput(path.join(runDirectory, "unit/native/coverage-final.json"), "native-unit", unitErrors);
-  const unit = await combineCoverage({ root, manifest, inputs: [unitInput, ...sdkInputs] }); unit.errors.push(...unitErrors);
+  const unit = await combineCoverage({ root, manifest, inputs: [unitInput] }); unit.errors.push(...unitErrors);
   const combinedInput = await readInput(path.join(runDirectory, "native/coverage-final.json"), "native+e2e", errors);
   const browser = await readBrowserRecords(path.join(runDirectory, "browser"), errors);
-  const combined = await combineCoverage({ root, manifest, inputs: [combinedInput, ...sdkInputs], browser });
+  const combined = await combineCoverage({ root, manifest, inputs: [combinedInput], browser });
   combined.errors.push(...unit.errors, ...errors, ...[...stages, ...phaseStages].filter(stage => stage.code !== 0).map(stage => `STAGE_FAILED:${stage.name}`));
   const tooling = await collectToolingCoverage(root, runDirectory, toolingManifest, { run, cli: resolveCli(root, "c8", "bin/c8.js"), env, stages });
   const toolingStageErrors = [...stages, ...phaseStages].filter(stage => stage.code !== 0).map(stage => `STAGE_FAILED:${stage.name}`);
@@ -352,7 +369,7 @@ export async function collectCoverage(root, { run = runNode, resolveCli = localC
   await writeReports(root, tooling.unit, { ...toolingMetadata, phase: "tooling/unit", collectionComplete: tooling.unit.errors.length === 0 }, "tooling/unit");
   const toolingSummary = await writeReports(root, tooling.combined, { ...toolingMetadata, phase: "tooling", collectionComplete: tooling.combined.errors.length === 0 }, "tooling");
   const collectionErrors = [...combined.errors, ...tooling.unit.errors, ...tooling.combined.errors];
-  console.log(JSON.stringify({ scope: metadata.scopeLabel, files: combined.map.files().length, unit: unitSummary.total, combined: combinedSummary.total, tooling: toolingSummary.total, errors: collectionErrors }, null, 2));
+  console.log(JSON.stringify({ scope: metadata.scopeLabel, files: combined.map.files().length, unit: unitSummary.total, combined: combinedSummary.total, packages: packageSummaries, tooling: toolingSummary.total, errors: collectionErrors }, null, 2));
   return collectionErrors.length ? 1 : 0;
 }
 export async function coverageMain(args = process.argv.slice(2), root = ROOT) {
@@ -370,6 +387,15 @@ export async function coverageMain(args = process.argv.slice(2), root = ROOT) {
     const summary = JSON.parse(await readFile(path.join(directory, "coverage-summary.json"), "utf8"));
     summaries[phase] = summary.total; failed.push(...checkThreshold(summary, threshold).map(metric => `${phase}:${metric}`));
     failed.push(...await verifyReports(root, phase));
+  }
+  for (const sdk of SDKS) {
+    try {
+      const summary = JSON.parse(await readFile(path.join(root, "coverage", "packages", sdk, "coverage-summary.json"), "utf8"));
+      summaries[`packages:${sdk}`] = summary.total;
+      failed.push(...checkThreshold(summary, threshold).map(metric => `packages:${sdk}:${metric}`));
+    } catch {
+      if (threshold > 0) failed.push(`packages:${sdk}:report-missing`); else summaries[`packages:${sdk}`] = null;
+    }
   }
   console.log(JSON.stringify({ threshold, scope: "runtime-sdk (not whole Sonar)", ...summaries, failed }, null, 2));
   return failed.length ? 1 : 0;

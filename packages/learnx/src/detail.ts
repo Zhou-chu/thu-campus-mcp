@@ -23,7 +23,10 @@ export function inlineResources(source: string, baseUrl: string) {
     if (url.protocol !== 'https:' || url.hostname !== 'learn.tsinghua.edu.cn') { warnings.push('存在外部内嵌资源，未跨站下载。'); return; }
     const canonical = scrub({ url: url.toString() }).url;
     if (seen.has(canonical)) return; seen.add(canonical);
-    const filename = decodeURIComponent(url.pathname.split('/').pop() || 'inline-resource');
+    // 页面里的文件名也可能被写坏；解码失败时保留原始片段，不能让详情归档整体崩掉。
+    const rawName = url.pathname.split('/').pop() || 'inline-resource';
+    let filename = rawName;
+    try { filename = decodeURIComponent(rawName); } catch { filename = rawName; }
     attachments.push({ id: 'inline-' + digest(canonical), name: filename, url: url.toString(), role: 'inline', source: value } as Attachment);
   });
   if ($('img[srcset],source[srcset]').length) warnings.push('响应式图片 srcset 需要站点验证，已保留原始标记。');
