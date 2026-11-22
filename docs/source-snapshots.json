@@ -119,6 +119,10 @@
       "src/service.ts": {
         "sha256": "4016cbabe42dc084b11aa057d8a8daa971717ce9557dffa880e8f6887f91e42d",
         "reason": "1.5.1：新增工具注册表（schema、标注、调用、脱敏与错误映射），网关与应用共用"
+      },
+      "src/status.ts": {
+        "sha256": "c3147899bec8fa289552cf35683eafe831fca06b79e0ad8720a75b2bc20a0804",
+        "reason": "1.5.1：上游 200 的“登录超时”页面按 AUTH_EXPIRED 处理，触发会话自动恢复"
       }
     }
   },
