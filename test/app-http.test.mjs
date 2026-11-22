@@ -1020,6 +1020,15 @@ test("app: session rename and delete use session ids honestly", async (t) => {
   assert.equal(again.status, 404, "重复删除如实返回不存在");
 });
 
+test("app: unified LearnX login requires authenticated access and a saved campus account", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const endpoint = url + "/api/auth/learnx";
+  assert.equal((await fetch(endpoint, { method: "POST" })).status, 401);
+  const result = await fetch(endpoint, { method: "POST", headers: { authorization: "Bearer t" } });
+  assert.equal(result.status, 409);
+  assert.equal((await result.json()).error.code, "ACCOUNT_NOT_CONFIGURED");
+});
+
 test("app: auth login validates service and reports job ids", async (t) => {
   const baseHost = fakeHost();
   const host = { ...baseHost, async call(name, args) { if (name === "campus_browser_login") return { ok: true, data: { id: "job-1" } }; return baseHost.call(name, args); } };
