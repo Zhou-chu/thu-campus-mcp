@@ -59,3 +59,6 @@
 - 手机必须与电脑在同一网段（或能路由到 `lanUrls` 中的地址），不能脱离主机独立使用。
 - 拍照扫码配对尚未实现：当前用「手动输 6 位码」与「深链 `thucampus://pair`」。扫码需要额外的相机权限与 ZXing/ScanKit 依赖，属于后续增量。
 - iOS 未纳入本轮：它与 Android 同属「WebView 外壳 + 配对」，可复用同一套 WebUI 与 API。
+## 令牌与 HTTPS
+
+桌面端可用 `node bin/thu-campus.mjs app token rotate` 轮换本机令牌；固定令牌来自 `THU_CAMPUS_APP_TOKEN` 时该命令只打印新值，需要改部署配置后重启。移动端与浏览器用一次性会话码打开界面，令牌不进 URL。

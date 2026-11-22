@@ -48,9 +48,12 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 
 默认只监听本机。想在任意网络下用手机接入时，见 [托管部署](docs/app-hosting.md)：必须 HTTPS（本机证书，或回环监听 + `THU_CAMPUS_APP_TLS_PROXY=1` 交给 Nginx/Caddy/Tailscale 终止 TLS；`proxy_buffering off` 是必须的）。托管形态缺 TLS 会直接拒绝启动。
 
+
+持续可用的 HTTPS 可以用 Tailscale 签发证书：`tailscale cert --cert-file <crt> --key-file <key> <机器名>.<tailnet>.ts.net`，再把 `THU_CAMPUS_APP_TLS_CERT/KEY` 指向这两个文件、`PUBLIC_URL` 设为 `https://…`。本仓库的生产实例已按这种方式只监听 HTTPS（同一个端口不再接受明文）。证书约 90 天过期，需在到期前重新签发并重启；签发与轮换命令见托管文档。
 ```powershell
 node bin/thu-campus.mjs app status           # 脱敏状态，不联网
 node bin/thu-campus.mjs app devices          # 已配对设备
+node bin/thu-campus.mjs app token rotate     # 轮换桌面端本机令牌（旧令牌失效）
 node bin/thu-campus.mjs app invite           # 设置固定令牌后可在运行中生成配对码
 npm run app:smoke                            # 真实启动运行时跑一遍配对与工具调用
 npm run verify:clients                       # 核对四端：静态资源、启动器、APK/HAP 结构与大小
