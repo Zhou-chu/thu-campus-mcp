@@ -77,12 +77,15 @@ async function fixture(t) {
     context.storageState = async () => { if (f.onStorage) await f.onStorage(context); return { cookies: structuredClone(context._cookies), origins: [] }; };
     context.pages = () => context._pages;
     context.newPage = async () => {
-      const page = { urlText: ORIGIN + "/", setDefaultTimeout(value) { assert.equal(value, 1000); }, isClosed: () => Boolean(f.pageClosed), url: () => f.urls?.length ? f.urls.shift() : page.urlText,
-        goto: async url => { f.gotoCalls.push(url); page.urlText = url; if (f.onGoto) await f.onGoto(page, url, context); },
+      const page = Object.assign(new EventEmitter(), { urlText: ORIGIN + "/", setDefaultTimeout(value) { assert.equal(value, 1000); }, isClosed: () => Boolean(f.pageClosed), url: () => f.urls?.length ? f.urls.shift() : page.urlText,
+        goto: async url => { f.gotoCalls.push(url); page.urlText = url; page.emit("framenavigated", frame); if (f.onGoto) await f.onGoto(page, url, context); },
         content: async () => '<meta name="_csrf" content="fixture-csrf">',
         evaluate: async (fn, arg) => fn(arg),
         locator: selector => { const loc = { first: () => loc, count: async () => selector === "#c_code" && f.challenge ? 1 : 0, isVisible: async () => true, getAttribute: async () => null }; return loc; },
-      }; context._pages.push(page); return page;
+        frames: () => [frame],
+      });
+      const frame = { url: () => page.urlText };
+      context._pages.push(page); context.emit("page", page); return page;
     };
     context.request = { get: async url => {
       if (url.includes("learn.tsinghua.edu.cn/")) return { ok: () => true, json: async () => ({ message: "success", result: { id: "fixture-semester" } }) };

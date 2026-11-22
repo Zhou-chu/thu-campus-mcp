@@ -54,7 +54,7 @@ test("sports: direct slots require response evidence for the exact date, with no
   const day = "2026-11-23";
   const menu = { success: true, data: [{ menuName: "场地预约", childrenVo: [
     { menuName: "羽毛球", childrenVo: [{ menuName: "气膜馆", uuid: "scene-a", sceneUseType: 2 }] },
-    { menuName: "游泳", childrenVo: [{ menuName: "陈明游泳馆", uuid: "scene-b", sceneUseType: 4 }] },
+    { menuName: "冰雪运动", childrenVo: [{ menuName: "冰场", uuid: "scene-b", sceneUseType: 6 }] },
   ] }] };
   const calls = [];
   let payload = { success: true, data: [{ siteName: "场地1", sessionVo: [{ beginDate: "20261123", beginTime: "14:00", endTime: "15:00" }] }] };
@@ -64,12 +64,60 @@ test("sports: direct slots require response evidence for the exact date, with no
   assert.deepEqual(calls[1], { name: "slots", body: { sceneUuid: "scene-a", resvKind: "CURRENT_RESERVE", reserveDate: day, siteType: "ROOM", sceneUseType: "SPORT_GROUP", pageNum: 1, pageSize: 99 } });
   await assert.rejects(() => slots({ sport: "羽毛球", venue: "气膜馆", date: "2026-11-24" }), { code: "SPORTS_DATE_MISMATCH" });
   const count = calls.length;
-  await assert.rejects(() => slots({ sport: "游泳", venue: "陈明游泳馆" }), { code: "SPORTS_SLOTS_UNSUPPORTED" });
+  await assert.rejects(() => slots({ sport: "冰雪运动", venue: "冰场" }), { code: "SPORTS_SLOTS_UNSUPPORTED" });
   assert.equal(calls.length, count + 1);
   payload = { success: true, data: [{ siteName: "场地1" }] };
   await assert.rejects(() => slots({ sport: "羽毛球", venue: "气膜馆" }), { code: "SLOTS_UNAVAILABLE" });
   payload = { success: false, errorCode: 1610001 };
   await assert.rejects(() => slots({ sport: "羽毛球", venue: "气膜馆" }), { code: "SPORTS_THROTTLED" });
+});
+
+test("sports: personal swimming sessions use official building and equipment scope and exact date", async () => {
+  const day = "2026-11-23";
+  const origin = "https://www.sports.tsinghua.edu.cn";
+  const calls = [];
+  let ambiguous = false;
+  const read = createSportsReader({
+    snapshot: async () => ({ origins: [{ origin, localStorage: [{ name: "token", value: '"fixture-token"' }] }] }),
+    fetchImpl: async (url, request) => {
+      const route = new URL(url);
+      const path = route.pathname;
+      calls.push(path);
+      assert.equal(route.origin, origin);
+      assert.equal(request.headers["x-api-version"], "2.0.0");
+      assert.equal(request.redirect, "manual");
+      if (path.endsWith("/menu")) return Response.json({ success: true, data: [{ menuName: "场地预约", childrenVo: [
+        { menuName: "游泳", childrenVo: [{ menuName: "陈明游泳馆", uuid: "pool-scene", sceneUseType: 4 }] },
+      ] }] });
+      if (path.endsWith("/chooseByType")) {
+        assert.equal(request.method, "GET");
+        assert.deepEqual(Object.fromEntries(route.searchParams), { sceneUuid: "pool-scene", siteType: "BUILDING" });
+        return Response.json({ success: true, data: [{ uuid: "pool-building" }, ...(ambiguous ? [{ uuid: "other-building" }] : [])] });
+      }
+      if (path.endsWith("/devKind/list")) {
+        assert.deepEqual(Object.fromEntries(route.searchParams), { uuid: "pool-scene" });
+        return Response.json({ success: true, data: [{ uuid: "pool-kind" }] });
+      }
+      assert.equal(path, "/venue/site/api/reserve/current/page");
+      assert.equal(request.method, "POST");
+      assert.deepEqual(JSON.parse(request.body), {
+        sceneUuid: "pool-scene", resvKind: "CURRENT_RESERVE", reserveDate: day, pageNum: 1, pageSize: 999,
+        devKindUuid: "pool-kind", siteType: "DEV", searchValue: "", siteKindId: "", classTypeEnum: "BUILDING", classTypeUuid: "pool-building", sceneUseType: "SPORT_PERSON",
+      });
+      return Response.json({ success: true, data: [{ siteName: "陈明游泳馆", sessionVo: [
+        { beginDate: 20261123, beginTime: "12:00", endTime: "13:00", allowUserNum: 30, resvUserNum: 22, reserveStatus: "Y" },
+      ] }] });
+    },
+  });
+  const slots = createSportsSlotReader({ read });
+  const selected = { sport: "游泳", venue: "陈明游泳馆", date: day };
+  const result = await slots(selected);
+  assert.equal(result.sessions.length, 1);
+  assert.equal(result.sessions[0].date, day);
+  assert.equal(result.sessions[0].status, "Y");
+  ambiguous = true;
+  await assert.rejects(() => slots(selected), { code: "SLOTS_UNAVAILABLE" });
+  assert.equal(calls.filter(path => path.endsWith("/current/page")).length, 1);
 });
 
 test("sports: catalogue uses the official versioned group tree, without guessed venue categories", async () => {

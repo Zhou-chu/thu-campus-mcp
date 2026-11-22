@@ -24,7 +24,7 @@ export function createSportsView({ el, api }) {
       header.replaceChildren(
         el("div", { class: "stack" }, [el("p", { class: "eyebrow", text: "清华体育" }), el("h2", { text: "场馆预约" })]),
         el("div", { class: "sports-actions" }, [
-          el("button", { class: "ghost", type: "button", text: state.loading ? "读取中…" : "刷新", disabled: state.loading, onclick: () => { void loadSports(); } }),
+          el("button", { class: "ghost", type: "button", text: state.loading ? "读取中…" : "刷新", disabled: state.loading, onclick: () => { void (state.venue ? loadSlots() : state.sport ? loadVenues() : loadSports()); } }),
         ]),
       );
     }
