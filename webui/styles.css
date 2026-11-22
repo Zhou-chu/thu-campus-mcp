@@ -432,8 +432,26 @@ a:focus-visible {
   flex: 1 1 200px;
   align-self: center;
 }
+.effort-picker {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.effort-picker .effort-field {
+  flex: 0 0 auto;
+}
+.effort-picker .effort-field select {
+  min-width: 84px;
+}
+.effort-picker .effort-field.compact > span {
+  display: none;
+}
+.effort-picker .effort-field.compact select {
+  min-width: 74px;
+}
 @media (max-width: 600px) {
   .chat-dock { gap: var(--space-2); }
+  .composer-footer { grid-template-columns: auto minmax(0,1fr) auto auto; }
   .model-field { flex: 1 1 180px; }
   .model-picker { gap: 8px; }
   .model-status { flex-basis: 100%; }
@@ -1198,7 +1216,7 @@ input,select {background:var(--control-fill);}
 .chat .composer textarea {min-height:56px;padding:var(--space-4) var(--space-5);border:0;border-radius:var(--radius-panel) var(--radius-panel) 0 0;background:transparent;}
 .chat[data-empty="true"] .composer textarea {min-height:132px;padding:var(--space-5);}
 .chat .composer textarea:focus-visible {border:0;}
-.composer-footer {display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);}
+.composer-footer {display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:var(--space-4);align-items:center;border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);}
 .composer-actions {display:flex;align-items:center;gap:var(--space-4);min-width:0;}
 .composer-submit {display:flex;gap:var(--space-2);}
 .composer .composer-send,.composer .composer-stop {display:grid;place-items:center;width:52px;min-width:52px;height:52px;padding:0;font-size:var(--text-ui);}
@@ -1232,10 +1250,12 @@ input,select {background:var(--control-fill);}
  .chat-home {gap:var(--space-2);}
  .home-eyebrow {font-size:var(--text-meta);}
  .home-title {letter-spacing:0;column-gap:.15em;}
- .composer-footer {grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);padding:var(--space-2) var(--space-3);}
+ .composer-footer {grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-2);padding:var(--space-2) var(--space-3);}
  .composer-actions {grid-column:1/-1;gap:var(--space-3);}
  .composer .model-picker {grid-column:1;justify-self:stretch;width:100%;}
- .composer-submit {grid-column:2;}
+ .composer .effort-picker {grid-column:2;align-self:stretch;}
+ .composer .effort-picker .effort-field {height:100%;justify-content:flex-end;}
+ .composer-submit {grid-column:3;}
  .chat[data-empty="true"] .composer textarea {min-height:92px;padding:var(--space-4);}
  .home-shortcut {gap:var(--space-2);font-size:var(--text-body);min-height:44px;padding:var(--space-1);}
  .home-shortcut .home-icon {width:20px;height:20px;}

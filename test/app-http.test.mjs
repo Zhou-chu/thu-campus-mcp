@@ -355,6 +355,20 @@ test("设置接口只接受白名单字段并持久化", async (t) => {
   assert.equal(saved.settings.ignored, undefined);
   const raw = JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8"));
   assert.deepEqual(raw, { modelName: "test-model" });
+
+  // 思考强度：白名单校验、持久化、清空后不再出现该字段。
+  for (const value of ["minimal", "LOW", 3, null]) {
+    const bad = await fetch(url + "/api/settings", { method: "PUT", headers, body: JSON.stringify({ reasoningEffort: value }) });
+    assert.equal(bad.status, 400, `拒绝非法思考强度 ${JSON.stringify(value)}`);
+    assert.equal((await bad.json()).error.code, "INVALID_ARGUMENTS");
+  }
+  const effort = await fetch(url + "/api/settings", { method: "PUT", headers, body: JSON.stringify({ reasoningEffort: "high" }) });
+  assert.equal(effort.status, 200);
+  assert.equal((await effort.json()).settings.reasoningEffort, "high");
+  assert.equal(JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8")).reasoningEffort, "high");
+  const cleared = await fetch(url + "/api/settings", { method: "PUT", headers, body: JSON.stringify({ reasoningEffort: "" }) });
+  assert.equal(Object.hasOwn((await cleared.json()).settings, "reasoningEffort"), false);
+  assert.equal(Object.hasOwn(JSON.parse(await readFile(path.join(dir, "settings.json"), "utf8")), "reasoningEffort"), false);
 });
 test("静态资源不回退到目录外，缺 WebUI 时给出可读占位页", async (t) => {
   const { url } = await boot(t);
@@ -702,6 +716,36 @@ test("会话可重命名，空标题与不存在的会话被拒", async (t) => {
   assert.equal(long.status, 400, "超长标题先于存在性校验被拒");
 });
 
+
+test("思考强度按设置发送，未设置时不带该参数", async (t) => {
+  const bodies = [];
+  const base = scriptedRoute();
+  const route = {
+    ...base,
+    async models() { return [{ id: "effort-model", label: "E" }]; },
+    async chat(body) {
+      bodies.push({ effort: body.reasoning_effort, model: body.model });
+      return sseResponse([chunk({ choices: [{ delta: { content: "好" } }] }), "data: [DONE]\n\n"]);
+    },
+  };
+  const { url, pairing } = await boot(t, { token: undefined, route });
+  const { body } = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const meta = await (await fetch(url + "/api/meta", { headers })).json();
+  assert.equal(meta.model.reasoningEffort, "");
+  assert.deepEqual(meta.model.reasoningEfforts, ["", "low", "medium", "high"]);
+  await (await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "默认" }) })).text();
+  await fetch(url + "/api/settings", { method: "PUT", headers, body: JSON.stringify({ reasoningEffort: "medium" }) });
+  await (await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "设置过" }) })).text();
+  await (await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "本轮覆盖", reasoningEffort: "high" }) })).text();
+  await (await fetch(url + "/api/chat", { method: "POST", headers, body: JSON.stringify({ text: "非法覆盖", reasoningEffort: "turbo" }) })).text();
+  assert.deepEqual(bodies, [
+    { effort: undefined, model: "effort-model" },
+    { effort: "medium", model: "effort-model" },
+    { effort: "high", model: "effort-model" },
+    { effort: "medium", model: "effort-model" },
+  ], "未设置不发送；本轮合法值覆盖；非法值回落到设置值");
+});
 
 test("对话请求始终带上具体模型名，不回落到空值", async (t) => {
   let seenModel = "";
