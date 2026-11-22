@@ -130,10 +130,10 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: 构建调试 APK
-        working-directory: mobile/android
+        working-directory: apps/mobile-android
         run: .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
       - name: 校验 APK 结构
-        working-directory: mobile/android
+        working-directory: apps/mobile-android
         shell: pwsh
         run: |
           $apk = "app/build/outputs/apk/debug/app-debug.apk"
@@ -144,7 +144,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: thu-campus-app-android-debug
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: apps/mobile-android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
           if-no-files-found: error
 
@@ -169,7 +169,7 @@ jobs:
       - run: npm ci
       - run: node bin/thu-campus.mjs browser install
       - name: 构建 Android 调试包
-        working-directory: mobile/android
+        working-directory: apps/mobile-android
         run: .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
       - name: 发布门禁（CI 无 DevEco，因此只要求四项目标中的三项）
         run: node scripts/verify-clients.mjs --strict --require webui,desktop,android,runtime
@@ -196,7 +196,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: thu-campus-app-release-android
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: apps/mobile-android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
           if-no-files-found: error
 

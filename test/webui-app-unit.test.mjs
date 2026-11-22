@@ -934,7 +934,7 @@ test("app: refreshing a throttled sports venue preserves selected date and reloa
 });
 
 test("app: library seat view lists seats and surfaces the real booking error", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
@@ -976,7 +976,7 @@ test("app: library seat view asks for login instead of showing empty grids", asy
 });
 
 test("app: library seat view states an empty seat list honestly", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
@@ -1056,7 +1056,7 @@ test("app: seat view explains expired login on segment read", async t => {
     },
   });
   a.routes.set("GET /api/seat/segments?section=96", () => { throw Object.assign(new Error("login"), { code: "SEAT_LOGIN_REQUIRED" }); });
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   a.routes.set(`GET /api/seat/seats?section=96&date=${day}`, () => { throw Object.assign(new Error("login"), { code: "SEAT_LOGIN_REQUIRED" }); });
   a.nav("seat");
   await until(() => /暂时读不到座位|需要先登录/.test(a.$(".seat-panel").textContent), "seat failure");
@@ -1124,7 +1124,7 @@ test("app: seat view opens the login window and reports failures", async t => {
 });
 
 test("app: seat view explains a closed booking window and reserve failures", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },
@@ -1140,7 +1140,7 @@ test("app: seat view explains a closed booking window and reserve failures", asy
 });
 
 test("app: seat reserve failure maps to an actionable hint", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, {
     routes: {
       "GET /api/seat/libraries": { ok: true, libraries: [{ id: 35, name: "北馆(李文正馆)", valid: true }] },

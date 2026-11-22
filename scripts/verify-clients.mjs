@@ -122,8 +122,8 @@ const webuiFiles = [
 /* ---------- Android ---------- */
 {
   const candidates = [
-    ["mobile/android/app/build/outputs/apk/release/app-release.apk", "release"],
-    ["mobile/android/app/build/outputs/apk/debug/app-debug.apk", "debug"],
+    ["apps/mobile-android/app/build/outputs/apk/release/app-release.apk", "release"],
+    ["apps/mobile-android/app/build/outputs/apk/debug/app-debug.apk", "debug"],
   ];
   let found = false;
   for (const [rel, kind] of candidates) {
@@ -136,22 +136,22 @@ const webuiFiles = [
     ok("android", `${kind} APK`, sizeLabel(rel));
   }
   if (!found) {
-    const message = "未构建（运行 mobile/android/gradlew.bat assembleRelease）";
+    const message = "未构建（运行 apps/mobile-android/gradlew.bat assembleRelease）";
     if (mustFail("android")) fail("android", "APK", message);
     else warn("android", "APK", message);
   }
-  for (const rel of ["mobile/android/gradlew.bat", "mobile/android/gradle/wrapper/gradle-wrapper.jar"])
+  for (const rel of ["apps/mobile-android/gradlew.bat", "apps/mobile-android/gradle/wrapper/gradle-wrapper.jar"])
     if (!existsSync(file(rel))) fail("android", "wrapper", `缺少 ${rel}`);
-  if (existsSync(file("mobile/android/keystore.properties")))
+  if (existsSync(file("apps/mobile-android/keystore.properties")))
     warn("android", "签名材料", "keystore.properties 存在（应保持被 gitignore 忽略）");
 }
 /* ---------- HarmonyOS ---------- */
 {
-  const hap = "mobile/harmony/entry/build/default/outputs/default/entry-default-unsigned.hap";
-  const signed = "mobile/harmony/entry/build/default/outputs/default/entry-default-signed.hap";
+  const hap = "apps/mobile-harmony/entry/build/default/outputs/default/entry-default-unsigned.hap";
+  const signed = "apps/mobile-harmony/entry/build/default/outputs/default/entry-default-signed.hap";
   const target = existsSync(file(signed)) ? signed : existsSync(file(hap)) ? hap : null;
   if (!target) {
-    const message = "未构建（运行 hvigorw assembleHap，见 mobile/harmony/README.md）";
+    const message = "未构建（运行 hvigorw assembleHap，见 apps/mobile-harmony/README.md）";
     if (mustFail("harmony")) fail("harmony", "HAP", message);
     else warn("harmony", "HAP", message);
   } else if (zipMagic(target) !== "504b0304") {
@@ -159,7 +159,7 @@ const webuiFiles = [
   } else {
     ok("harmony", "HAP", `${sizeLabel(target)}${target === signed ? "（已签名）" : "（未签名）"}`);
   }
-  for (const rel of ["mobile/harmony/build-profile.json5", "mobile/harmony/entry/src/main/module.json5"]) {
+  for (const rel of ["apps/mobile-harmony/build-profile.json5", "apps/mobile-harmony/entry/src/main/module.json5"]) {
     if (!existsSync(file(rel))) {
       fail("harmony", "工程", `缺少 ${rel}`);
       continue;

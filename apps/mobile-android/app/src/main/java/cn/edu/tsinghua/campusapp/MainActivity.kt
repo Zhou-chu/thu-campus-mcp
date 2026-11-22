@@ -15,6 +15,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
@@ -122,7 +123,7 @@ class MainActivity : Activity() {
                 .put("code", code)
                 .put("deviceName", android.os.Build.MODEL ?: "Android")
                 .put("platform", "android")
-            val result = request("POST", "$base/api/pair/redeem", payload.toString(), null)
+            val result = request("POST", "$base${MobileCore.PAIRING_PATH}", payload.toString(), null)
             runOnUiThread {
                 pairButton.isEnabled = true
                 pairButton.text = getString(R.string.pair_submit)
@@ -156,7 +157,7 @@ class MainActivity : Activity() {
     /** 已保存令牌时先校验一次，401 就清掉令牌回到配对页。 */
     private fun verifyAndShow(base: String, token: String) {
         worker.execute {
-            val result = request("GET", "$base/api/meta", null, token)
+            val result = request("GET", "$base${MobileCore.META_PATH}", null, token)
             runOnUiThread {
                 when (result.first) {
                     200 -> showWeb(base, token)
@@ -204,7 +205,28 @@ class MainActivity : Activity() {
                 return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
             }
         }
-        web.loadUrl("$base/#token=" + Uri.encode(token))
+        loadEntry(base, token)
+    }
+
+    /**
+     * 优先调用 /api/session/exchange 换取一次性会话码，令牌只出现在 POST 请求体里；
+     * 旧版运行时或明文远程拒绝兑换时才回退令牌片段，并明确提示。
+     */
+    private fun loadEntry(base: String, token: String) {
+        worker.execute {
+            val result = request("POST", "$base" + MobileCore.EXCHANGE_PATH, "{}", token)
+            val code = if (result.first == 200) {
+                runCatching { JSONObject(result.second).optString("code") }.getOrDefault("")
+            } else ""
+            runOnUiThread {
+                if (code.isNotEmpty()) {
+                    web.loadUrl("$base/?" + MobileCore.REDEEM_QUERY + "=" + Uri.encode(code))
+                } else {
+                    Toast.makeText(this, MobileCore.COPY_FALLBACK, Toast.LENGTH_LONG).show()
+                    web.loadUrl("$base/#" + MobileCore.FALLBACK_FRAGMENT + "=" + Uri.encode(token))
+                }
+            }
+        }
     }
 
     @Deprecated("Activity 未用 AndroidX OnBackPressedDispatcher")
