@@ -1190,8 +1190,6 @@ test("app: gitlab config keeps the saved token when only the url changes", async
 
 
 test("app: 作业栏会话失效会同步到服务状态，恢复后自动清除", async (t) => {
-  const { clearLearnxSignal } = await import("../lib/app/session-signals.mjs");
-  clearLearnxSignal();
   const baseHost = fakeHost();
   let mode = "expired";
   const host = {
