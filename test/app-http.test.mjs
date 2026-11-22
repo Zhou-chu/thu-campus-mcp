@@ -215,6 +215,65 @@ test("配对码换到设备令牌，令牌可读 meta 并能被吊销", async (t
   const after = await fetch(url + "/api/meta", { headers });
   assert.equal(after.status, 401);
 });
+test("会话交换码让客户端不用把令牌放进 URL，且只兑换一次", async (t) => {
+  const { url, pairing } = await boot(t);
+  const redeemed = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + redeemed.body.token, "content-type": "application/json" };
+
+  const issued = await fetch(url + "/api/session/exchange", { method: "POST", headers });
+  assert.equal(issued.status, 200);
+  const { code, ttlSeconds } = await issued.json();
+  assert.match(code, /^[A-Za-z0-9_-]{24,80}$/);
+  assert.equal(ttlSeconds, 60);
+
+  const anonymous = await fetch(url + "/api/session/exchange", { method: "POST", headers: { "content-type": "application/json" } });
+  assert.equal(anonymous.status, 401);
+
+  const first = await fetch(url + "/api/session/redeem", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) });
+  assert.equal(first.status, 200);
+  const firstBody = await first.json();
+  assert.equal(firstBody.token, redeemed.body.token, "兑换得到调用者原本的令牌");
+  assert.equal(typeof firstBody.baseUrl, "string");
+
+  const replay = await fetch(url + "/api/session/redeem", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) });
+  assert.equal(replay.status, 403);
+  assert.equal((await replay.json()).error.code, "SESSION_CODE_INVALID");
+
+  const wrongMethod = await fetch(url + "/api/session/redeem", { method: "GET" });
+  assert.equal(wrongMethod.status, 405);
+});
+
+test("设备令牌可整体轮换：旧令牌立即失效，新令牌可用", async (t) => {
+  const { url, pairing } = await boot(t);
+  const redeemed = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + redeemed.body.token, "content-type": "application/json" };
+  const rotated = await fetch(url + "/api/session/rotate", { method: "POST", headers });
+  assert.equal(rotated.status, 200);
+  const body = await rotated.json();
+  assert.match(body.token, /^tc1_/);
+  assert.notEqual(body.token, redeemed.body.token);
+  assert.ok(body.revoked >= 1);
+
+  const old = await fetch(url + "/api/meta", { headers });
+  assert.equal(old.status, 401, "旧令牌必须立即失效");
+  const fresh = await fetch(url + "/api/meta", { headers: { authorization: "Bearer " + body.token } });
+  assert.equal(fresh.status, 200);
+  const list = await (await fetch(url + "/api/devices", { headers: { authorization: "Bearer " + body.token } })).json();
+  assert.equal(list.devices.length, 1, "轮换后只剩一个设备");
+});
+
+test("固定令牌模式不假装支持轮换", async (t) => {
+  const { url } = await boot(t, { token: "fixture-fixed-token" });
+  const rotated = await fetch(url + "/api/session/rotate", { method: "POST", headers: { authorization: "Bearer fixture-fixed-token" } });
+  assert.equal(rotated.status, 409);
+  const body = await rotated.json();
+  assert.equal(body.error.code, "ROTATION_FIXED_TOKEN");
+  assert.match(body.error.message, /固定令牌/);
+  // 固定令牌仍可签发交换码，只是不能轮换环境里的那个令牌。
+  const issued = await fetch(url + "/api/session/exchange", { method: "POST", headers: { authorization: "Bearer fixture-fixed-token" } });
+  assert.equal(issued.status, 200);
+});
+
 test("无效配对码被拒绝且不泄露细节", async (t) => {
   const { url } = await boot(t);
   const response = await fetch(url + "/api/pair/redeem", {

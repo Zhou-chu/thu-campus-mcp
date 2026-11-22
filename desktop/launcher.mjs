@@ -17,9 +17,13 @@ export const stateDir = path.join(homedir(), ".thu-campus-mcp/app");
 export const configFile = path.join(stateDir, "desktop.json");
 export const lockFile = path.join(stateDir, "desktop.lock");
 export const logFile = path.join(stateDir, "desktop.log");
-export function buildLaunchArgs({ port, token, profileDir }) {
+export function buildLaunchArgs({ port, token, sessionCode, profileDir }) {
+  // 优先用一次性会话码：令牌不进入 URL、浏览器历史或 --app= 的命令行。
+  const target = sessionCode
+    ? `http://127.0.0.1:${port}/?session=${encodeURIComponent(sessionCode)}`
+    : `http://127.0.0.1:${port}/#token=${encodeURIComponent(token || "")}`;
   return [
-    `--app=http://127.0.0.1:${port}/#token=${encodeURIComponent(token)}`,
+    `--app=${target}`,
     `--user-data-dir=${profileDir}`,
     "--window-size=1180,820",
     "--no-first-run",
@@ -61,6 +65,23 @@ export async function waitForHealth({ url, timeoutMs = 30000, intervalMs = 250, 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw Object.assign(new Error(`等待运行时就绪超时：${last}`), { code: "APP_NOT_READY" });
+}
+export function describeExchangeFailure(error) {
+  if (error?.code === "APP_NOT_READY") return "运行时就绪前无法签发会话码，已改用令牌链接；请检查运行时是否正常。";
+  return "会话码签发失败，已改用令牌链接；如担心令牌暴露，请关闭窗口后重启应用。";
+}
+export async function requestSessionCode({ port, token, fetchImpl = fetch } = {}) {
+  const response = await fetchImpl(`http://127.0.0.1:${port}/api/session/exchange`, {
+    method: "POST",
+    headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+    body: "{}",
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { code: "EXCHANGE_FAILED" });
+  const body = await response.json().catch(() => ({}));
+  const code = typeof body?.code === "string" ? body.code : "";
+  if (!body?.ok || !code) throw Object.assign(new Error("会话码缺失"), { code: "EXCHANGE_FAILED" });
+  return code;
 }
 export function redact(text, token) {
   const value = String(text ?? "");
@@ -127,11 +148,19 @@ async function main() {
     });
     await waitForHealth({ url: `http://127.0.0.1:${config.port}/healthz` });
     line(`运行时已就绪：http://127.0.0.1:${config.port}`);
+    let sessionCode = "";
+    try {
+      sessionCode = await requestSessionCode({ port: config.port, token: config.token });
+    } catch (error) {
+      line(describeExchangeFailure(error));
+    }
     window = spawn(info.executablePath, buildLaunchArgs({
       port: config.port,
       token: config.token,
+      sessionCode,
       profileDir: path.join(stateDir, "desktop-profile"),
     }), { stdio: "ignore", windowsHide: false });
+    if (sessionCode) line("已使用一次性会话码打开窗口（URL 不含令牌）。");
     line("桌面窗口已打开。关闭窗口即退出应用。");
     window.once("exit", () => void cleanup("窗口已关闭").then(() => process.exit(0)));
   } catch (e) {
