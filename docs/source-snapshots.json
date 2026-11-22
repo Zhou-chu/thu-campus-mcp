@@ -60,7 +60,8 @@
       "vendor/thu-learn-lib/src/types.ts": "0f2eef60aff97906b944d8b9c605d052dd7be0b45843619638d2c14d5b83cca0",
       "vendor/thu-learn-lib/src/urls.ts": "e0c5f7bc57e3aa111dbcbc3b7e979f3252c708dae8ef25d031e40444533a016e",
       "vendor/thu-learn-lib/src/utils.ts": "67dc4ab0d9c234a59460df4ea56646d22200d39b69576cd62488d516e4f35004",
-      "vitest.config.ts": "1e2ed348ef32f7feb8a4c6daede22d0fc2c42dc54afa819123ec8bc4c677768a"
+      "vitest.config.ts": "1e2ed348ef32f7feb8a4c6daede22d0fc2c42dc54afa819123ec8bc4c677768a",
+      "src/service.ts": "4016cbabe42dc084b11aa057d8a8daa971717ce9557dffa880e8f6887f91e42d"
     },
     "integrationChanges": {
       "README.md": {
@@ -96,8 +97,8 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)"
       },
       "src/server.ts": {
-        "sha256": "15564d90b95762dadb159a324b947bebd61f57014b446697e2586f39cf86e132",
-        "reason": "1.5：受保护网络学堂认证探针，不把配置当登录证据"
+        "sha256": "b8c56dd40e51b3269971084ed72e386e79eec429c62cb85004170953acb0a9a0",
+        "reason": "1.5.1：MCP 服务器改为 service.ts 的薄适配器，工具定义与调用移入进程内服务"
       },
       "src/install.ts": {
         "sha256": "0cc4dbc2a322bc69b1bff0591e3759bea44900938c18eb52253d96ab5f75b95d",
@@ -110,6 +111,14 @@
       "vitest.config.ts": {
         "sha256": "062e63dcb3d20576748d4cd956c78445b3d1eabd58acecebb5a154726e709517",
         "reason": "真实V8覆盖率采集全部src/**/*.ts，输出可映回源码的JSON与LCOV；不筛除未测生产源码"
+      },
+      "src/detail.ts": {
+        "sha256": "a7292cdb60d6b6e7d20082cce99ae346f87abdd8dc3b3f60acaa7b709bc8750b",
+        "reason": "1.5.1：坏百分号编码的内嵌文件名不再让详情归档整体失败"
+      },
+      "src/service.ts": {
+        "sha256": "4016cbabe42dc084b11aa057d8a8daa971717ce9557dffa880e8f6887f91e42d",
+        "reason": "1.5.1：新增工具注册表（schema、标注、调用、脱敏与错误映射），网关与应用共用"
       }
     }
   },
@@ -146,7 +155,8 @@
       "test/sync.test.ts": "953f6c2032d04be3627b1e650293848df5f09c8c96c3287a4c72460b80dd05d5",
       "test/transfer.test.ts": "3387b8c0995972c082a27f91a5c22c7bb9effdbf512971d3357c0bbab26e0f4e",
       "tsconfig.json": "138b68b82f00bb2f66b43ee5779e06f448cadbd3f547d3855e69c5a1833c9ed9",
-      "vitest.config.ts": "1e2ed348ef32f7feb8a4c6daede22d0fc2c42dc54afa819123ec8bc4c677768a"
+      "vitest.config.ts": "1e2ed348ef32f7feb8a4c6daede22d0fc2c42dc54afa819123ec8bc4c677768a",
+      "src/service.ts": "d38d64c4cb10dc9fecd0c300787ff843856b4225794b5a4937c26868408102da"
     },
     "integrationChanges": {
       "README.md": {
@@ -170,8 +180,8 @@
         "reason": "Independent persistent browser, account-safe login and bundle integration (1.1)；Sonar S4036：改用共享固定绝对路径的系统程序解析，保留原生登录及DPAPI契约"
       },
       "src/server.ts": {
-        "sha256": "2e012c7f348cd0dff0d60a41cbe4ff2bab753e26d1c4a1b22e4255dfb2eb7dae",
-        "reason": "1.5：注册受保护认证状态及五个受限私有工作区工具"
+        "sha256": "98e161ba744fa46ac621165837def1e26ed026fe21464d221eb9da8936b1639d",
+        "reason": "1.5.1：MCP 服务器改为 service.ts 的薄适配器，工具定义与调用移入进程内服务"
       },
       "test/server.test.ts": {
         "sha256": "76817f7bcd3e8b5b510f8398d757c09692590c1617b225c3f36d9ae237196a14",
@@ -192,6 +202,10 @@
       "vitest.config.ts": {
         "sha256": "ae0bc36b785655836cd53c606e8cd0c9e7d90db176e9a33ab8a562b8c8774bc5",
         "reason": "真实V8覆盖率采集全部src/**/*.ts，输出可映回源码的JSON与LCOV；不筛除未测生产源码"
+      },
+      "src/service.ts": {
+        "sha256": "d38d64c4cb10dc9fecd0c300787ff843856b4225794b5a4937c26868408102da",
+        "reason": "1.5.1：新增工具注册表（schema、标注、调用、脱敏与错误映射），网关与应用共用"
       }
     }
   },
@@ -232,7 +246,8 @@
       "test/server.test.ts": "6d8b4cc1b27bba903dee81a418f4df5858fea4c9a1bae13808b8ffc7c77e9a7e",
       "test/smoke.mjs": "8666efa6f7af46607fc7fe39257ee6b71ff1ae7d30ed6144e0c8ea76bd3d678c",
       "tsconfig.json": "138b68b82f00bb2f66b43ee5779e06f448cadbd3f547d3855e69c5a1833c9ed9",
-      "vitest.config.ts": "1e2ed348ef32f7feb8a4c6daede22d0fc2c42dc54afa819123ec8bc4c677768a"
+      "vitest.config.ts": "1e2ed348ef32f7feb8a4c6daede22d0fc2c42dc54afa819123ec8bc4c677768a",
+      "src/service.ts": "b4ae41d82076912bfe86412ae1bef748d47ffc73ff536f5c6b5eb2ac2e4f7443"
     },
     "integrationChanges": {
       "README.md": {
@@ -280,8 +295,8 @@
         "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage."
       },
       "src/server.ts": {
-        "sha256": "1a55ece8dfe6680f8f15f83cf1cbbbf0e60f395aa1822e2424c70c715bbfc78c",
-        "reason": "Prepared-answer scheduling with protected snapshots, publication timing provenance, dispatch gates, MCP tool and regression coverage.；1.5：受保护雨课堂认证探针与明确认证证据，不自动登录或进入课堂"
+        "sha256": "036af9ced2af593893f701d4ee48a77cae3fff7789d16dd0f6a7fd218e9da966",
+        "reason": "1.5.1：MCP 服务器改为 service.ts 的薄适配器，工具定义与调用移入进程内服务"
       },
       "src/types.ts": {
         "sha256": "c4675bfe1d5f9b1350f8e20bd1e31204fcd7a15d1a85d5a587ea03e2e5b4c60f",
@@ -326,6 +341,10 @@
       "vitest.config.ts": {
         "sha256": "db98bd0a2e222d0fd6d19142130e41f042aafbd5c16041659b7fa6b1ef746c5f",
         "reason": "真实V8覆盖率采集全部src/**/*.ts，输出可映回源码的JSON与LCOV；不筛除未测生产源码"
+      },
+      "src/service.ts": {
+        "sha256": "b4ae41d82076912bfe86412ae1bef748d47ffc73ff536f5c6b5eb2ac2e4f7443",
+        "reason": "1.5.1：新增工具注册表（schema、标注、调用、脱敏与错误映射），网关与应用共用"
       }
     }
   }
