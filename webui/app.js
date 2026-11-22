@@ -1302,6 +1302,7 @@ async function loginService(name, manual, connection) {
     if (result.job?.status === "busy") throw loginFailure("BROWSER_BUSY");
     if (typeof result.jobId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(result.jobId)) throw loginFailure("LOGIN_JOB_MISSING");
     await followLoginJob(result.jobId, name, connection);
+    state.meta = { ...state.meta, services: { ...state.meta?.services, [name]: { state: "unverified", verified: false } } };
     state.authNotices[name] = { text: "登录任务已结束，请点击“核验登录状态”确认结果。" };
     if (name === "cloud") { state.workspaceStorageError = "云盘登录任务已结束，请重新核验工作区。"; updateStoragePanels(); }
   } catch (error) {
