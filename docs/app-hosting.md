@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 本机（默认） | 什么都不设 | 只在自己电脑上用浏览器 / 桌面端 |
 | 局域网 | `THU_CAMPUS_APP_HOST=0.0.0.0` + `THU_CAMPUS_APP_ALLOW_REMOTE=1` | 手机在家用 Wi-Fi，同一个路由器 |
-| 托管 | 上面再加 `PUBLIC_URL` + `TLS_CERT/KEY`（或反代） | 出门在外、多校区、多设备 |
+| 托管 | 上面再加 `PUBLIC_URL` + `TLS_CERT/KEY`，或回环监听 + `TLS_PROXY=1` 交给反代 | 出门在外、多校区、多设备 |
 
 ## 环境变量
 
@@ -22,10 +22,21 @@
 | `THU_CAMPUS_APP_TOKEN` | 空 | 固定设备令牌；设置后**关闭配对**，所有客户端共用它 |
 | `THU_CAMPUS_APP_PUBLIC_URL` | 空 | 对外可达地址，配对时回给客户端；也自动进入 Host 白名单 |
 | `THU_CAMPUS_APP_TLS_CERT` / `_KEY` | 空 | PEM 证书与私钥；成对提供，直出 HTTPS |
-| `THU_CAMPUS_APP_ALLOWED_HOSTS` | 空 | 逗号分隔的额外 Host 白名单（反代终止 TLS 时需要） |
+| `THU_CAMPUS_APP_TLS_PROXY` | 空 | `1` 表示由本机回环反代终止 TLS；必须同时设回环监听与 `HTTPS` 的 `PUBLIC_URL` |
+| `THU_CAMPUS_APP_ALLOW_PLAINTEXT` | 空 | 仅为已在运行的明文实例保留的迁移开关；新部署不要使用 |
+| `THU_CAMPUS_APP_ALLOWED_HOSTS` | 空 | 逗号分隔的额外 Host 白名单（反代转发的主机名不在 `PUBLIC_URL` 里时才需要） |
 | `THU_CAMPUS_APP_ALLOWED_ORIGINS` | 空 | 逗号分隔的额外 Origin 白名单 |
 
-安全闸门：非回环监听必须在 `THU_CAMPUS_APP_TOKEN` 与 `THU_CAMPUS_APP_ALLOW_REMOTE=1` 之间**二选一**，否则启动即失败（`INSECURE_LISTEN`）。这是刻意的——不允许「不小心把没有鉴权的助手挂到公网」。
+安全闸门有两条，都在 `app serve` 启动阶段执行，不满足直接退出：
+
+1. 非回环监听必须在 `THU_CAMPUS_APP_TOKEN` 与 `THU_CAMPUS_APP_ALLOW_REMOTE=1` 之间**二选一**，否则 `INSECURE_LISTEN`。
+2. 托管形态（`ALLOW_REMOTE=1`、`PUBLIC_URL` 或非回环监听）必须有 TLS：本机直出证书，或回环 + `TLS_PROXY=1`，否则 `TLS_REQUIRED`。代理模式配置不完整报 `INVALID_TLS_PROXY`。
+
+只有「本机回环 + 明文 HTTP」仍是合法形态，那是自己电脑上的浏览器与桌面端。
+
+已在运行的明文托管实例可以临时设置 `THU_CAMPUS_APP_ALLOW_PLAINTEXT=1` 继续启动，启动日志会输出 `app-plaintext-legacy`，`/api/meta` 的 `security.https` 仍为 `false`。这个开关只为迁移期保留，不要在新部署里使用。
+
+配对与账号写入都要求密文通道（原生 TLS、经批准的回环代理，或本机回环 HTTP），其余情况返回 `PAIRING_HTTPS_REQUIRED` / `ACCOUNT_HTTPS_REQUIRED`，不会在明文远程页面上收密码。
 
 ## 方案 A：运行时直出 HTTPS
 
@@ -43,13 +54,13 @@ node bin/thu-campus.mjs app serve
 
 ## 方案 B：本机回环 + 反向代理终止 TLS（推荐）
 
-运行时继续只监听 `127.0.0.1`，由 Nginx/Caddy 负责证书与公网。
+运行时继续只监听 `127.0.0.1`，由 Nginx/Caddy/Tailscale Serve 负责证书。**必须**显式声明 `THU_CAMPUS_APP_TLS_PROXY=1`：只有这个开关打开，运行时才会信任回环代理发来的 `X-Forwarded-Proto`，并且要求 `Host` 与 `X-Forwarded-Host` 都等于 `PUBLIC_URL` 的主机名（含端口）。
 
 ```powershell
-$env:THU_CAMPUS_APP_ALLOW_REMOTE   = '1'
-$env:THU_CAMPUS_APP_PUBLIC_URL     = 'https://campus.example.com'
-$env:THU_CAMPUS_APP_ALLOWED_HOSTS  = 'campus.example.com'
-$env:THU_CAMPUS_APP_ALLOWED_ORIGINS = 'https://campus.example.com'
+$env:THU_CAMPUS_APP_HOST            = '127.0.0.1'
+$env:THU_CAMPUS_APP_ALLOW_REMOTE    = '1'
+$env:THU_CAMPUS_APP_TLS_PROXY       = '1'
+$env:THU_CAMPUS_APP_PUBLIC_URL      = 'https://campus.example.com'
 node bin/thu-campus.mjs app serve
 ```
 
@@ -67,13 +78,14 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;   # 运行时要核对，缺了会被当成明文
     proxy_buffering off;          # 关键：否则 SSE 会被缓冲
     proxy_read_timeout 600s;
   }
 }
 ```
 
-Caddy 更简单：
+Caddy（自动带上 `X-Forwarded-Host`）：
 
 ```
 campus.example.com {
@@ -81,6 +93,14 @@ campus.example.com {
     flush_interval -1
   }
 }
+```
+
+Tailscale Serve（只有 tailnet 能访问，无需证书文件）：
+
+```powershell
+tailscale serve --bg --https=8443 http://127.0.0.1:8971
+$env:THU_CAMPUS_APP_TLS_PROXY  = '1'
+$env:THU_CAMPUS_APP_PUBLIC_URL = 'https://<machine>.<tailnet>.ts.net:8443'
 ```
 
 `proxy_buffering off` / `flush_interval -1` 是必须的：对话是 `text/event-stream`，被缓冲就看不到流式输出。
@@ -158,7 +178,8 @@ node bin/thu-campus.mjs browser login learnx --account <你的学号>
 
 ## 安全清单
 
-- [ ] 公网必须 HTTPS；明文托管会在启动时打印 `app-insecure-remote` 警告。
+- [ ] 公网必须 HTTPS；托管形态缺 TLS 时**启动即失败**（`TLS_REQUIRED`），不再是警告。
+- [ ] 反代终止 TLS 时设 `THU_CAMPUS_APP_TLS_PROXY=1`，并确认反代会覆盖 `Host`/`X-Forwarded-Host`/`X-Forwarded-Proto`；直接访问后端端口伪造这些头不会生效。
 - [ ] 不要长期开着 `THU_CAMPUS_APP_TOKEN` 又对外暴露——它是单一共享令牌，泄露即全丢；日常用配对码 + 设备吊销。
 - [ ] 定期 `node bin/thu-campus.mjs app devices` 检查已配对设备，可疑的 `--revoke <id>`。
 - [ ] 反代不要加缓存（尤其 `/api/chat`），不要在 `/api/*` 上做路径重写。
