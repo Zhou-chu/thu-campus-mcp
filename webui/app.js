@@ -290,6 +290,7 @@ async function refreshMeta() {
     state.meta = await api("/api/meta");
     // 思考强度来自服务端持久化设置，首次加载时同步到本地状态。
     state.settings = { ...(state.settings || {}), modelName: state.meta.model?.name || "", reasoningEffort: state.meta.model?.reasoningEffort || "" };
+    if (state.settings.compactTools === undefined) state.settings.compactTools = state.meta.model?.compactTools === true;
     // 只在首次加载采用服务端值；用户刚保存的值不被并发中的旧 meta 覆盖。
     if (state.effort === undefined) state.effort = state.meta.model?.reasoningEffort || "";
     acceptModels(state.meta.models, state.meta.model?.name);
@@ -1828,7 +1829,7 @@ function settingsView() {
     ]),
   ]);
   const surface = el("div", { class: "settings-surface" });
-  surface.append(workspaceStorageCard(), settingsSection("对话模型", [modelPicker("settings-model"), effortPicker("settings-effort")]));
+  surface.append(workspaceStorageCard(), settingsSection("对话模型", [modelPicker("settings-model"), effortPicker("settings-effort"), compactToolsToggle()]));
   const codeNode = el("output", { class: "pair-code", "aria-label": "一次性配对码", hidden: true });
   const validity = el("span", { class: "small muted", hidden: true });
   const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });
@@ -1864,6 +1865,33 @@ surface.append(settingsSection("帮助与诊断", [helpPanel(diagnostics)]));
   return wrap;
 }
 
+function compactToolsToggle() {
+  const stateNode = el("p", { class: "small muted", role: "status", hidden: true });
+  const box = el("input", { type: "checkbox", id: "settings-compact-tools" });
+  box.checked = state.settings?.compactTools === true;
+  box.addEventListener("change", () => void setCompactTools(box.checked, box, stateNode));
+  box.className = "switch-input";
+  return el("label", { class: "switch-row", for: "settings-compact-tools" }, [
+    box,
+    el("span", { class: "stack" }, [
+      el("strong", { text: "精简工具模式" }),
+      el("span", { class: "small muted", text: "模型只拿到“检索/调用”两个入口，写入仍在工具页用完整模式确认。" }),
+      stateNode,
+    ]),
+  ]);
+}
+async function setCompactTools(enabled, box, statusNode) {
+  statusNode.hidden = false;
+  statusNode.textContent = "保存中…";
+  try {
+    const data = await api("/api/settings", { method: "PUT", body: { compactTools: enabled } });
+    state.settings = { ...(state.settings || {}), compactTools: data.settings?.compactTools === true };
+    statusNode.textContent = enabled ? "已开启：下一轮对话起生效。" : "已关闭：模型恢复完整工具清单。";
+  } catch (e) {
+    box.checked = !enabled;
+    statusNode.textContent = e.message || "保存失败，保持原设置。";
+  }
+}
 function rotateTokenButton() {
   const status = el("p", { class: "small muted", role: "status", hidden: true });
   const button = el("button", {

@@ -10,6 +10,18 @@
 | TIMETABLE | 同级的“课表”视图：周视图（7 天 × 6 大节）、窄屏日程、课程详情 | 已实现，验收见[课表验证](#timetable课表视图) |
 | SPORTS-BOOKING | 清华体育场馆预约：运动 → 场馆 → 日期 → 场次，一键登录 | **部分实现**：只读链路已上线，下单与支付未做 |
 | LIBRARY-SEAT | 图书馆座位预约：分区 → 座位 → 预约 / 取消 | **可用**：读取、预约、取消、界面与工具均已打通 |
+| TOOL-COMPACT-MODE | 精简工具模式：用检索/调用两个入口替代 86 个工具的完整清单 | 已实现，验收见[精简工具模式](#tool-compact-mode精简工具模式) |
+
+## TOOL-COMPACT-MODE：精简工具模式
+
+86 个工具的完整 Schema 约 1 万 token，每轮都随请求发送。设置页“对话模型 → 精简工具模式”打开后，模型只拿到两个入口：
+
+- `campus_tool_search(query, limit)`：按名称/服务/描述检索**只读**工具，返回名称、服务与完整 inputSchema。
+- `campus_tool_call(name, arguments)`：调用检索到的只读工具。
+
+写入类工具不进入检索结果，直接点名也会被拒绝并提示到工具页用完整模式逐次确认，避免把写操作藏在转发层后面。实测首轮工具 Schema 约 300 token（原约 10,600）；开关保存在 `settings.json`，`/api/meta` 可回读；真实页面验证开→关→开、刷新保持、390px 无横向溢出。
+
+验收：`test/compact-tools.test.mjs`（检索/写拒绝/透传）、`test/compact-agent.test.mjs`（runTurn 只发两个入口且检索结果可继续调用）、`.local/audit-compact-tools.mjs`（真实浏览器）。
 
 ## UI-APPROVAL-CARD：审批卡与生命周期
 
