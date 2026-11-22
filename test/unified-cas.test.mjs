@@ -38,7 +38,7 @@ test("unified CAS never fills credentials at a different origin or submits a cha
   }
 });
 
-function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { ok: true } } = {}) {
+function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { ok: true }, prior = { version: "old", data: { account: "test-user" } } } = {}) {
   const saves = [];
   const account = { username: "test-user", password: "test-only" };
   let closed = 0, read = 0, origins;
@@ -54,6 +54,7 @@ function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { o
   class AuthStore {
     async generation() { return "epoch"; }
     async version() { return "old"; }
+    async loadVersioned() { return prior; }
     async saveBrowserIfCurrent(...args) { saves.push(args); }
   }
   const login = createLearnxAccountLogin({
@@ -68,10 +69,25 @@ function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { o
 
 test("LearnX writes the verified session with a version guard and only captures LearnX cookies", async () => {
   const fixture = learnFixture();
-  assert.deepEqual(await fixture.login(), { ok: true });
+  assert.deepEqual(await fixture.login({ sameAccountOnly: true }), { ok: true });
   assert.deepEqual(fixture.saves, [[{ account: "test-user", csrfToken: "test" }, "epoch", "old"]]);
   assert.deepEqual(fixture.origins(), ["https://learn.tsinghua.edu.cn"]);
   assert.equal(fixture.closed(), 1);
+});
+
+test("LearnX automatic recovery never launches a browser for a different account or changed version", async () => {
+  for (const [prior, code] of [
+    [{ version: "old", data: { account: "different-user" } }, "BROWSER_ACCOUNT_MISMATCH"],
+    [{ version: "different", data: { account: "test-user" } }, "AUTH_CHANGED"],
+  ]) {
+    const fixture = learnFixture({ prior });
+    await assert.rejects(() => fixture.login({ sameAccountOnly: true }), { code });
+    assert.deepEqual(fixture.saves, []);
+    assert.equal(fixture.closed(), 0);
+  }
+  const fixture = learnFixture();
+  await assert.rejects(() => fixture.login({ sameAccountOnly: true, expectedAccount: { username: "test-user", password: "changed" } }), { code: "AUTH_CHANGED" });
+  assert.equal(fixture.closed(), 0);
 });
 
 test("LearnX never persists on challenge, failed verification or changed account", async () => {
