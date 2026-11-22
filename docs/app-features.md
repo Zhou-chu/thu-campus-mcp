@@ -155,6 +155,12 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 - 令牌来源：优先页面渲染的 `ska.access_token`（比 cookie 新），页面地址附带 `_=<timestamp>` 规避缓存导致的陈旧令牌。
 
 
-- **自动重登实测（2026-11-20）**：主动登出后再调 `POST /api/seat/login` → `ok=true, alreadyLoggedIn=false, needsManual=false`，耗时约 20 秒，恢复后 `ska.access_token` 32 位、`userid` 存在。凭据来自 `app/seat-credentials.json`（`{"username","password"}`，用户自行写入，代码不打印）。
+- **自动重登实测（2026-11-20）**：主动登出后调用 `POST /api/seat/login`，约20秒后返回 `ok=true, alreadyLoggedIn=false, needsManual=false`，恢复的是当时的本机座位会话。凭据现应在“清华账号”统一配置，不需要再手工创建座位密码文件。
 - **两条路径的预约证据**：工具层 `seat_reserve` → `ok=true, bookingId=7522862`；界面点击 → 提示「已提交预约：NF3B001」，记录 `7523614`；两条记录随后都取消成功。
+
+### 本机凭据存储
+
+- 统一清华账号保存在应用状态目录的 `account.dpapi`，由Windows DPAPI绑定到当前Windows用户，不以明文写盘。配置接口只接受HTTPS或本机回环连接。非Windows环境不能保存统一账号，不降级为明文。
+- 从旧应用状态目录迁移时，`account.json` 优先于 `seat-credentials.json`，与旧读取顺序一致。原来生效的账号在加密写入、读回校验后才会移除应用状态目录内的旧文件。显式指定的外部 `SEAT_CREDENTIALS` 文件仍仅作旧座位入口，不由程序迁移或删除。
+- 已配对设备令牌在服务端设备列表中只保存摘要；独立浏览器会话另由DPAPI保护。固定实例令牌和令牌传输不属于统一账号密码加密的范围：远程使用应启用HTTPS，泄露令牌应单独撤销或轮换。
 

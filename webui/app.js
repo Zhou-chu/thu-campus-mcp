@@ -1340,6 +1340,13 @@ function accountCard() {
       updateAuthPanels();
       try {
         if (username.value.trim() || password.value) {
+          const target = new URL(endpoint("/api/account"), location.origin);
+          const isLocal = url => url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+          const securePage = new URL(location.origin).protocol === "https:";
+          if (!(securePage && target.protocol === "https:") && !(isLocal(target) && target.origin === location.origin)) {
+            password.value = "";
+            throw new Error("请通过HTTPS或本机回环地址配置清华账号，密码未发送。");
+          }
           describe(await api("/api/account", { method: "PUT", body: { username: username.value.trim(), password: password.value } }));
           password.value = "";
         }
