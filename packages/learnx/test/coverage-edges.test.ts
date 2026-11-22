@@ -567,10 +567,13 @@ describe('RealClient network, recovery and write-safety edges', () => {
       else expect(result.body).toContain('List body');
     }
   });
-  it('retains partial list summaries if detail postprocessing fails', async () => {
+  it('keeps a bad percent-encoded inline filename instead of failing the whole detail', async () => {
     const client = await authenticatedClient(); boundary.methods.getDiscussionList.mockResolvedValue([{ id: 'd', title: 'Summary', url: 'https://learn.tsinghua.edu.cn/f/wlxt/detail' }]);
     deniedFetch.mockResolvedValueOnce(new Response('<div class="discussion-content"><img src="/%zz.png"></div>'));
-    const item = (await client.contents('c', 'discussion'))[0]; expect(item.warnings?.[0]).toContain('详情抓取失败'); expect(item.completeness).toBe('partial');
+    const item = (await client.contents('c', 'discussion'))[0];
+    expect(item.completeness).toBe('partial');
+    expect(item.attachments.map(a => a.name)).toContain('%zz.png');
+    expect(item.warnings?.join('')).not.toContain('详情抓取失败');
   });
   it.each(['status', 'header-limit', 'stream-limit', 'null-body'])('handles download %s boundary without saving an invalid attachment', async mode => {
     const client = await authenticatedClient({ maxDownloadBytes: 3 });
