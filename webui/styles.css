@@ -1509,3 +1509,10 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 .switch-input:checked { background: var(--ink); border-color: var(--ink); }
 .switch-input:checked::after { transform: translateX(18px); background: var(--paper); }
 .switch-input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.schedules-page > h2 { margin-bottom: var(--space-2); }
+.schedules-page .card { text-align: left; align-items: stretch; }
+.schedules-page .schedule-actions { justify-content: flex-end; gap: 10px; }
+.schedules-page .card .row.between { align-items: center; }
+.schedules-page .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.schedules-page .form-row > * { flex: 1 1 180px; min-width: 0; }

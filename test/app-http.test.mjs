@@ -274,6 +274,40 @@ test("固定令牌模式不假装支持轮换", async (t) => {
   assert.equal(issued.status, 200);
 });
 
+test("定时任务可通过 HTTP 创建、修改、停用与删除", async (t) => {
+  const { url, pairing } = await boot(t);
+  const redeemed = await pair(url, pairing);
+  const headers = { authorization: "Bearer " + redeemed.body.token, "content-type": "application/json" };
+
+  const empty = await (await fetch(url + "/api/schedules", { headers })).json();
+  assert.deepEqual(empty.tasks, []);
+  assert.equal(empty.runner.running, true, "执行器随应用启动");
+
+  const created = await fetch(url + "/api/schedules", { method: "POST", headers, body: JSON.stringify({ title: "早报", prompt: "汇总作业", kind: "daily", time: "08:30" }) });
+  assert.equal(created.status, 200);
+  const task = (await created.json()).task;
+  assert.ok(task.id);
+  assert.equal(task.nextRunAt !== null, true);
+
+  const bad = await fetch(url + "/api/schedules", { method: "POST", headers, body: JSON.stringify({ title: "", prompt: "", kind: "daily", time: "08:30" }) });
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).error.code, "INVALID_ARGUMENTS");
+  const brokenJson = await fetch(url + "/api/schedules", { method: "POST", headers, body: "{oops" });
+  assert.equal(brokenJson.status, 400);
+
+  const patched = await fetch(url + "/api/schedules/" + task.id, { method: "PATCH", headers, body: JSON.stringify({ enabled: false }) });
+  assert.equal(patched.status, 200);
+  assert.equal((await patched.json()).task.enabled, false);
+
+  const missing = await fetch(url + "/api/schedules/00000000-0000-4000-8000-000000000000", { method: "DELETE", headers });
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).error.code, "SCHEDULE_NOT_FOUND");
+
+  const removed = await fetch(url + "/api/schedules/" + task.id, { method: "DELETE", headers });
+  assert.equal(removed.status, 200);
+  assert.deepEqual((await (await fetch(url + "/api/schedules", { headers })).json()).tasks, []);
+});
+
 test("无效配对码被拒绝且不泄露细节", async (t) => {
   const { url } = await boot(t);
   const response = await fetch(url + "/api/pair/redeem", {
@@ -305,7 +339,14 @@ test("工具列表区分只读与写入，工具调用失败返回错误码", as
   const { body } = await pair(url, pairing);
   const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
   const tools = await (await fetch(url + "/api/tools", { headers })).json();
-  assert.equal(tools.tools.length, 2);
+  // 两个假校园工具 + 四个定时任务工具（后者由应用自身提供）。
+  assert.equal(tools.tools.length, 6);
+  const scheduleNames = tools.tools.map(tool => tool.name).filter(name => name.startsWith("schedule_")).sort();
+  assert.deepEqual(scheduleNames, ["schedule_create", "schedule_delete", "schedule_list", "schedule_update"]);
+  const scheduleTools = tools.tools.filter(tool => tool.name.startsWith("schedule_"));
+  assert.equal(scheduleTools.every(tool => tool.service === "schedule"), true);
+  assert.equal(scheduleTools.find(tool => tool.name === "schedule_list").readOnly, true);
+  assert.equal(scheduleTools.filter(tool => tool.name !== "schedule_list").every(tool => tool.readOnly === false), true, "创建/修改/删除是写操作");
   assert.equal(tools.tools[0].readOnly, true);
   assert.equal(tools.tools[1].readOnly, false);
   assert.equal(tools.tools[1].destructive, true);
