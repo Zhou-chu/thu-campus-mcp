@@ -1,3 +1,14 @@
+# 移动端与共享核心
+
+| 目录 | 作用 |
+| --- | --- |
+| `apps/mobile-android/` | 安卓 WebView 瘦客户端（Gradle 独立构建） |
+| `apps/mobile-harmony/` | 鸿蒙 ArkWeb 瘦客户端（hvigor 独立构建） |
+| `packages/mobile-core/` | 两端共享的协议与文案：会话码交换、配对解析、存储键、错误提示 |
+| `packages/browser/`、`packages/learnx/` … | 与本目录无关的服务 SDK，互不依赖 |
+
+共享常量由 `npm run mobile:core` 从 `packages/mobile-core/spec.json` 生成到两端工程；`npm run mobile:core:check` 在 CI 里防止漂移。移动端只依赖公开 HTTP 接口，不 import `lib/` 内部模块。
+
 # 移动端：Android 与 HarmonyOS
 
 两端的定位相同：**运行时的瘦客户端**。

@@ -20,8 +20,8 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 | --- | --- | --- |
 | WebUI | `app serve` 后打开页面 | 自带对话、会话、服务、工具、设置五个界面，可安装为 PWA |
 | Windows 桌面 | `desktop\thu-campus-desktop.cmd` | 启动运行时并用包内 Chromium 以应用窗口打开，不引入 Electron |
-| Android | `mobile/android` | WebView 瘦客户端，配对后共享同一份登录态 |
-| HarmonyOS | `mobile/harmony` | ArkWeb 瘦客户端，同上 |
+| Android | `apps/mobile-android` | WebView 瘦客户端，配对后共享同一份登录态 |
+| HarmonyOS | `apps/mobile-harmony` | ArkWeb 瘦客户端，同上 |
 
 **一键联通**：在电脑上用清华账号登录一次（`campus_browser_login` 或 MadModel 登录），运行时打印一次性 6 位配对码；手机、平板、另一台电脑输码配对后共享同一份会话。设备令牌只存 sha256 摘要 + DPAPI 加密，可随时在「设置」里吊销。
 

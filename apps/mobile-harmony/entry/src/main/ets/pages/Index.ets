@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { MobileCore } from '../common/MobileCore';
 import { preferences } from '@kit.ArkData';
 import { http } from '@kit.NetworkKit';
 import { webview } from '@kit.ArkWeb';
@@ -43,6 +44,7 @@ struct Index {
   @State code: string = '';
   @State busy: boolean = false;
   @State errorText: string = '';
+  @State fallbackNotice: string = '';
   @State pageUrl: string = 'about:blank';
   private controller: webview.WebviewController = new webview.WebviewController();
 
@@ -80,8 +82,39 @@ struct Index {
   }
 
   showWeb(base: string, token: string): void {
-    this.pageUrl = base + '/#token=' + encodeURIComponent(token);
     this.paired = true;
+    this.exchangeAndOpen(base, token);
+  }
+
+  /**
+   * 优先用 /api/session/exchange 换一次性会话码，令牌只出现在 POST 请求体里；
+   * 旧版运行时或明文远程拒绝兑换时才回退令牌片段，并明确提示。
+   */
+  private exchangeAndOpen(base: string, token: string): void {
+    const request = http.createHttp();
+    const options: http.HttpRequestOptions = {
+      method: http.RequestMethod.POST,
+      header: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      extraData: '{}',
+      expectDataType: http.HttpDataType.STRING
+    };
+    request.request(base + MobileCore.EXCHANGE_PATH, options)
+      .then((response: http.HttpResponse) => {
+        const payload = JSON.parse(String(response.result ?? '{}')) as Record<string, string>;
+        const code: string = response.responseCode === 200 ? String(payload['code'] ?? '') : '';
+        if (code.length > 0) {
+          this.pageUrl = base + '/?' + MobileCore.REDEEM_QUERY + '=' + encodeURIComponent(code);
+        } else {
+          this.fallbackNotice = MobileCore.COPY_FALLBACK;
+          this.pageUrl = base + '/#' + MobileCore.FALLBACK_FRAGMENT + '=' + encodeURIComponent(token);
+        }
+        request.destroy();
+      })
+      .catch(() => {
+        request.destroy();
+        this.fallbackNotice = MobileCore.COPY_FALLBACK;
+        this.pageUrl = base + '/#' + MobileCore.FALLBACK_FRAGMENT + '=' + encodeURIComponent(token);
+      });
   }
 
   savePair(base: string, token: string): void {
@@ -193,6 +226,14 @@ struct Index {
         }
         .width('100%')
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+
+        if (this.fallbackNotice.length > 0) {
+          Text(this.fallbackNotice)
+            .fontSize(12)
+            .fontColor('#B42318')
+            .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+            .width('100%')
+        }
 
         Web({ src: this.pageUrl, controller: this.controller })
           .javaScriptAccess(true)

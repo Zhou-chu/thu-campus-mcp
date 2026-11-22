@@ -25,12 +25,12 @@ test("Sonar classifies real Node, SDK and Kotlin tests without relabeling produc
     ["packages/learnx/test/coverage-edges.test.ts", true],
     ["packages/thu-cloud/test/coverage-edges.test.ts", true],
     ["packages/hetang/test/coverage-edges-3-jobs.test.ts", true],
-    ["mobile/android/app/src/test/java/cn/edu/tsinghua/campusapp/HostPolicyTest.kt", true],
+    ["apps/mobile-android/app/src/test/java/cn/edu/tsinghua/campusapp/HostPolicyTest.kt", true],
     ["scripts/coverage.mjs", false],
     ["lib/app/server.mjs", false],
     ["webui/app.js", false],
     ["packages/hetang/src/resources.ts", false],
-    ["mobile/android/app/src/main/java/cn/edu/tsinghua/campusapp/HostPolicy.kt", false],
+    ["apps/mobile-android/app/src/main/java/cn/edu/tsinghua/campusapp/HostPolicy.kt", false],
   ];
   for (const [file, expected] of samples) {
     await access(new URL("../" + file, import.meta.url));

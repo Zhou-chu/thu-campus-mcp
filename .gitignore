@@ -14,17 +14,17 @@ coverage/
 *.part
 
 # 移动端构建产物与本地工具缓存
-mobile/harmony/.hvigor/
-mobile/harmony/build/
-mobile/harmony/entry/build/
-mobile/harmony/**/oh_modules/
-mobile/android/.gradle/
-mobile/android/build/
-mobile/android/app/build/
-mobile/android/local.properties
+apps/mobile-harmony/.hvigor/
+apps/mobile-harmony/build/
+apps/mobile-harmony/entry/build/
+apps/mobile-harmony/**/oh_modules/
+apps/mobile-android/.gradle/
+apps/mobile-android/build/
+apps/mobile-android/app/build/
+apps/mobile-android/local.properties
 
 # Android 签名材料一律不入库
-mobile/android/keystore.properties
+apps/mobile-android/keystore.properties
 *.jks
 *.keystore
 .cache/

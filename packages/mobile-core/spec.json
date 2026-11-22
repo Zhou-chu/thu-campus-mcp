@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "session": {
+    "exchangePath": "/api/session/exchange",
+    "redeemQuery": "session",
+    "fallbackFragment": "token",
+    "pairingPath": "/api/pair/redeem",
+    "healthPath": "/healthz",
+    "metaPath": "/api/meta"
+  },
+  "storage": {
+    "baseKey": "campus.base",
+    "tokenKey": "campus.token"
+  },
+  "copy": {
+    "sessionCodeFallback": "无法获取一次性会话码，已改用令牌片段打开；如担心暴露，请关闭窗口后重试。",
+    "pairingFailed": "配对失败，请检查电脑地址与配对码。",
+    "tokenRejected": "设备令牌已失效，请重新配对。",
+    "runtimeUnreachable": "无法连接电脑上的运行时，请确认同一网络且应用正在运行。"
+  },
+  "ui": {
+    "appTitle": "清华校园助手",
+    "pairTitle": "连接电脑上的运行时"
+  }
+}
