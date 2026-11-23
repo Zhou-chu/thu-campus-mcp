@@ -61,7 +61,8 @@ test("执行器启动、停止与重复 tick 防重入", async () => {
     advance(10 * 60_000);
     const first = runner.tick();
     const second = runner.tick();
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // 并行跑整个套件时，进入 runTurn 可能晚于固定 10ms；轮询到就绪为止。
+    for (let i = 0; i < 200 && typeof resolveTurn !== "function"; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(typeof resolveTurn, "function", "第一轮已进入模型调用");
     assert.equal(runner.status().ticks, 1, "重入时第二次 tick 直接返回");
     resolveTurn();

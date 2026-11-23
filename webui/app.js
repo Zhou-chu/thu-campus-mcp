@@ -198,7 +198,8 @@ async function redeemSessionCode() {
   const code = state.sessionCode;
   state.sessionCode = "";
   try {
-    const response = await fetch((state.base || location.origin) + "/api/session/redeem", {
+    // 会话码由当前实例签发，兑换也必须回到当前源；不接受 ?base= 指向其它地址。
+    const response = await fetch(location.origin + "/api/session/redeem", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "omit",

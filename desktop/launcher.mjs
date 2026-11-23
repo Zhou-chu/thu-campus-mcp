@@ -17,11 +17,23 @@ export const stateDir = path.join(homedir(), ".thu-campus-mcp/app");
 export const configFile = path.join(stateDir, "desktop.json");
 export const lockFile = path.join(stateDir, "desktop.lock");
 export const logFile = path.join(stateDir, "desktop.log");
-export function buildLaunchArgs({ port, token, sessionCode, profileDir }) {
+/** 端口、令牌与会话码来自配置/网络响应；进入命令行前先按形状校验，拒绝被拼接的额外参数。 */
+export function sanitizeLaunchInput({ port, token = "", sessionCode = "" }) {
+  const number = Number(port);
+  if (!Number.isInteger(number) || number < 1 || number > 65535) throw Object.assign(new Error("端口不合法。"), { code: "INVALID_ARGUMENTS" });
+  const code = typeof sessionCode === "string" ? sessionCode.trim() : "";
+  if (code && !/^[A-Za-z0-9_-]{8,256}$/.test(code)) throw Object.assign(new Error("会话码不合法。"), { code: "INVALID_ARGUMENTS" });
+  const deviceToken = typeof token === "string" ? token.trim() : "";
+  if (!code && !/^[\x20-\x7e]{1,512}$/.test(deviceToken)) throw Object.assign(new Error("设备令牌不合法。"), { code: "INVALID_ARGUMENTS" });
+  return { port: number, token: deviceToken, sessionCode: code };
+}
+export function buildLaunchArgs(input) {
+  const { port, token, sessionCode } = sanitizeLaunchInput(input);
+  const { profileDir } = input;
   // 优先用一次性会话码：令牌不进入 URL、浏览器历史或 --app= 的命令行。
   const target = sessionCode
     ? `http://127.0.0.1:${port}/?session=${encodeURIComponent(sessionCode)}`
-    : `http://127.0.0.1:${port}/#token=${encodeURIComponent(token || "")}`;
+    : `http://127.0.0.1:${port}/#token=${encodeURIComponent(token)}`;
   return [
     `--app=${target}`,
     `--user-data-dir=${profileDir}`,
