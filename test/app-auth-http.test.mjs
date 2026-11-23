@@ -184,6 +184,26 @@ test("设置按用户保存：A 改模型后只有 A 看到", async t => {
   assert.equal(metaB.model.name, "", "meta 也按用户返回模型名");
 });
 
+test("统一账号按用户存库：A 配置后 B 看不到", async t => {
+  const { url } = await boot(t);
+  const register = async email => cookieOf(await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: "long-enough-pass" }) }));
+  const cookieA = await register("account-a@mails.tsinghua.edu.cn");
+  const saved = await fetch(url + "/api/account", { method: "PUT", headers: { cookie: cookieA, "content-type": "application/json", "x-thu-csrf": "1" }, body: JSON.stringify({ username: "2024****19", password: "secret-pass" }) });
+  assert.equal(saved.status, 200);
+  const readA = await (await fetch(url + "/api/account", { headers: { cookie: cookieA } })).json();
+  assert.equal(readA.configured, true);
+  assert.match(readA.masked, /2024/);
+
+  const cookieB = await register("account-b@mails.tsinghua.edu.cn");
+  const readB = await (await fetch(url + "/api/account", { headers: { cookie: cookieB } })).json();
+  assert.equal(readB.configured, false, "B 看不到 A 的统一账号");
+
+  const cleared = await fetch(url + "/api/account", { method: "DELETE", headers: { cookie: cookieA, "x-thu-csrf": "1" } });
+  assert.equal(cleared.status, 200);
+  const afterA = await (await fetch(url + "/api/account", { headers: { cookie: cookieA } })).json();
+  assert.equal(afterA.configured, false);
+});
+
 test("同步接口：增量拉取变更，未配置/未登录都明确拒绝", async t => {
   const { url, session } = await boot(t);
   const anonymous = await fetch(url + "/api/sync/changes");
