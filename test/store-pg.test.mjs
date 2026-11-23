@@ -31,7 +31,7 @@ test("连接配置：只接受 postgres 连接串，缺失返回 null", () => {
 
 test("迁移幂等，健康检查可用，SQL 错误转成可读错误", async () => {
   const store = createPgStore({ pool: memoryPool() });
-  assert.deepEqual(await store.migrate(), [1, 2, 3]);
+  assert.deepEqual(await store.migrate(), [1, 2, 3, 4]);
   assert.deepEqual(await store.migrate(), []);
   assert.equal(await store.healthy(), true);
   await assert.rejects(() => store.query("select * from missing_table"), (error) => error instanceof StoreError && error.code === "DATABASE_ERROR");

@@ -204,6 +204,32 @@ test("统一账号按用户存库：A 配置后 B 看不到", async t => {
   assert.equal(afterA.configured, false);
 });
 
+test("GitLab 与模型提供商密文进库，接口只返回掩码", async t => {
+  const { url, session } = await boot(t);
+  const cookie = cookieOf(await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "config-a@mails.tsinghua.edu.cn", password: "long-enough-pass" }) }));
+  const headers = { cookie, "content-type": "application/json", "x-thu-csrf": "1" };
+
+  const gl = await fetch(url + "/api/gitlab/config", { method: "PUT", headers, body: JSON.stringify({ baseUrl: "https://git.tsinghua.edu.cn", token: "glpat-http-secret" }) });
+  assert.equal(gl.status, 200);
+  const glRead = await (await fetch(url + "/api/gitlab/config", { headers: { cookie } })).json();
+  assert.equal(glRead.configured, true);
+  assert.equal(JSON.stringify(glRead).includes("glpat-http-secret"), false, "不回显令牌");
+
+  const created = await fetch(url + "/api/providers", { method: "POST", headers, body: JSON.stringify({ kind: "openai", name: "HTTP 提供商", baseUrl: "https://api.example.com/v1", apiKey: "sk-http-secret" }) });
+  assert.equal(created.status, 200);
+  const list = await (await fetch(url + "/api/providers", { headers: { cookie } })).json();
+  assert.equal(list.providers.length, 1);
+  assert.equal(JSON.stringify(list).includes("sk-http-secret"), false, "列表只给掩码");
+
+  const rows = await session.store.query("select key, ciphertext from app_config order by key");
+  const keys = rows.rows.map(row => row.key);
+  assert.ok(keys.includes("gitlab"));
+  assert.ok(keys.includes("model-providers"));
+  const text = rows.rows.map(row => row.ciphertext).join(" ");
+  assert.equal(text.includes("glpat-http-secret"), false, "GitLab 令牌是密文");
+  assert.equal(text.includes("sk-http-secret"), false, "提供商密钥是密文");
+});
+
 test("同步接口：增量拉取变更，未配置/未登录都明确拒绝", async t => {
   const { url, session } = await boot(t);
   const anonymous = await fetch(url + "/api/sync/changes");
