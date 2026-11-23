@@ -36,25 +36,27 @@ test("没有数据库时退回文件会话存储", async () => {
   assert.equal(file.calls, 1);
 });
 
-test("有数据库且有账号时切到 PostgreSQL，并缓存账号查询", async () => {
+test("已登录用户走 PostgreSQL，并按用户隔离", async () => {
   const { store, users, repos } = await database();
   const user = await users.create({ email: "router@mails.tsinghua.edu.cn", passwordHash: "hash" });
+  const other = await users.create({ email: "router2@mails.tsinghua.edu.cn", passwordHash: "hash" });
   const file = fileStore();
-  let asks = 0;
-  const counting = { repos: { ...repos, users: { async first() { asks += 1; return user; } } } };
-  const router = createSessionRouter({ store: counting, fileSessions: file });
+  const router = createSessionRouter({ store: { repos }, fileSessions: file, userId: () => user.id });
   const created = await router.create({ title: "库" });
   assert.ok(created.id);
   assert.equal((await router.list()).length, 1);
-  assert.equal(asks, 1, "缓存期内只查一次账号");
   assert.equal(file.calls, 0);
   assert.equal(await router.get(created.id).then(item => item.title), "库");
+
+  const otherRouter = createSessionRouter({ store: { repos }, fileSessions: file, userId: () => other.id });
+  assert.equal((await otherRouter.list()).length, 0, "看不到别人的会话");
   assert.ok(store);
 });
 
-test("数据库报错时退回文件存储，不阻塞登录前的会话", async () => {
+test("未登录（没有请求用户）时继续用文件存储", async () => {
+  const { repos } = await database();
   const file = fileStore();
-  const router = createSessionRouter({ store: { repos: { users: { async first() { throw new Error("db down"); } } } }, fileSessions: file });
+  const router = createSessionRouter({ store: { repos }, fileSessions: file, userId: () => null });
   const created = await router.create({ title: "兜底" });
   assert.equal(created.id, "file-1");
   assert.equal(file.calls, 1);
