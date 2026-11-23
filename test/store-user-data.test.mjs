@@ -80,6 +80,31 @@ test("定时任务：创建、更新、记录执行与删除", async () => {
   assert.equal(await repos.schedules.get(user.id, task.id), null);
 });
 
+test("定时任务执行结果：单次任务自动停用，每周任务保持启用", async () => {
+  const { repos, user } = await boot();
+  const onceTask = await repos.schedules.create({ userId: user.id, title: "一次", prompt: "x", kind: "once", spec: { at: "2026-12-01T00:00:00.000Z" } });
+  const finished = await repos.schedules.finish(user.id, onceTask.id, { ok: true, sessionId: "s-1" });
+  assert.equal(finished.lastStatus, "succeeded");
+  assert.equal(finished.lastSessionId, "s-1");
+  assert.equal(finished.enabled, false, "单次任务执行后停用");
+  const weekly = await repos.schedules.create({ userId: user.id, title: "每周", prompt: "x", kind: "weekly", spec: { time: "08:00", days: [1] } });
+  const kept = await repos.schedules.finish(user.id, weekly.id, { ok: false, error: "失败" });
+  assert.equal(kept.lastStatus, "failed");
+  assert.equal(kept.lastError, "失败");
+  assert.equal(kept.enabled, true, "每周任务继续启用");
+  assert.equal(await repos.schedules.finish("other", weekly.id, { ok: true }), null);
+});
+
+test("同一会话的 seq 唯一：重复序号被数据库拒绝", async () => {
+  const { store, repos, user } = await boot();
+  const session = await repos.chat.createSession({ userId: user.id, title: "seq" });
+  await repos.chat.appendMessage({ sessionId: session.id, role: "user", content: { text: "一" } });
+  await assert.rejects(() => store.query(
+    "insert into chat_messages (id, session_id, role, content, created_at, seq) values ($1, $2, $3, $4, $5, $6)",
+    ["manual", session.id, "user", "{}", "2026-11-23T00:00:00.000Z", 1],
+  ), (error) => error.code === "CONFLICT");
+});
+
 test("服务凭据：只存密文与 nonce，按用户隔离", async () => {
   const { repos, user, other } = await boot();
   await repos.credentials.put({ userId: user.id, service: "learnx", ciphertext: "cipher", nonce: "nonce" });
