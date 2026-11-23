@@ -82,10 +82,11 @@ test('unit2: malformed deep-link parameters are stripped without redeeming or cr
   const a = await boot(t, { paired: false, href: origin + '/?base=javascript%3Aalert(1)&code=12xx56&token=bad%20token#junk=1' });
   assert.equal(a.w.location.search, ''); assert.equal(a.w.location.hash, ''); assert.equal(a.$('#pair-code').value, '');
   await a.tick(1000);
-  assert.deepEqual(a.calls.map(c => c.method + ' ' + c.url.pathname).sort(), ['GET /api/auth/config', 'GET /api/auth/me']);
+  assert.deepEqual(a.calls.map(c => c.method + ' ' + c.url.pathname).sort(), ['GET /api/auth/config']);
   assert.ok(a.calls.every(c => !c.options.body && !c.options.headers?.authorization), "启动探测不转发任何凭据");
   assert.equal(a.saved.has(key), false);
-  a.event('#pair-code', 'keydown', { key: 'x' }); assert.equal(a.calls.length, 2);
+  assert.equal(a.saved.has(key), false);
+  a.event('#pair-code', 'keydown', { key: 'x' }); assert.equal(a.calls.length, 1);
 });
 
 test('unit2: blocked storage remains usable and dark theme does not fail boot', async t => {

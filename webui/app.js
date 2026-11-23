@@ -282,17 +282,6 @@ async function submitAuth(event) {
     button.disabled = false;
   }
 }
-async function hasCookieSession() {
-  try {
-    const response = await fetch(endpoint("/api/auth/me"), { credentials: "same-origin" });
-    if (!response.ok) return false;
-    const data = await response.json().catch(() => ({}));
-    if (!data?.ok) return false;
-    state.cookieAuth = true;
-    state.userEmail = data.user?.email || "";
-    return true;
-  } catch { return false; }
-}
 async function readPublicConfig() {
   try {
     const response = await fetch(location.origin + "/api/auth/config", { credentials: "same-origin" });
@@ -2425,19 +2414,24 @@ document.addEventListener("visibilitychange", () => {
   }, { pending: "", success: "状态已更新" }));
   $("#auth-form").addEventListener("submit", submitAuth);
   $("#auth-switch").addEventListener("click", () => showAuth(state.authMode === "register" ? "login" : "register"));
-  if (!state.token && !(await hasCookieSession())) {
+  if (!state.token) {
+    // 一次公开配置请求同时带回“是否已登录”，避免未登录时再打一个必然 401 的 /me。
     const config = await readPublicConfig();
     state.emailAuth = Boolean(config.emailAuth);
     state.pairingEnabled = config.pairingEnabled !== false;
-    if (state.emailAuth) {
+    if (config.authenticated) {
+      state.cookieAuth = true;
+      state.userEmail = config.user?.email || "";
+    } else if (state.emailAuth) {
       showAuth("login");
       return;
+    } else {
+      const autoPair = !!state.deeplinkCode;
+      showPair(state.pairNotice || "");
+      state.pairNotice = "";
+      if (autoPair) setTimeout(() => void submitPair(), 120);
+      return;
     }
-    const autoPair = !!state.deeplinkCode;
-    showPair(state.pairNotice || "");
-    state.pairNotice = "";
-    if (autoPair) setTimeout(() => void submitPair(), 120);
-    return;
   }
   const ok = await refreshMeta();
   if (!ok) return;

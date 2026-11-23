@@ -68,7 +68,7 @@ test("公开配置声明邮箱登录可用，且不泄露账号信息", async t 
   const response = await fetch(url + "/api/auth/config");
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(body, { ok: true, emailAuth: true, pairingEnabled: true });
+  assert.deepEqual(body, { ok: true, emailAuth: true, pairingEnabled: true, authenticated: false, user: null });
 });
 
 test("邮箱注册即登录：Cookie 带 HttpOnly，/me 可读，重复注册被拒", async t => {
