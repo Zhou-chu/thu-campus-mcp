@@ -143,12 +143,15 @@ async function api(path, { method = "GET", body, signal, headers: extra = {} } =
   const headers = { ...extra };
   if (body !== undefined) headers["content-type"] = "application/json";
   if (state.token) headers.authorization = "Bearer " + state.token;
+  // 没有设备令牌时走邮箱登录的 HttpOnly Cookie；写操作带防跨站标记。
+  const viaCookie = !state.token;
+  if (viaCookie && method !== "GET" && method !== "HEAD") headers["x-thu-csrf"] = "1";
   const response = await fetch(endpoint(path), {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
-    credentials: "omit",
+    credentials: viaCookie ? "same-origin" : "omit",
   });
   let data = {};
   try {
@@ -216,10 +219,86 @@ async function redeemSessionCode() {
     return false;
   }
 }
+/* ---------------- 邮箱登录 ---------------- */
+function showAuth(mode = "login") {
+  state.authMode = mode === "register" ? "register" : "login";
+  $("#app").hidden = true;
+  $("#pair").hidden = true;
+  $("#auth").hidden = false;
+  const register = state.authMode === "register";
+  $("#auth-title").textContent = register ? "创建账号" : "登录";
+  $("#auth-submit").textContent = register ? "创建并登录" : "登录";
+  $("#auth-switch").textContent = register ? "已有账号？登录" : "没有账号？创建账号";
+  $("#auth-password").setAttribute("autocomplete", register ? "new-password" : "current-password");
+  $("#auth-error").hidden = true;
+  $("#auth-email").focus();
+}
+async function submitAuth(event) {
+  event.preventDefault();
+  const button = $("#auth-submit");
+  const errorNode = $("#auth-error");
+  const email = $("#auth-email").value.trim();
+  const password = $("#auth-password").value;
+  if (!email || !password) {
+    errorNode.hidden = false;
+    errorNode.textContent = "请填写邮箱与密码。";
+    return;
+  }
+  button.disabled = true;
+  errorNode.hidden = true;
+  try {
+    const response = await fetch(endpoint(state.authMode === "register" ? "/api/auth/register" : "/api/auth/login"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) {
+      const map = {
+        EMAIL_DOMAIN_NOT_ALLOWED: "只支持清华邮箱注册。",
+        EMAIL_TAKEN: "该邮箱已注册，请直接登录。",
+        INVALID_CREDENTIALS: "邮箱或密码不正确。",
+        WEAK_PASSWORD: data?.error?.message || "密码至少 10 位。",
+        RATE_LIMITED: "尝试过于频繁，请稍后再试。",
+      };
+      throw Object.assign(new Error(map[data?.error?.code] || data?.error?.message || "登录失败，请重试。"), { code: data?.error?.code });
+    }
+    state.token = "";
+    state.cookieAuth = true;
+    state.userEmail = data.user?.email || email;
+    $("#auth").hidden = true;
+    const ok = await refreshMeta();
+    if (!ok) return;
+    rightSidebar.init();
+    $("#app").hidden = false;
+    await loadSessions();
+    render();
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  } catch (e) {
+    errorNode.hidden = false;
+    errorNode.textContent = e.message || "登录失败，请检查网络。";
+  } finally {
+    button.disabled = false;
+  }
+}
+async function readPublicConfig() {
+  try {
+    const response = await fetch(location.origin + "/api/auth/config", { credentials: "same-origin" });
+    return await response.json().catch(() => ({}));
+  } catch { return {}; }
+}
 /* ---------------- 配对 ---------------- */
 function showPair(message) {
   $("#app").hidden = true;
+  $("#auth").hidden = true;
   $("#pair").hidden = false;
+  const fixedToken = state.pairingEnabled === false;
+  $("#pair-guidance").hidden = !fixedToken;
+  for (const node of document.querySelectorAll("#pair .field, #pair-submit, #pair .help-section")) node.hidden = fixedToken;
+  if (fixedToken) {
+    $("#pair-guidance").textContent = "这台电脑使用固定令牌，配对码不可用。请在电脑的仓库目录运行 node bin/thu-campus.mjs app link --url " + (state.base || location.origin) + "，用打印出的一次性链接打开（60 秒内有效）。";
+  }
   const errorNode = $("#pair-error");
   errorNode.hidden = !message;
   errorNode.textContent = message || "";
@@ -2333,12 +2412,26 @@ document.addEventListener("visibilitychange", () => {
     if (!ok) throw new Error(state.authError || "状态刷新失败，请重试。");
     render();
   }, { pending: "", success: "状态已更新" }));
+  $("#auth-form").addEventListener("submit", submitAuth);
+  $("#auth-switch").addEventListener("click", () => showAuth(state.authMode === "register" ? "login" : "register"));
   if (!state.token) {
-    const autoPair = !!state.deeplinkCode;
-    showPair(state.pairNotice || "");
-    state.pairNotice = "";
-    if (autoPair) setTimeout(() => void submitPair(), 120);
-    return;
+    // 一次公开配置请求同时带回“是否已登录”，避免未登录时再打一个必然 401 的 /me。
+    const config = await readPublicConfig();
+    state.emailAuth = Boolean(config.emailAuth);
+    state.pairingEnabled = config.pairingEnabled !== false;
+    if (config.authenticated) {
+      state.cookieAuth = true;
+      state.userEmail = config.user?.email || "";
+    } else if (state.emailAuth) {
+      showAuth("login");
+      return;
+    } else {
+      const autoPair = !!state.deeplinkCode;
+      showPair(state.pairNotice || "");
+      state.pairNotice = "";
+      if (autoPair) setTimeout(() => void submitPair(), 120);
+      return;
+    }
   }
   const ok = await refreshMeta();
   if (!ok) return;

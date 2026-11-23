@@ -835,7 +835,27 @@ a:focus-visible {
   max-width: 88vw;
 }
 /* ---------------- 主题开关与眉标 ---------------- */
+@media (max-width: 600px) {
+  .topbar .brand { flex: 1 1 auto; min-width: 0; }
+  /* 窄屏把状态压成两个字，完整文案仍在 DOM 里供读屏；顶栏高度回到 64px。 */
+  .topbar #account { font-size: 0; }
+  .topbar #account::after { content: "在线"; font-size: var(--text-meta); }
+  #app .topbar { padding-block: var(--space-2); }
+  .topbar .view-context { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-meta { flex: none; }
+  /* 窄屏把三档主题压成 44×44 的短标签，标题单行省略，顶栏回到 64px 一档。 */
+  .theme-switch .theme-btn { min-width: 40px; height: 44px; padding: 0 4px; font-size: 0; letter-spacing: 0; white-space: nowrap; }
+  .topbar .theme-switch { padding: 0; gap: 0; }
+  .theme-switch .theme-btn::after { font-size: var(--text-ui); letter-spacing: 0; }
+  #theme-light::after { content: "浅"; }
+  #theme-dark::after { content: "深"; }
+  #theme-auto::after { content: "自"; }
+}
+@media (max-width: 380px) {
+  .topbar .brand { display: none; }
+}
 @media (max-width: 430px) {
+  .theme-switch .theme-btn { min-width: 38px; padding: 0 2px; }
   .topbar {
     align-items: center;
   }

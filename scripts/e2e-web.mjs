@@ -186,7 +186,8 @@ async function main() {
   page.on("response", (response) => {
     const path = new URL(response.url()).pathname;
     const expected = (expectedModelError && path === "/api/models" && response.status() === 502) ||
-      (expectedCampusChallenge && path === "/api/auth/learnx" && response.status() === 409);
+      (expectedCampusChallenge && path === "/api/auth/learnx" && response.status() === 409) ||
+      (path === "/api/auth/me" && response.status() === 401);
     if (response.status() >= 400 && !expected) badResponses.push(`${response.status()} ${response.url()}`);
   });
 
@@ -195,12 +196,10 @@ async function main() {
     await page.goto(`${base}/`, { waitUntil: "load" });
     record("配对页可见", await page.locator("#pair").isVisible());
     record("主应用隐藏", !(await page.locator("#app").isVisible()));
-    record("配对帮助默认折叠", !(await page.locator("#pair code").isVisible()));
-    await page.locator("#pair summary").click();
-    record("配对码获取方式可展开", await page.locator("#pair code").isVisible());
-    await page.fill("#pair-code", "12");
-    await page.click("#pair-submit");
-    record("必要的配对错误反馈保留", await page.locator("#pair-error").isVisible());
+    // 固定令牌实例：配对码被服务端禁用，页面必须给出可用的一次性链接指引。
+    record("固定令牌给出 app link 指引", /app link --url/.test(await page.locator("#pair-guidance").innerText()));
+    record("固定令牌不显示配对码输入", !(await page.locator("#pair-code").isVisible()));
+    record("固定令牌不显示配对按钮", !(await page.locator("#pair-submit").isVisible()));
 
     // 2. 注入版本号：页面里不应残留占位符
     const expectedVersion = urlArg

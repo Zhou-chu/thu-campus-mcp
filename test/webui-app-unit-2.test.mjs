@@ -47,7 +47,7 @@ async function boot(t, { paired = true, href = origin + '/', routes: overrides =
   const saved = new Map(paired ? [[key, JSON.stringify({ version: 1, base: origin, token })]] : []);
   const localStorage = { getItem(k) { if (storageError) throw new Error('fixture storage blocked'); return saved.get(k) ?? null; }, setItem(k, v) { if (storageError) throw new Error('fixture storage blocked'); saved.set(k, String(v)); }, removeItem(k) { if (storageError) throw new Error('fixture storage blocked'); saved.delete(k); } };
   w.localStorage = localStorage;
-  const routes = new Map(Object.entries({ 'GET /api/meta': meta(), 'GET /api/sessions': { ok: true, sessions: [] }, 'GET /api/workspace/storage': { ok: true, storage: { mode: 'cloud', state: 'unavailable' } }, 'GET /api/sidebar/assignments': { ok: true, state: 'ready', fetchedAt: '2026-11-15T00:00:00.000Z', active: [], expired: [], ungraded: [], courseErrors: [] }, 'GET /api/gitlab/config': { ok: true, baseUrl: 'https://git.tsinghua.edu.cn', configured: false, masked: '', source: 'none' }, 'GET /api/account': { ok: true, configured: false, masked: '', source: 'none' }, 'GET /api/service': { ok: true, supported: false }, 'GET /api/providers': { ok: true, providers: [], activeId: '' }, ...overrides }));
+  const routes = new Map(Object.entries({ 'GET /api/meta': meta(), 'GET /api/auth/me': { ok: false, error: { code: 'AUTH_REQUIRED' } }, 'GET /api/auth/config': { ok: true, emailAuth: false, pairingEnabled: true }, 'GET /api/sessions': { ok: true, sessions: [] }, 'GET /api/workspace/storage': { ok: true, storage: { mode: 'cloud', state: 'unavailable' } }, 'GET /api/sidebar/assignments': { ok: true, state: 'ready', fetchedAt: '2026-11-15T00:00:00.000Z', active: [], expired: [], ungraded: [], courseErrors: [] }, 'GET /api/gitlab/config': { ok: true, baseUrl: 'https://git.tsinghua.edu.cn', configured: false, masked: '', source: 'none' }, 'GET /api/account': { ok: true, configured: false, masked: '', source: 'none' }, 'GET /api/service': { ok: true, supported: false }, 'GET /api/providers': { ok: true, providers: [], activeId: '' }, ...overrides }));
   const calls = [], denied = [], streams = [], timers = new Map(), frames = new Map(); let serial = 0, now = 0;
   const a = { w, document: w.document, saved, routes, calls,
     $: s => w.document.querySelector(s), all: s => [...w.document.querySelectorAll(s)],
@@ -81,20 +81,25 @@ for (const [status, code, paired] of [[401, undefined, true], [403, 'AUTH_REQUIR
 test('unit2: malformed deep-link parameters are stripped without redeeming or credential forwarding', async t => {
   const a = await boot(t, { paired: false, href: origin + '/?base=javascript%3Aalert(1)&code=12xx56&token=bad%20token#junk=1' });
   assert.equal(a.w.location.search, ''); assert.equal(a.w.location.hash, ''); assert.equal(a.$('#pair-code').value, '');
-  await a.tick(1000); assert.equal(a.calls.length, 0); assert.equal(a.saved.has(key), false);
-  a.event('#pair-code', 'keydown', { key: 'x' }); assert.equal(a.calls.length, 0);
+  await a.tick(1000);
+  assert.deepEqual(a.calls.map(c => c.method + ' ' + c.url.pathname).sort(), ['GET /api/auth/config']);
+  assert.ok(a.calls.every(c => !c.options.body && !c.options.headers?.authorization), "启动探测不转发任何凭据");
+  assert.equal(a.saved.has(key), false);
+  assert.equal(a.saved.has(key), false);
+  a.event('#pair-code', 'keydown', { key: 'x' }); assert.equal(a.calls.length, 1);
 });
 
 test('unit2: blocked storage remains usable and dark theme does not fail boot', async t => {
   const a = await boot(t, { paired: false, storageError: true, theme: 'dark' });
   assert.equal(a.$('#pair').hidden, false); assert.equal(a.document.documentElement.dataset.theme, 'dark');
-  a.click('#theme-light'); assert.equal(a.document.documentElement.dataset.theme, 'light'); assert.equal(a.calls.length, 0);
+  a.click('#theme-light'); assert.equal(a.document.documentElement.dataset.theme, 'light');
+  assert.ok(a.calls.every(c => c.method === 'GET' && c.url.pathname.startsWith('/api/auth/')));
 });
 
 test('unit2: pairing transport error/fallback device name and non-string issued token are validated', async t => {
   const a = await boot(t, { paired: false, routes: { 'POST /api/pair/redeem': () => { throw new Error('fixture network offline'); } } });
   a.input('#pair-code', '123456'); a.click('#pair-submit'); await flush(); assert.match(a.$('#pair-error').textContent, /fixture network offline/); assert.equal(a.$('#pair-submit').disabled, false);
-  assert.equal(a.calls[0].body.deviceName, '浏览器');
+  assert.equal(a.calls.find(c => c.method === 'POST').body.deviceName, '浏览器');
   a.routes.set('POST /api/pair/redeem', { ok: true }); a.click('#pair-submit'); await flush(); assert.match(a.$('#pair-error').textContent, /不合法/); assert.equal(a.saved.has(key), false);
 });
 
