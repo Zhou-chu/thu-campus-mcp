@@ -160,6 +160,30 @@ test("Cookie 会话可访问 API；写操作缺 CSRF 标记被拒；登出后失
   assert.equal(after.status, 401);
 });
 
+test("设置按用户保存：A 改模型后只有 A 看到", async t => {
+  const { url } = await boot(t);
+  const register = async email => {
+    const response = await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password: "long-enough-pass" }) });
+    return cookieOf(response);
+  };
+  const cookieA = await register("prefs-a@mails.tsinghua.edu.cn");
+  const cookieB = await register("prefs-b@mails.tsinghua.edu.cn");
+
+  const before = await (await fetch(url + "/api/settings", { headers: { cookie: cookieA } })).json();
+  assert.equal(before.settings.modelName, "");
+  const saved = await fetch(url + "/api/settings", { method: "PUT", headers: { cookie: cookieA, "content-type": "application/json", "x-thu-csrf": "1" }, body: JSON.stringify({ modelName: "A-模型", compactTools: true }) });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).settings.modelName, "A-模型");
+
+  const readA = await (await fetch(url + "/api/settings", { headers: { cookie: cookieA } })).json();
+  assert.equal(readA.settings.modelName, "A-模型");
+  assert.equal(readA.settings.compactTools, true);
+  const readB = await (await fetch(url + "/api/settings", { headers: { cookie: cookieB } })).json();
+  assert.equal(readB.settings.modelName, "", "B 不受 A 的设置影响");
+  const metaB = await (await fetch(url + "/api/meta", { headers: { cookie: cookieB } })).json();
+  assert.equal(metaB.model.name, "", "meta 也按用户返回模型名");
+});
+
 test("同步接口：增量拉取变更，未配置/未登录都明确拒绝", async t => {
   const { url, session } = await boot(t);
   const anonymous = await fetch(url + "/api/sync/changes");
