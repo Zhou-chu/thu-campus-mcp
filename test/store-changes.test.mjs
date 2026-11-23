@@ -16,7 +16,7 @@ async function boot() {
 
 test("变更日志按用户单调递增、可分页拉取", async () => {
   const { changes, user, other, migrations } = await boot();
-  assert.deepEqual(migrations, [1, 2, 3]);
+  assert.deepEqual(migrations, [1, 2, 3, 4]);
   assert.equal(await changes.latest(user.id), 0);
   const first = await changes.append({ userId: user.id, entity: "chat_session", entityId: "s1", op: "create", payload: { title: "新对话" } });
   const second = await changes.append({ userId: user.id, entity: "chat_message", entityId: "m1", op: "append", payload: { role: "user" } });

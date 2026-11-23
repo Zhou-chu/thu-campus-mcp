@@ -95,6 +95,15 @@ test("定时任务执行结果：单次任务自动停用，每周任务保持�
   assert.equal(await repos.schedules.finish("other", weekly.id, { ok: true }), null);
 });
 
+test("并发追加消息：序号不重复、不丢消息", async () => {
+  const { repos, user } = await boot();
+  const session = await repos.chat.createSession({ userId: user.id, title: "并发" });
+  const results = await Promise.all(Array.from({ length: 5 }, (_, index) => repos.chat.appendMessage({ sessionId: session.id, role: "user", content: { text: "m" + index } })));
+  const seqs = results.map(message => message.seq).sort((a, b) => a - b);
+  assert.deepEqual(seqs, [1, 2, 3, 4, 5]);
+  assert.equal((await repos.chat.listMessages(session.id)).length, 5);
+});
+
 test("同一会话的 seq 唯一：重复序号被数据库拒绝", async () => {
   const { store, repos, user } = await boot();
   const session = await repos.chat.createSession({ userId: user.id, title: "seq" });
