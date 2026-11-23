@@ -69,6 +69,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | brace-expansion | 5.0.13 | MIT | development |
 | bytes | 3.1.2 | MIT | runtime |
 | c8 | 12.0.0 | ISC | development |
+| call-bind | 1.0.9 | MIT | development |
 | call-bind-apply-helpers | 1.0.2 | MIT | runtime |
 | call-bound | 1.0.4 | MIT | runtime |
 | chai | 6.3.0 | MIT | development |
@@ -91,9 +92,11 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | css-select | 5.2.2 | BSD-2-Clause | runtime |
 | css-what | 6.2.2 | BSD-2-Clause | runtime |
 | debug | 4.4.3 | MIT | runtime |
+| define-data-property | 1.1.4 | MIT | development |
 | depd | 2.0.0 | MIT | runtime |
 | dependency-cruiser | 18.8.0 | MIT | development |
 | detect-libc | 2.1.2 | Apache-2.0 | development |
+| discontinuous-range | 1.0.0 | MIT | development |
 | dom-serializer | 2.0.0 | MIT | runtime |
 | entities | 4.5.0 | BSD-2-Clause | runtime |
 | domelementtype | 2.3.0 | BSD-2-Clause | runtime |
@@ -131,6 +134,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | fresh | 2.0.0 | MIT | runtime |
 | fsevents | 2.3.3 | MIT | development, optional |
 | function-bind | 1.1.2 | MIT | runtime |
+| functional-red-black-tree | 1.0.1 | MIT | development |
 | get-caller-file | 2.0.5 | ISC | development |
 | get-east-asian-width | 1.7.0 | MIT | development |
 | get-intrinsic | 1.3.0 | MIT | runtime |
@@ -140,6 +144,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | gopd | 1.2.0 | MIT | runtime |
 | graceful-fs | 4.2.11 | ISC | runtime |
 | has-flag | 4.0.0 | MIT | development |
+| has-property-descriptors | 1.0.2 | MIT | development |
 | has-symbols | 1.1.0 | MIT | runtime |
 | hasown | 2.0.4 | MIT | runtime |
 | hono | 4.13.18 | MIT | runtime |
@@ -149,6 +154,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | http-errors | 2.0.1 | MIT | runtime |
 | iconv-lite | 0.7.3 | MIT | runtime |
 | ignore | 7.0.14 | MIT | development |
+| immutable | 4.3.9 | MIT | development |
 | inherits | 2.0.4 | ISC | runtime |
 | ini | 4.1.1 | ISC | development |
 | interpret | 3.1.1 | MIT | development |
@@ -158,6 +164,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | is-installed-globally | 1.0.1 | MIT | development |
 | is-path-inside | 4.0.0 | MIT | development |
 | is-promise | 4.0.0 | MIT | runtime |
+| isarray | 2.0.5 | MIT | development |
 | isexe | 2.0.0 | ISC | runtime |
 | istanbul-lib-coverage | 3.2.2 | BSD-3-Clause | development |
 | istanbul-lib-report | 3.0.1 | BSD-3-Clause | development |
@@ -168,7 +175,9 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | jsbn | 1.1.0 | MIT | runtime |
 | json-schema-traverse | 1.0.0 | MIT | runtime |
 | json-schema-typed | 8.0.2 | BSD-2-Clause | runtime |
+| json-stable-stringify | 1.3.0 | MIT | development |
 | json5 | 2.2.3 | MIT | development |
+| jsonify | 0.0.1 | Public Domain | development |
 | kleur | 3.0.3 | MIT | development |
 | lightningcss | 1.33.0 | MPL-2.0 | development |
 | lightningcss-android-arm64 | 1.33.0 | MPL-2.0 | development, optional |
@@ -195,14 +204,20 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | minimatch | 11.0.8 | BlueOak-1.0.0 | development |
 | minimist | 1.2.8 | MIT | development |
 | minipass | 7.1.3 | BlueOak-1.0.0 | development |
+| moment | 2.31.0 | MIT | development |
+| moo | 0.5.3 | BSD-3-Clause | development |
 | ms | 2.1.3 | MIT | runtime |
 | nanoid | 3.3.20 | MIT | development |
+| nearley | 2.20.1 | MIT | development |
+| commander | 2.20.3 | MIT | development |
 | negotiator | 1.1.0 | MIT | runtime |
 | content-type | 2.1.0 | MIT | runtime |
 | node-fetch-native | 1.6.7 | MIT | runtime |
 | nth-check | 2.1.1 | BSD-2-Clause | runtime |
 | object-assign | 4.1.1 | MIT | runtime |
+| object-hash | 2.2.0 | MIT | development |
 | object-inspect | 1.13.4 | MIT | runtime |
+| object-keys | 1.1.1 | MIT | development |
 | obug | 3.0.0 | MIT | development |
 | on-finished | 2.4.2 | MIT | runtime |
 | once | 1.4.0 | ISC | runtime |
@@ -219,11 +234,26 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | path-scurry | 3.0.0 | BlueOak-1.0.0 | development |
 | path-to-regexp | 8.4.2 | MIT | runtime |
 | pdf-lib | 1.17.1 | MIT | runtime |
+| pg | 8.23.1 | MIT | runtime |
+| pg-cloudflare | 1.4.1 | MIT | runtime, optional |
+| pg-connection-string | 2.14.1 | MIT | runtime |
+| pg-int8 | 1.0.1 | ISC | runtime |
+| pg-mem | 3.0.14 | MIT | development |
+| lru-cache | 6.0.0 | ISC | development |
+| pg-pool | 3.14.0 | MIT | runtime |
+| pg-protocol | 1.16.1 | MIT | runtime |
+| pg-types | 2.2.0 | MIT | runtime |
+| pgpass | 1.0.5 | MIT | runtime |
+| pgsql-ast-parser | 12.0.2 | MIT | development |
 | picocolors | 1.1.1 | ISC | development |
 | picomatch | 4.0.7 | MIT | development |
 | pkce-challenge | 5.0.1 | MIT | runtime |
 | playwright-core | 1.64.1 | Apache-2.0 | runtime |
 | postcss | 8.5.31 | MIT | development |
+| postgres-array | 2.0.0 | MIT | runtime |
+| postgres-bytea | 1.0.1 | MIT | runtime |
+| postgres-date | 1.0.7 | MIT | runtime |
+| postgres-interval | 1.2.0 | MIT | runtime |
 | prettier | 3.6.2 | MIT | development |
 | prompts | 2.4.2 | MIT | development |
 | proper-lockfile | 4.1.2 | MIT | runtime |
@@ -232,6 +262,8 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | punycode | 2.3.1 | MIT | runtime |
 | qs | 6.16.1 | BSD-3-Clause | runtime |
 | querystringify | 2.2.0 | MIT | runtime |
+| railroad-diagrams | 1.0.0 | CC0-1.0 | development |
+| randexp | 0.4.6 | MIT | development |
 | range-parser | 1.3.0 | MIT | runtime |
 | raw-body | 3.0.2 | MIT | runtime |
 | rechoir | 0.8.0 | MIT | development |
@@ -239,6 +271,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | require-from-string | 2.0.2 | MIT | runtime |
 | requires-port | 1.0.0 | MIT | runtime |
 | resolve | 1.22.14 | MIT | development |
+| ret | 0.1.15 | MIT | development |
 | retry | 0.12.0 | MIT | runtime |
 | rolldown | 1.2.15 | MIT | development |
 | router | 2.2.0 | MIT | runtime |
@@ -248,6 +281,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | send | 1.2.1 | MIT | runtime |
 | serve-static | 2.2.1 | MIT | runtime |
 | set-cookie-parser | 2.7.3 | MIT | runtime |
+| set-function-length | 1.2.2 | MIT | development |
 | setprototypeof | 1.2.0 | ISC | runtime |
 | shebang-command | 2.0.0 | MIT | runtime |
 | shebang-regex | 3.0.0 | MIT | runtime |
@@ -260,6 +294,7 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | sm-crypto | 0.5.7 | MIT | runtime |
 | smol-toml | 1.9.1 | BSD-3-Clause | runtime |
 | source-map-js | 1.2.2 | BSD-3-Clause | development |
+| split2 | 4.2.0 | ISC | runtime |
 | statuses | 2.0.2 | MIT | runtime |
 | std-env | 4.3.0 | MIT | development |
 | string-width | 8.3.0 | MIT | development |
@@ -296,7 +331,9 @@ Generated from the root package-lock.json. Includes runtime, development and opt
 | wrap-ansi | 9.0.2 | MIT | development |
 | string-width | 7.2.0 | MIT | development |
 | wrappy | 1.0.2 | ISC | runtime |
+| xtend | 4.0.2 | MIT | runtime |
 | y18n | 5.0.8 | ISC | development |
+| yallist | 4.0.0 | ISC | development |
 | yargs | 18.2.0 | MIT | development |
 | yargs-parser | 21.1.1 | ISC | development |
 | yargs-parser | 22.0.0 | ISC | development |

@@ -50,6 +50,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
     "@thu-campus/browser": "1.0.0",
+    "pg": "^8.23.1",
     "proper-lockfile": "4.1.2",
     "smol-toml": "1.9.1"
   },
@@ -66,6 +67,7 @@
     "istanbul-lib-coverage": "3.2.2",
     "istanbul-lib-report": "3.0.1",
     "istanbul-reports": "3.2.0",
+    "pg-mem": "^3.0.14",
     "v8-to-istanbul": "9.3.0"
   }
 }
