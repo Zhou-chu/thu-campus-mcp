@@ -8,6 +8,7 @@ import { createAppServer } from "../lib/app/server.mjs";
 import { PairingCodes } from "../lib/app/pairing.mjs";
 import { DeviceStore } from "../lib/app/devices.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
+import { ProviderStore } from "../lib/app/providers.mjs";
 import { openStore } from "../lib/store/index.mjs";
 
 function fakeHost() {
@@ -27,7 +28,7 @@ function fakeRoute() {
   };
 }
 
-async function boot(t) {
+async function boot(t, options = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-auth-http-"));
   const db = newDb({ autoCreateForeignKeyIndices: true });
   const adapter = db.adapters.createPg();
@@ -49,6 +50,7 @@ async function boot(t) {
     webuiDir: path.join(dir, "webui"),
     auth: session.auth,
     store: session,
+    providerStore: options.providerStore || undefined,
   });
   const url = await app.listen();
   t.after(async () => {
@@ -228,6 +230,18 @@ test("GitLab 与模型提供商密文进库，接口只返回掩码", async t =>
   const text = rows.rows.map(row => row.ciphertext).join(" ");
   assert.equal(text.includes("glpat-http-secret"), false, "GitLab 令牌是密文");
   assert.equal(text.includes("sk-http-secret"), false, "提供商密钥是密文");
+});
+
+test("外部注入的提供商存储也会镜像进库", async t => {
+  const providerStore = new ProviderStore(path.join(tmpdir(), "campus-injected-provider"));
+  const { url, session } = await boot(t, { providerStore });
+  const cookie = cookieOf(await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "config-b@mails.tsinghua.edu.cn", password: "long-enough-pass" }) }));
+  const created = await fetch(url + "/api/providers", { method: "POST", headers: { cookie, "content-type": "application/json", "x-thu-csrf": "1" }, body: JSON.stringify({ kind: "openai", name: "注入提供商-" + Date.now(), baseUrl: "https://api.example.com/v1", apiKey: "sk-injected" }) });
+  const body = await created.text();
+  assert.equal(created.status, 200, body);
+  const row = (await session.store.query("select ciphertext from app_config where key = 'model-providers'")).rows[0];
+  assert.ok(row, "注入存储也要落库");
+  assert.equal(String(row.ciphertext).includes("sk-injected"), false);
 });
 
 test("同步接口：增量拉取变更，未配置/未登录都明确拒绝", async t => {
