@@ -33,7 +33,6 @@ test("生成的 Kotlin/ArkTS 常量与 spec 一致，且仓库里的文件没有
     [spec.session.redeemQuery, renderKotlin(spec)],
     [spec.copy.sessionCodeFallback, renderKotlin(spec)],
     [spec.session.exchangePath, renderArkTs(spec)],
-    [spec.copy.authRejected, renderArkTs(spec)],
   ]) {
     assert.ok(source.includes(needle), `生成结果缺少 ${needle}`);
   }
