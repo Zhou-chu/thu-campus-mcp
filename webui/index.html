@@ -59,9 +59,30 @@
       </nav>
     </div>
 
+    <section id="auth" class="pair" hidden>
+      <div class="card pair-card">
+        <h2 id="auth-title">登录</h2>
+        <form id="auth-form" novalidate>
+          <label class="field">
+            <span>邮箱</span>
+            <input id="auth-email" type="email" inputmode="email" autocomplete="username" spellcheck="false" required />
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input id="auth-password" type="password" autocomplete="current-password" minlength="10" required />
+          </label>
+          <p id="auth-hint" class="small muted">仅支持清华邮箱，密码至少 10 位。</p>
+          <p id="auth-error" class="error" role="alert" hidden></p>
+          <button id="auth-submit" class="primary" type="submit">登录</button>
+          <button id="auth-switch" class="ghost" type="button">没有账号？创建账号</button>
+        </form>
+      </div>
+    </section>
+
     <section id="pair" class="pair" hidden>
       <div class="card pair-card">
         <h2>连接设备</h2>
+        <p id="pair-guidance" class="small muted" hidden></p>
         <label class="field">
           <span>服务器地址</span>
           <input id="pair-base" type="url" inputmode="url" placeholder="http://192.168.1.23:8971" autocomplete="off" />

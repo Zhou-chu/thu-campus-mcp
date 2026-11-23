@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/auth/me": { ok: false, error: { code: "AUTH_REQUIRED" } }, "GET /api/auth/config": { ok: true, emailAuth: false, pairingEnabled: true }, "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -146,7 +146,7 @@ test("app: unpaired validation, mapped rejection, and successful atomic pairing"
   assert.equal(a.$("#app").hidden, true);
   a.click("#pair-submit");
   assert.match(a.$("#pair-error").textContent, /6 位数字/);
-  assert.equal(a.calls.length, 0);
+  assert.ok(a.calls.every(call => call.method === "GET" && new URL(call.url).pathname.startsWith("/api/auth/")), "未配对启动只做邮箱能力探测");
   a.input("#pair-code", "123456");
   a.routes.set("POST /api/pair/redeem", { ok: false, error: { code: "PAIRING_EXPIRED" } });
   a.event("#pair-code", "keydown", { key: "Enter" }); await flush();
@@ -893,7 +893,7 @@ test("app: sports view lists sports, venues and dates from the real routes", asy
 test("app: sports view asks for login instead of pretending there is no data", async t => {
   const a = await app(t, { routes: { "GET /api/sports/sports": { ok: false, error: { code: "SPORTS_LOGIN_REQUIRED", message: "需要登录" } } } });
   a.nav("sports");
-  await until(() => /登录/.test(document.body.textContent), "login hint");
+  await until(() => /需要先登录体育场馆/.test(a.$(".sports-panel")?.textContent || ""), "login hint");
   assert.match(a.$(".sports-panel").textContent, /需要先登录体育场馆/);
   assert.ok(a.$(".sports-login"), "提供去登录的入口");
   assert.match(a.$(".sports-login").textContent, /打开体育登录窗口/);
