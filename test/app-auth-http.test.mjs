@@ -55,7 +55,7 @@ async function boot(t) {
     await app.close();
     await rm(dir, { recursive: true, force: true });
   });
-  return { url };
+  return { url, session };
 }
 
 function cookieOf(response) {
@@ -158,6 +158,31 @@ test("Cookie 会话可访问 API；写操作缺 CSRF 标记被拒；登出后失
   assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
   const after = await fetch(url + "/api/auth/me", { headers: { cookie } });
   assert.equal(after.status, 401);
+});
+
+test("同步接口：增量拉取变更，未配置/未登录都明确拒绝", async t => {
+  const { url, session } = await boot(t);
+  const anonymous = await fetch(url + "/api/sync/changes");
+  assert.equal(anonymous.status, 401);
+  const registered = await fetch(url + "/api/auth/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "sync@mails.tsinghua.edu.cn", password: "long-enough-pass" }),
+  });
+  const cookie = cookieOf(registered);
+  const user = await session.repos.users.findByEmail("sync@mails.tsinghua.edu.cn");
+  await session.repos.changes.append({ userId: user.id, entity: "chat_session", entityId: "s-1", op: "create", payload: { title: "同步" } });
+
+  const all = await fetch(url + "/api/sync/changes?since=0", { headers: { cookie } });
+  assert.equal(all.status, 200);
+  const body = await all.json();
+  assert.equal(body.latest, 1);
+  assert.equal(body.changes.length, 1);
+  assert.equal(body.changes[0].entity, "chat_session");
+  const tail = await (await fetch(url + "/api/sync/changes?since=1", { headers: { cookie } })).json();
+  assert.equal(tail.changes.length, 0);
+  const wrongMethod = await fetch(url + "/api/sync/changes", { method: "POST", headers: { cookie, "x-thu-csrf": "1" } });
+  assert.equal(wrongMethod.status, 405);
 });
 
 test("设备会话列表可撤销其它设备，登录限流生效", async t => {
