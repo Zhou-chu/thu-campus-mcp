@@ -114,6 +114,7 @@ async function main() {
       if (request.url().endsWith("/abort")) abortRequests++;
       if (/\/api\/tools\/workspace_/.test(request.url())) directToolRequests++;
     });
+    await page.addInitScript(() => { try { localStorage.setItem("thu-campus.toolDetails", "on"); } catch { /* 存储不可用时保持默认隐藏 */ } });
     await page.goto(base + "/#token=" + TOKEN);
     try { await page.waitForSelector("#composer", { timeout: 8000 }); }
     catch (error) { console.error("启动诊断", (await page.locator("body").innerText()).slice(0, 2000), errors); throw error; }

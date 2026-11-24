@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/auth/me": { ok: false, error: { code: "AUTH_REQUIRED" } }, "GET /api/auth/config": { ok: true, emailAuth: false, pairingEnabled: true }, "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/auth/me": { ok: false, error: { code: "AUTH_REQUIRED" } }, "GET /api/auth/config": { ok: true, emailAuth: false, pairingEnabled: true }, "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/debug-log": { ok: true, enabled: false, dir: "logs", files: [], totalBytes: 0 }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -349,6 +349,14 @@ test("app: history restores reasoning, safe Markdown and failed/raw tool results
   assert.equal(a.all(".reasoning-block")[1].dataset.state, "stopped");
   assert.equal(a.$(".tool-card").dataset.state, "failed");
   assert.match(a.all(".tool-card")[1].textContent, /raw output/);
+  assert.equal(a.$(".tool-card").hidden, true, "工具调用流程默认不占用对话主界面");
+  a.nav("settings");
+  assert.match(a.$(".tool-log")?.textContent || "", /fixture_read/);
+  const toggle = a.all("label").find(label => /在对话中显示完整工具调用卡片/.test(label.textContent))?.querySelector("input");
+  toggle.checked = true;
+  a.event(toggle, "change");
+  a.nav("chat");
+  assert.equal(a.$(".tool-card").hidden, false, "打开偏好后恢复工具卡片");
   assert.equal(a.$("#messages script"), undefined);
   assert.equal(a.$("#messages a").rel, "noopener noreferrer");
   a.click("#rail-new-chat"); assert.equal(a.$("#messages").textContent, "");

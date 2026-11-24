@@ -21,6 +21,7 @@ const state = {
   meta: null,
   view: "chat",
   messages: [],
+  toolDetails: (() => { try { return localStorage.getItem("thu-campus.toolDetails") === "on"; } catch { return false; } })(),
   chatDraft: "",
   sessionId: null,
   busy: false,
@@ -1057,7 +1058,12 @@ function autoGrow(textarea) {
 /** 只负责把一个块变成节点；不碰文档，历史消息渲染时容器可能还没挂到页面。 */
 function blockNode(block) {
   if (block.kind === "reasoning") return reasoningFor(block);
-  if (block.kind === "tool") return toolCardFor(block);
+  if (block.kind === "tool") {
+    const node = toolCardFor(block);
+    // 工具调用流程默认不占用对话主界面，统一放到「设置 → 工具调用记录」查看。
+    node.hidden = !state.toolDetails;
+    return node;
+  }
   if (block.kind === "confirm") return confirmCardFor(block);
   if (block.kind === "error")
     return el("div", { class: "bubble err", text: (block.code ? `[${block.code}] ` : "") + block.message });
@@ -2044,6 +2050,7 @@ function providerCard() {
   ]);
 }
 function settingsView() {
+  const toolCalls = state.messages.filter(block => block.kind === "tool");
   const wrap = el("div", { class: "stack settings-page" });
   wrap.append(el("h2", { text: "设置" }));
   const meta = state.meta || {};
@@ -2057,7 +2064,59 @@ function settingsView() {
     ]),
   ]);
   const surface = el("div", { class: "settings-surface" });
+  const showTools = el("input", { type: "checkbox", checked: state.toolDetails });
+  showTools.addEventListener("change", () => {
+    state.toolDetails = showTools.checked;
+    try { localStorage.setItem("thu-campus.toolDetails", state.toolDetails ? "on" : "off"); } catch { /* 本地偏好不可写时保持当前会话内生效 */ }
+    render();
+  });
+  const toolLog = el("div", { class: "stack tool-log" });
+  if (!toolCalls.length) toolLog.append(el("p", { class: "small muted", text: "本次会话还没有工具调用。" }));
+  for (const call of toolCalls) {
+    const item = el("details", { class: "tool-card", dataset: { state: call.state || "done" } }, [
+      el("summary", {}, [el("span", { class: "tool-name", text: call.name || "工具" }), el("span", { class: "tool-state", text: call.state === "failed" ? "失败" : call.state === "running" ? "执行中" : "完成" })]),
+      el("pre", { text: pretty(call.args) }),
+      el("div", { class: "small muted", text: "结果" }),
+      el("pre", { text: pretty(call.result ?? call.error ?? "（暂无结果）") }),
+    ]);
+    toolLog.append(item);
+  }
   surface.append(workspaceStorageCard(), settingsSection("对话模型", [modelPicker("settings-model"), effortPicker("settings-effort"), compactToolsToggle()]));
+  const debugToggle = el("input", { type: "checkbox" });
+  const debugState = el("p", { class: "small muted", text: "读取中…" });
+  const debugActions = el("div", { class: "settings-actions" });
+  const debugSection = settingsSection("详细调试日志", [
+    el("label", { class: "switch-row" }, [debugToggle, el("span", { text: "开启详细运行日志" })]),
+    debugState,
+    debugActions,
+  ]);
+  const paintDebug = data => {
+    debugToggle.checked = data?.enabled === true;
+    const size = data?.totalBytes ? (data.totalBytes / 1024).toFixed(1) + " KB" : "0 KB";
+    debugState.textContent = data?.enabled ? `已开启 · 日志目录 ${data.dir || "-"} · 共 ${size}` : "默认关闭；开启后记录 HTTP、对话与工具运行细节，便于测试排查。";
+  };
+  const loadDebug = async () => {
+    try { paintDebug(await api("/api/debug-log")); }
+    catch { debugState.textContent = "当前实例未启用调试日志接口。"; }
+  };
+  debugToggle.addEventListener("change", async () => {
+    try { paintDebug(await api("/api/debug-log", { method: "PUT", body: { enabled: debugToggle.checked } })); }
+    catch (error) { debugState.textContent = "切换失败：" + (error?.message || "请稍后重试。"); }
+  });
+  debugActions.append(
+    el("a", { class: "ghost", href: "/api/debug-log/download", download: "debug.jsonl", text: "导出最近日志" }),
+    el("button", { class: "ghost danger", type: "button", text: "清空日志", onclick: async () => {
+      try { paintDebug(await api("/api/debug-log/clear", { method: "POST", body: {} })); }
+      catch (error) { debugState.textContent = "清空失败：" + (error?.message || "请稍后重试。"); }
+    } }),
+  );
+  void loadDebug();
+  surface.append(debugSection);
+  surface.append(settingsSection("工具调用记录", [
+    el("label", { class: "switch-row" }, [showTools, el("span", { text: "在对话中显示完整工具调用卡片" })]),
+    el("p", { class: "small muted", text: "默认隐藏，避免工具流程占用对话主界面；展开下方条目查看参数与结果。" }),
+    toolLog,
+  ]));
   const codeNode = el("output", { class: "pair-code", "aria-label": "一次性配对码", hidden: true });
   const validity = el("span", { class: "small muted", hidden: true });
   const errorNode = el("p", { class: "error inline-error", role: "alert", hidden: true });
