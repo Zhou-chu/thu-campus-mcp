@@ -28,6 +28,10 @@ export function createTimetableView({ el, api }) {
         text: "添加课程",
         onclick: () => { mode = "add"; draw(); },
       }));
+      actions.append(el("details", { class: "timetable-legend" }, [
+        el("summary", { text: "节次时间" }),
+        el("div", { class: "small muted", text: "第一大节 08:00–09:35（第1-2小节）· 第二大节 09:50–12:15（第3-5小节）· 第三大节 13:30–15:05（第6-7小节）· 第四大节 15:20–16:55（第8-9小节）· 第五大节 17:05–18:40（第10-11小节）· 第六大节 19:20–21:45（第12-14小节）" }),
+      ]));
       actions.append(el("button", { class: "ghost", type: "button", text: loading ? "读取中…" : "刷新", disabled: loading, onclick: () => { void load(true); } }));
       header.append(title, actions);
     };
@@ -35,7 +39,7 @@ export function createTimetableView({ el, api }) {
     const block = slot => {
       const label = el("button", { class: "course-block", type: "button", dataset: { lane: String(slot.lane), lanes: String(slot.lanes), custom: String(Boolean(slot.course.custom)) } }, [
         el("span", { class: "course-name", text: slot.course.name }),
-        el("span", { class: "course-meta", text: [periodText(slot.from, slot.to), slot.location, weekText(slot.weeks)].filter(Boolean).join(" · ") }),
+        el("span", { class: "course-meta", text: [periodText(slot.from, slot.to), slot.sectionLabel, slot.time, slot.location, weekText(slot.weeks)].filter(Boolean).join(" · ") }),
       ]);
       label.style.setProperty("--lane", String(slot.lane));
       label.style.setProperty("--lanes", String(slot.lanes));
@@ -78,7 +82,7 @@ export function createTimetableView({ el, api }) {
         const section = el("section", { class: "agenda-day" }, [el("h3", { text: DAY_LABELS[index] })]);
         for (const slot of slots)
           section.append(el("button", { class: "agenda-item", type: "button", onclick: () => { activeSlot = slot; mode = "detail"; draw(); } }, [
-            el("span", { class: "agenda-time", text: periodText(slot.from, slot.to) }),
+            el("span", { class: "agenda-time", text: [periodText(slot.from, slot.to), slot.time].filter(Boolean).join(" ") }),
             el("span", { class: "agenda-name", text: slot.course.name }),
             el("span", { class: "small muted", text: [slot.location, weekText(slot.weeks)].filter(Boolean).join(" · ") }),
           ]));
@@ -112,7 +116,7 @@ export function createTimetableView({ el, api }) {
         el("h2", { text: slot.course.name }),
         el("dl", { class: "ddl-facts" }, [
           el("dt", { text: "教师" }), el("dd", { text: slot.course.teacher || "未知" }),
-          el("dt", { text: "时间" }), el("dd", { text: `${DAY_LABELS[slot.day - 1]} ${periodText(slot.from, slot.to)}` }),
+          el("dt", { text: "时间" }), el("dd", { text: [DAY_LABELS[slot.day - 1], periodText(slot.from, slot.to), slot.sectionLabel, slot.time].filter(Boolean).join(" ") }),
           el("dt", { text: "地点" }), el("dd", { text: slot.location || "未标注" }),
           el("dt", { text: "周次" }), el("dd", { text: weekText(slot.weeks) }),
           slot.course.custom ? el("dt", { text: "来源" }) : null,
@@ -140,16 +144,28 @@ export function createTimetableView({ el, api }) {
       const from = el("select", { "aria-label": "开始节次" }, Array.from({ length: PERIODS }, (_, index) => el("option", { value: String(index + 1), text: `第${index + 1}节` })));
       const to = el("select", { "aria-label": "结束节次" }, Array.from({ length: PERIODS }, (_, index) => el("option", { value: String(index + 1), text: `第${index + 1}节` })));
       to.value = "2";
+      const sectionOptions = ["沿用大节", ...Array.from({ length: 14 }, (_, index) => `第${index + 1}小节`)];
+      const sectionFrom = el("select", { "aria-label": "精确开始小节" }, sectionOptions.map((label, index) => el("option", { value: index === 0 ? "" : String(index), text: label })));
+      const sectionTo = el("select", { "aria-label": "精确结束小节" }, sectionOptions.map((label, index) => el("option", { value: index === 0 ? "" : String(index), text: label })));
       const submit = el("button", {
         class: "primary",
         type: "button",
         text: "保存到课表",
         onclick: async () => {
+          if (sectionFrom.value && sectionTo.value && Number(sectionFrom.value) > Number(sectionTo.value)) {
+            status.textContent = "精确小节结束不能早于开始。";
+            return;
+          }
           submit.disabled = true;
           try {
             await api("/api/timetable/custom", {
               method: "POST",
-              body: { name: name.value, teacher: teacher.value, location: location.value, day: Number(day.value), from: Number(from.value), to: Number(to.value) },
+              body: {
+                name: name.value, teacher: teacher.value, location: location.value, day: Number(day.value),
+                ...(sectionFrom.value && sectionTo.value
+                  ? { sections: Array.from({ length: Number(sectionTo.value) - Number(sectionFrom.value) + 1 }, (_, index) => Number(sectionFrom.value) + index) }
+                  : { from: Number(from.value), to: Number(to.value) }),
+              },
             });
             mode = "grid";
             await load(true);
@@ -163,6 +179,7 @@ export function createTimetableView({ el, api }) {
         el("h2", { text: "添加课程" }),
         field("名称", name), field("教师", teacher), field("地点", location),
         field("星期", day), field("开始", from), field("结束", to),
+        field("精确到小节（可选）", sectionFrom), field("精确结束小节", sectionTo),
         status,
         el("div", { class: "timetable-actions" }, [
           el("button", { class: "ghost", type: "button", text: "← 返回课表", onclick: () => { mode = "grid"; draw(); } }),
