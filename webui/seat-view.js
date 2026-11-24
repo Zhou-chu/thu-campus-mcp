@@ -1,6 +1,6 @@
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
 
-function drawSeatPlan(seats, makeButton, el) {
+function drawSeatPlan(seats, makeButton, el, zoom = 1) {
   const positioned = seats.filter(seat => seat.position);
   if (!positioned.length) return null;
   const positions = positioned.map(seat => seat.position);
@@ -11,9 +11,13 @@ function drawSeatPlan(seats, makeButton, el) {
   // Scale the two axes from the measured seats—not the viewport—so touch targets remain usable.
   const sx = 64 / Math.min(...positions.map(p => p.width));
   const sy = 54 / Math.min(...positions.map(p => p.height));
+  const baseWidth = width * sx + 24;
+  const baseHeight = height * sy + 24;
   const plan = el("div", { class: "seat-plan", role: "group", "aria-label": "座位分布图" });
-  plan.style.width = (width * sx + 24) + "px";
-  plan.style.height = (height * sy + 24) + "px";
+  plan.style.width = baseWidth + "px";
+  plan.style.height = baseHeight + "px";
+  plan.style.transform = "scale(" + zoom + ")";
+  plan.style.transformOrigin = "top left";
   for (const seat of positioned) {
     const p = seat.position;
     const button = makeButton(seat, true);
@@ -21,14 +25,17 @@ function drawSeatPlan(seats, makeButton, el) {
     button.style.top = ((p.y - minY) * sy + 12) + "px";
     plan.append(button);
   }
-  return el("div", { class: "seat-plan-frame", tabIndex: 0, "aria-label": "可滚动的座位分布图" }, [plan]);
+  const scaler = el("div", { class: "seat-plan-scaler" }, [plan]);
+  scaler.style.width = Math.ceil(baseWidth * zoom) + "px";
+  scaler.style.height = Math.ceil(baseHeight * zoom) + "px";
+  return el("div", { class: "seat-plan-frame", tabIndex: 0, "aria-label": "可滚动的座位分布图，可用缩放按钮调整比例" }, [scaler]);
 }
 
 export function createSeatView({ el, api }) {
   const state = {
     libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
-    date: today(), days: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0,
+    date: today(), days: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1,
   };
 
   return function seatPage() {
@@ -107,7 +114,20 @@ export function createSeatView({ el, api }) {
       ].map(([mode, label]) => el("button", { class: "ghost", type: "button", text: label, "aria-pressed": String(state.display === mode),
         onclick: () => { state.display = mode; render(); panel.querySelector('.seat-view-switch [aria-pressed="true"]')?.focus(); },
       }))));
-      if (usingMap) display.append(drawSeatPlan(state.seats, makeButton, el));
+      if (usingMap) {
+        const zoomOut = el("button", { class: "ghost", type: "button", text: "－", "aria-label": "缩小座位图", disabled: state.zoom <= 1,
+          onclick: () => { state.zoom = Math.max(1, Math.round((state.zoom - 0.25) * 100) / 100); render(); } });
+        const zoomIn = el("button", { class: "ghost", type: "button", text: "＋", "aria-label": "放大座位图", disabled: state.zoom >= 3,
+          onclick: () => { state.zoom = Math.min(3, Math.round((state.zoom + 0.25) * 100) / 100); render(); } });
+        controlBar.append(el("div", { class: "seat-zoom", role: "group", "aria-label": "座位图缩放" }, [
+          zoomOut,
+          el("span", { class: "seat-zoom-value", role: "status", text: Math.round(state.zoom * 100) + "%" }),
+          zoomIn,
+          el("button", { class: "ghost", type: "button", text: "重置", disabled: state.zoom === 1,
+            onclick: () => { state.zoom = 1; render(); } }),
+        ]));
+        display.append(drawSeatPlan(state.seats, makeButton, el, state.zoom));
+      }
       const listed = usingMap ? state.seats.filter(seat => !seat.position) : state.seats;
       if (listed.length) {
         if (usingMap) display.append(el("h4", { class: "seat-label", text: "无位置数据的座位" }));

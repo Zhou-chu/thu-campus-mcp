@@ -978,8 +978,8 @@ test("app: library seat view lists seats and surfaces the real booking error", a
       [`GET /api/seat/seats?section=96&date=${day}`]: {
         ok: true, sectionId: 96, date: day,
         seats: [
-          { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true },
-          { id: 5123, name: "A002", segment: 1586205, begin: "08:00", end: "22:00", status: 0, available: false },
+          { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true, position: { x: 0, y: 0, width: 60, height: 50 } },
+          { id: 5123, name: "A002", segment: 1586205, begin: "08:00", end: "22:00", status: 0, available: false, position: { x: 64, y: 0, width: 60, height: 50 } },
         ],
         available: 1,
       },
@@ -994,6 +994,11 @@ test("app: library seat view lists seats and surfaces the real booking error", a
   assert.equal(a.all(".seat").length, 2);
   assert.equal(a.all('.seat[data-open="true"]').length, 1, "不可约座位标为不可用");
   assert.match(a.$(".seat-panel").textContent, /北馆\(李文正馆\)/);
+  assert.ok(a.$(".seat-plan"), "有坐标时显示分布图");
+  a.click(a.$('[aria-label="放大座位图"]'));
+  await flush();
+  assert.equal(a.$(".seat-zoom-value").textContent, "125%");
+  assert.match(a.$(".seat-plan").style.transform, /scale\(1\.25\)/);
   a.click(a.$('.seat[data-open="true"]'));
   assert.match(a.$(".seat-confirm-line").textContent, /A001/);
   assert.match(a.$(".seat-confirm-line").textContent, /08:00-22:00/);
