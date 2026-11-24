@@ -1449,7 +1449,7 @@ async function loginService(name, manual, connection) {
       state.authNotices[name] = { text: "请在运行实例的电脑上完成验证，然后核验登录状态。", manual: true };
       return;
     }
-    const result = await api("/api/auth/login", { method: "POST", body: { service: name } });
+    const result = await api("/api/services/login", { method: "POST", body: { service: name } });
     if (result.job?.status === "busy") throw loginFailure("BROWSER_BUSY");
     if (typeof result.jobId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(result.jobId)) throw loginFailure("LOGIN_JOB_MISSING");
     await followLoginJob(result.jobId, name, connection);

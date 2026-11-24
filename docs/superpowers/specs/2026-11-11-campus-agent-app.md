@@ -103,7 +103,7 @@ node bin/thu-campus.mjs app status            # 脱敏状态，不联网
 | POST | `/api/chat` | 是 | 发起一轮对话，返回 `text/event-stream` |
 | POST | `/api/chat/:id/abort` | 是 | 取消进行中的一轮 |
 | GET | `/api/auth/status` | 是 | 各服务登录态与最近任务 |
-| POST | `/api/auth/login` | 是 | `{ service }`，后台启动浏览器登录，返回 `{ jobId }` |
+| POST | `/api/services/login` | 是 | `{ service }`，后台启动浏览器登录，返回 `{ jobId }` |
 | GET | `/api/jobs/:id` | 是 | 后台任务状态 |
 | GET | `/api/settings` | 是 | 运行时设置 |
 | PUT | `/api/settings` | 是 | 更新设置（白名单字段） |

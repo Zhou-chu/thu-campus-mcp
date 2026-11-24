@@ -414,7 +414,7 @@ test("app: tool catalog errors are visible rather than fake empty results", asyn
 
 test("app: service login does not imply verified authentication; failed checks remain recoverable", async t => {
   const evidence = { state: "ready", verified: true, source: "protected-api:fixture", checkedAt, code: "OK" };
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, jobId: "fixture-login" }, "GET /api/jobs/fixture-login": { ok: true, found: true, job: { service: "cloud", status: "complete" } }, "GET /api/auth/status": { ok: true, services: { learnx: evidence, cloud: { state: "ready" }, hetang: { mode: "mock" } } } } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/services/login": { ok: true, jobId: "fixture-login" }, "GET /api/jobs/fixture-login": { ok: true, found: true, job: { service: "cloud", status: "complete" } }, "GET /api/auth/status": { ok: true, services: { learnx: evidence, cloud: { state: "ready" }, hetang: { mode: "mock" } } } } });
   a.nav("services"); await flush();
   let cloud = a.$('[data-service="cloud"]');
   a.click(a.button("登录", cloud)); await flush(); cloud = a.$('[data-service="cloud"]');
@@ -438,7 +438,7 @@ test("app: unified service rows need no second account field and retain failed v
   const a = await app(t, { routes: {
     "GET /api/keepalive": { ok: true, enabled: false, history: [] },
     "POST /api/auth/learnx": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要验证码" } },
-    "POST /api/auth/login": { ok: true, jobId: "learnx-login" },
+    "POST /api/services/login": { ok: true, jobId: "learnx-login" },
     "GET /api/jobs/learnx-login": { ok: true, found: true, job: { service: "learnx", status: "complete" } },
   } });
   a.nav("services"); await flush();
@@ -456,14 +456,14 @@ test("app: login polls queued, downloading and running without claiming a window
   const jobs = [{ status: "queued" }, { status: "running", phase: "downloading" }, { status: "running", phase: "login" }, { status: "complete" }];
   const a = await app(t, { routes: {
     "GET /api/keepalive": { ok: true, enabled: false, history: [] },
-    "POST /api/auth/login": { ok: true, jobId: "cloud-login" },
+    "POST /api/services/login": { ok: true, jobId: "cloud-login" },
     "GET /api/jobs/cloud-login": () => ({ ok: true, found: true, job: { service: "cloud", ...jobs.shift() } }),
   } });
   a.nav("services"); await flush();
   a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
   assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /任务已提交/);
   a.click(a.button("登录中…", a.$('[data-service="cloud"]'))); await flush();
-  assert.equal(a.count("POST /api/auth/login"), 1);
+  assert.equal(a.count("POST /api/services/login"), 1);
   await a.tick(1000); assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /正在安装/);
   await a.tick(1000); assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /任务运行中/);
   assert.doesNotMatch(a.$('[data-service="cloud"]').textContent, /窗口已打开|已登录/);
@@ -483,7 +483,7 @@ for (const [label, data, expected] of [
   ["invalid", { found: true, job: { status: "unexpected" } }, /LOGIN_JOB_INVALID/],
   ["poll failure", { ok: false, error: { message: "fixture status offline" } }, /fixture status offline/],
 ]) test(`app: login ${label} remains an explicit recoverable failure`, async t => {
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, jobId: "fixture-login" }, "GET /api/jobs/fixture-login": { ok: true, ...data } } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/services/login": { ok: true, jobId: "fixture-login" }, "GET /api/jobs/fixture-login": { ok: true, ...data } } });
   a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
   assert.match(a.$('[data-service="cloud"] .auth-notice.error').textContent, expected);
   assert.equal(a.button("登录", a.$('[data-service="cloud"]')).disabled, false);
@@ -494,7 +494,7 @@ for (const [label, reply, expected] of [
   ["no id", {}, /LOGIN_JOB_MISSING/],
   ["invalid id", { jobId: "unsafe/path" }, /LOGIN_JOB_MISSING/],
 ]) test(`app: login ${label} never starts an unrelated poll`, async t => {
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, ...reply } } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/services/login": { ok: true, ...reply } } });
   a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
   assert.match(a.$('[data-service="cloud"] .auth-notice.error').textContent, expected);
   assert.equal(a.calls.some(call => new URL(call.url).pathname.startsWith("/api/jobs/")), false);
@@ -502,7 +502,7 @@ for (const [label, reply, expected] of [
 
 test("app: clearing credentials while login starts never polls with a changed connection", async t => {
   const pending = deferred();
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "GET /api/service": { ok: true, supported: false }, "POST /api/auth/login": () => pending.promise } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "GET /api/service": { ok: true, supported: false }, "POST /api/services/login": () => pending.promise } });
   a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
   a.nav("settings"); await flush(); a.click(a.button("清除本地令牌并退出"));
   pending.resolve({ ok: true, jobId: "old-login" }); await flush();
@@ -510,7 +510,7 @@ test("app: clearing credentials while login starts never polls with a changed co
 });
 
 test("app: login polling is bounded and timeout never claims success", async t => {
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/login": { ok: true, jobId: "slow-login" }, "GET /api/jobs/slow-login": { ok: true, found: true, job: { status: "running" } } } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/services/login": { ok: true, jobId: "slow-login" }, "GET /api/jobs/slow-login": { ok: true, found: true, job: { status: "running" } } } });
   a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
   for (let i = 0; i < 900; i++) await a.tick(1000);
   assert.match(a.$('[data-service="cloud"] .auth-notice.error').textContent, /LOGIN_WAIT_TIMEOUT/);

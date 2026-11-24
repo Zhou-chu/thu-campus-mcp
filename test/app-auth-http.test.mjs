@@ -162,6 +162,26 @@ test("Cookie 会话可访问 API；写操作缺 CSRF 标记被拒；登出后失
   assert.equal(after.status, 401);
 });
 
+test("服务状态与登录不被邮箱认证路由截获", async t => {
+  const { url } = await boot(t);
+  const cookie = cookieOf(await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "svc-a@mails.tsinghua.edu.cn", password: "long-enough-pass" }) }));
+  const headers = { cookie, "content-type": "application/json", "x-thu-csrf": "1" };
+
+  const status = await fetch(url + "/api/auth/status", { headers: { cookie } });
+  assert.equal(status.status, 200, "服务状态不能再 404");
+  const statusBody = await status.json();
+  assert.equal(typeof statusBody.services, "object");
+
+  const learnx = await fetch(url + "/api/auth/learnx", { method: "POST", headers });
+  assert.notEqual(learnx.status, 404, "网络学堂登录不能再 404");
+  const learnxBody = await learnx.json();
+  assert.notEqual(learnxBody.error?.code, "NOT_FOUND");
+
+  const service = await fetch(url + "/api/services/login", { method: "POST", headers, body: JSON.stringify({ service: "nope" }) });
+  assert.equal(service.status, 400, "服务登录走独立路径");
+  assert.equal((await service.json()).error.code, "INVALID_ARGUMENTS");
+});
+
 test("设置按用户保存：A 改模型后只有 A 看到", async t => {
   const { url } = await boot(t);
   const register = async email => {
