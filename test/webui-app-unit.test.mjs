@@ -956,6 +956,27 @@ test("app: verified service hides stale login failure instead of showing two sta
   assert.match(current.textContent, /已登录/);
 });
 
+test("app: only real school challenges are labelled manual verification", async t => {
+  const run = async code => {
+    const a = await app(t, { routes: {
+      "GET /api/meta": { ...meta(), services: { sports: { state: "unverified" } } },
+      "GET /api/workspace/storage": storage(),
+      "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+      "POST /api/sports/login": { ok: false, error: { code, message: code === "BROWSER_BUSY" ? "浏览器正忙" : "需要验证码" } },
+    } });
+    a.nav("services");
+    const row = a.$('[data-service="sports"]');
+    a.click([...row.querySelectorAll("button")].find(button => button.textContent === "登录"));
+    await flush();
+    return a.$('[data-service="sports"]').textContent;
+  };
+  const busy = await run("BROWSER_BUSY");
+  assert.match(busy, /浏览器正忙/);
+  assert.equal(/人工验证/.test(busy), false, "浏览器忙不是人工验证");
+  const challenge = await run("CAS_CAPTCHA_REQUIRED");
+  assert.match(challenge, /人工验证/);
+});
+
 test("app: remote client gets host-machine guidance instead of an invisible window", async t => {
   const a = await app(t, { routes: {
     "GET /api/meta": { ...meta(), security: { localClient: false }, services: { sports: { state: "unverified" } } },
@@ -1146,7 +1167,7 @@ test("app: seat view reports area and segment failures honestly", async t => {
   });
   a.routes.set("GET /api/seat/areas?floor=37", () => { throw Object.assign(new Error("bad"), { code: "SEAT_UNREACHABLE" }); });
   a.nav("seat");
-  await until(() => /暂时读不到分区/.test(a.$(".seat-panel").textContent), "area failure");
+  await until(() => /无法启动浏览器读取座位/.test(a.$(".seat-panel").textContent), "area failure");
   assert.equal(a.all(".seat").length, 0);
 });
 

@@ -270,7 +270,10 @@ export function createSeatView({ el, api }) {
         const hints = {
           SEAT_LOGIN_REQUIRED: "需要先登录图书馆座位系统。",
           SEAT_WINDOW_CLOSED: "系统开放预约时间为06:00-23:00（北京时间）。",
-          CAS_CAPTCHA_REQUIRED: "校方登录需要人工验证。",
+          BROWSER_BUSY: "浏览器正被其它任务占用，请稍后重试。",
+          SEAT_UNREACHABLE: "无法启动浏览器读取座位，请检查运行实例。",
+          SEAT_LOGIN_UNCONFIRMED: "未能确认座位登录，请核对清华账号或到运行实例完成验证。",
+          CAS_CAPTCHA_REQUIRED: "校方登录要求人工验证；远程访问时需在运行实例的电脑上完成。",
         };
         state.error = hints[error?.code] ?? (["SEAT_EMPTY", "ACCOUNT_NOT_CONFIGURED"].includes(error?.code) ? error.message : fallback);
         return false;
