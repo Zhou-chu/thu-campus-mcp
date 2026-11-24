@@ -1149,12 +1149,14 @@ async function sendTurn(text) {
   state.controller = new AbortController();
   try {
     const headers = { "content-type": "application/json" };
+    const viaCookie = !state.token;
     if (state.token) headers.authorization = "Bearer " + state.token;
+    else headers["x-thu-csrf"] = "1";
     const response = await fetch(endpoint("/api/chat"), {
       method: "POST", headers,
       body: JSON.stringify({ text, sessionId: state.sessionId || undefined, model: turnModel || undefined }),
       signal: state.controller.signal,
-      credentials: "omit",
+      credentials: viaCookie ? "same-origin" : "omit",
     });
     if (!response.ok || !response.body) {
       const data = await response.json().catch(() => ({}));
@@ -1435,21 +1437,47 @@ async function followLoginJob(id, name, connection) {
   throw loginFailure("LOGIN_WAIT_TIMEOUT");
 }
 const DIRECT_LOGIN = { learnx: "/api/auth/learnx", seat: "/api/seat/login", sports: "/api/sports/login" };
+// 人工验证窗口只会开在运行实例那台电脑上；远程浏览器看不到，也不该把“已打开”当成成功。
+function localClient() {
+  const flag = state.meta?.security?.localClient;
+  if (typeof flag === "boolean") return flag;
+  return ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+}
+function remoteManualText(name) {
+  const label = name === "seat" ? "图书馆座位" : name === "sports" ? "体育场馆" : "该服务";
+  const local = "http://127.0.0.1" + (location.port ? ":" + location.port : "");
+  return "人工验证只能在运行实例的电脑上完成：请在那台电脑打开 " + local + "，登录" + label + "完成验证，再回到这里点「核验登录状态」。";
+}
+async function apiWithTimeout(path, options, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try { return await api(path, { ...options, signal: controller.signal }); }
+  finally { clearTimeout(timer); }
+}
 async function loginService(name, manual, connection) {
   try {
     if (DIRECT_LOGIN[name] && !manual) {
-      await api(DIRECT_LOGIN[name], { method: "POST" });
+      await apiWithTimeout(DIRECT_LOGIN[name], { method: "POST" }, 20000);
       checkLoginConnection(connection);
       state.authNotices[name] = { text: "已提交登录，正在核验。" };
       return;
     }
     if (manual && (name === "seat" || name === "sports")) {
-      await api("/api/tools/campus_browser_open", { method: "POST", body: { service: name } });
+      if (!localClient()) {
+        state.authNotices[name] = { text: remoteManualText(name), manual: true };
+        return;
+      }
+      try {
+        await apiWithTimeout("/api/tools/campus_browser_open", { method: "POST", body: { service: name } }, 20000);
+      } catch (error) {
+        state.authNotices[name] = { error: true, manual: true, text: "打开人工验证窗口未完成：" + (error.name === "AbortError" ? "等待超时，请到运行实例的电脑上操作。" : error.message) };
+        return;
+      }
       checkLoginConnection(connection);
-      state.authNotices[name] = { text: "请在运行实例的电脑上完成验证，然后核验登录状态。", manual: true };
+      state.authNotices[name] = { text: "已在运行实例的电脑上打开验证窗口，完成后点「核验登录状态」。", manual: true };
       return;
     }
-    const result = await api("/api/services/login", { method: "POST", body: { service: name } });
+    const result = await apiWithTimeout("/api/services/login", { method: "POST", body: { service: name } }, 20000);
     if (result.job?.status === "busy") throw loginFailure("BROWSER_BUSY");
     if (typeof result.jobId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(result.jobId)) throw loginFailure("LOGIN_JOB_MISSING");
     await followLoginJob(result.jobId, name, connection);
@@ -1547,7 +1575,9 @@ function servicesView() {
       const row = el("section", { class: "auth-service", dataset: { service: name } }, [
         el("div", { class: "auth-service-main" }, [el("span", { class: "item-title", text: label }), el("span", { class: "state", dataset: { s: info.state }, text: info.label })]),
       ]);
-      const notice = state.authNotices[name];
+      // 已经有受保护接口核验通过的状态时，不再把旧的登录失败提示摆在旁边。
+      if (info.verified) delete state.authNotices[name];
+      const notice = info.verified ? null : state.authNotices[name];
       if (name !== "gitlab") {
         row.append(el("button", { class: "ghost", type: "button", text: notice?.manual ? "人工验证" : state.authLoginBusy === name ? "登录中…" : "登录",
           disabled: !!state.authLoginBusy || state.authChecking, onclick: () => openLogin(name, !!notice?.manual) }));

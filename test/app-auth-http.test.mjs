@@ -162,6 +162,23 @@ test("Cookie 会话可访问 API；写操作缺 CSRF 标记被拒；登出后失
   assert.equal(after.status, 401);
 });
 
+test("邮箱 Cookie 可以发起流式对话，缺 CSRF 或未登录仍被拒", async t => {
+  const { url } = await boot(t);
+  const cookie = cookieOf(await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "chat-a@mails.tsinghua.edu.cn", password: "long-enough-pass" }) }));
+  const body = JSON.stringify({ text: "你好" });
+  const missingCsrf = await fetch(url + "/api/chat", { method: "POST", headers: { cookie, "content-type": "application/json" }, body });
+  assert.equal(missingCsrf.status, 403);
+  assert.equal((await missingCsrf.json()).error.code, "CSRF_REQUIRED");
+
+  const anonymous = await fetch(url + "/api/chat", { method: "POST", headers: { "content-type": "application/json", "x-thu-csrf": "1" }, body });
+  assert.equal(anonymous.status, 401);
+
+  const response = await fetch(url + "/api/chat", { method: "POST", headers: { cookie, "content-type": "application/json", "x-thu-csrf": "1" }, body });
+  const text = await response.text();
+  assert.notEqual(response.status, 401, "有效 Cookie + CSRF 不应再被鉴权拦截");
+  assert.equal(text.includes("AUTH_REQUIRED"), false);
+});
+
 test("服务状态与登录不被邮箱认证路由截获", async t => {
   const { url } = await boot(t);
   const cookie = cookieOf(await fetch(url + "/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "svc-a@mails.tsinghua.edu.cn", password: "long-enough-pass" }) }));

@@ -28,7 +28,7 @@ const connectionKey = "campus.app.connection";
 const token = "fixture-device-token";
 const checkedAt = "2026-11-14T12:00:00.000Z";
 const models = [{ id: "fixture-a", label: "模型甲" }, { id: "fixture-b", label: "模型乙" }];
-const meta = () => ({ ok: true, models, model: { name: "fixture-a", route: "fixture" }, services: {} });
+const meta = () => ({ ok: true, models, model: { name: "fixture-a", route: "fixture" }, services: {}, security: { localClient: true } });
 const storage = () => ({ mode: "cloud", state: "uninitialized", scope: { accountId: "fixture-account", repoId: "fixture-private", rootPath: "/Agent工作区" }, privacy: { verified: true, checkedAt } });
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); };
@@ -898,6 +898,41 @@ test("app: sports view asks for login instead of pretending there is no data", a
   assert.ok(a.$(".sports-login"), "提供去登录的入口");
   assert.match(a.$(".sports-login").textContent, /打开体育登录窗口/);
   assert.equal(a.all(".sports-site").length, 0, "没有数据时不画场地");
+});
+
+test("app: verified service hides stale login failure instead of showing two states", async t => {
+  const ready = { state: "ready", verified: true, source: "protected-api:learnx", checkedAt };
+  const a = await app(t, { routes: { "GET /api/meta": { ...meta(), services: { learnx: ready } }, "GET /api/auth/status": { ok: true, services: { learnx: ready } }, "GET /api/workspace/storage": storage(), "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "POST /api/auth/learnx": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要验证码" } } } });
+  a.nav("services");
+  const row = a.$('[data-service="learnx"]');
+  assert.match(row.textContent, /已登录/);
+  a.click([...row.querySelectorAll("button")].find(button => /登录|人工验证/.test(button.textContent)));
+  await flush();
+  const current = a.$('[data-service="learnx"]');
+  assert.equal(!!current.querySelector(".auth-notice.error"), false, "已核验通过时不再显示登录未完成");
+  assert.match(current.textContent, /已登录/);
+});
+
+test("app: remote client gets host-machine guidance instead of an invisible window", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/meta": { ...meta(), security: { localClient: false }, services: { sports: { state: "unverified" } } },
+    "GET /api/workspace/storage": storage(),
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "POST /api/sports/login": { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要人工验证" } },
+    "POST /api/tools/campus_browser_open": { ok: true },
+  } });
+  a.nav("services");
+  const row = a.$('[data-service="sports"]');
+  a.click([...row.querySelectorAll("button")].find(button => button.textContent === "登录"));
+  await flush();
+  assert.equal(a.count("POST /api/sports/login"), 1, "登录请求已发出");
+  let current = a.$('[data-service="sports"]');
+  assert.match(current.textContent, /人工验证/);
+  a.click([...current.querySelectorAll("button")].find(button => button.textContent === "人工验证"));
+  await flush();
+  assert.equal(a.count("POST /api/tools/campus_browser_open"), 0, "远程浏览器不触发宿主机窗口");
+  current = a.$('[data-service="sports"]');
+  assert.match(current.textContent, /127\.0\.0\.1/, "给出宿主机操作入口");
 });
 
 test("app: sports shows manual verification and exposes the matching login action", async t => {
