@@ -7,6 +7,7 @@ import { createUserDataRepositories } from "../lib/store/user-data-repo.mjs";
 import { createChangeLog } from "../lib/store/changes-repo.mjs";
 import { createPgScheduleStore } from "../lib/app/pg-schedules.mjs";
 import { createScheduleRouter } from "../lib/app/schedule-router.mjs";
+import { createScheduleRunner } from "../lib/app/schedule-runner.mjs";
 
 async function boot() {
   const db = newDb({ autoCreateForeignKeyIndices: true });
@@ -54,6 +55,39 @@ test("定时任务适配器：创建、改名、执行完成与删除，用户�
   assert.equal(await mine.remove(once.id), true);
   assert.equal((await mine.list()).length, 0);
   await assert.rejects(() => mine.create({ title: "", prompt: "x", kind: "daily", time: "08:00" }), (error) => error.code === "INVALID_ARGUMENTS");
+});
+
+test("抢占同一周期：第二个执行器拿不到任务", async () => {
+  const { repos, user } = await boot();
+  const due = await repos.schedules.create({ userId: user.id, title: "一次", prompt: "x", kind: "daily", spec: { time: "08:00" }, at: "2026-11-20T00:00:00.000Z" });
+  assert.equal(await repos.schedules.claim(user.id, due.id, "2026-11-23T08:00:00.000Z"), true);
+  assert.equal(await repos.schedules.claim(user.id, due.id, "2026-11-23T08:00:00.000Z"), false, "同一周期只能被一个执行器抢到");
+});
+
+test("不同字段的并发更新都保留，同字段按最后写入", async () => {
+  const { repos, user } = await boot();
+  const task = await repos.schedules.create({ userId: user.id, title: "old", prompt: "old prompt", kind: "daily", spec: { time: "08:00" } });
+  await repos.schedules.update(user.id, task.id, { title: "new title" });
+  const afterPrompt = await repos.schedules.update(user.id, task.id, { prompt: "new prompt" });
+  assert.equal(afterPrompt.title, "new title");
+  assert.equal(afterPrompt.prompt, "new prompt");
+  const afterTitle = await repos.schedules.update(user.id, task.id, { title: "final title" });
+  assert.equal(afterTitle.title, "final title");
+  assert.equal(afterTitle.prompt, "new prompt");
+});
+
+test("两个执行器同时检查到期：同一周期只运行一次", async () => {
+  const { repos, user } = await boot();
+  const late = () => new Date("2026-11-23T09:00:00.000Z");
+  await repos.schedules.create({ userId: user.id, title: "到期", prompt: "x", kind: "daily", spec: { time: "08:00" }, at: "2026-11-20T00:00:00.000Z" });
+  let calls = 0;
+  const make = () => createScheduleRunner({
+    store: createScheduleRouter({ store: { repos }, fileStore: { due: async () => [] }, userId: () => null, now: late }),
+    sessions: { create: async () => ({ id: "s-" + (++calls) }) },
+    runTurn: async () => { await new Promise(resolve => setTimeout(resolve, 10)); return { aborted: false }; },
+  });
+  await Promise.all([make().tick(), make().tick()]);
+  assert.equal(calls, 1, "并发执行器只应启动一次");
 });
 
 test("选择器：未登录走文件存储，登录后按用户走数据库", async () => {
