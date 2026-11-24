@@ -201,6 +201,7 @@ export function createSportsView({ el, api }) {
     }
 
     async function loadVenues() {
+      const request = (state.venuesRequest = (state.venuesRequest || 0) + 1);
       state.venues = [];
       state.sessions = [];
       state.venue = "";
@@ -209,11 +210,14 @@ export function createSportsView({ el, api }) {
       if (!state.sport) return;
       try {
         const data = await api(`/api/sports/venues?sport=${encodeURIComponent(state.sport)}`);
+        if (request !== state.venuesRequest) return;
         state.venues = Array.isArray(data.venues) ? data.venues : [];
         state.venue = state.venues[0] || "";
       } catch (error) {
-    state.error = error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到该运动的场馆。";
+        if (request !== state.venuesRequest) return;
+        state.error = error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到该运动的场馆。";
       }
+      if (request !== state.venuesRequest) return;
       render();
       if (state.venue) await loadSlots();
     }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSeatLogin, createSeatReader, createSeatReadSession, SeatError } from "../lib/app/seat-read.mjs";
+import { chooseSeatSegment } from "../lib/app/seat.mjs";
 
 test("seat login: uses verified active snapshot without opening a browser; network failure never resets it", async () => {
   for (const state of ["ready", "unknown"]) {
@@ -98,4 +99,18 @@ test("seat read: login failures are not success; transient failures don't trigge
   await assert.rejects(() => run(read), { code: "SEAT_UNREACHABLE" });
   assert.deepEqual(states, ["expired"]);
   assert.equal(refreshes, 1);
+});
+
+test("seat: 同一天多个时段时可按 segment 选择，默认取第一个", () => {
+  const day = "2026-12-01";
+  const checked = new Date("2026-11-30T02:00:00.000Z");
+  const dayList = [
+    { id: 11, day, start: "08:00", end: "12:00" },
+    { id: 12, day, start: "13:00", end: "18:00" },
+  ];
+  assert.equal(chooseSeatSegment(dayList, day, "", checked).match.segment.id, 11);
+  assert.equal(chooseSeatSegment(dayList, day, "12", checked).match.segment.id, 12);
+  assert.deepEqual(chooseSeatSegment(dayList, day, "", checked).candidates.map(item => item.segment.id), [11, 12]);
+  assert.throws(() => chooseSeatSegment(dayList, day, "99", checked), { code: "SEAT_SEGMENT_INVALID" });
+  assert.throws(() => chooseSeatSegment([], day, "", checked), { code: "SEAT_EMPTY" });
 });

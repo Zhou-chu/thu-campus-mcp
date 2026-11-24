@@ -1457,7 +1457,7 @@ async function apiWithTimeout(path, options, ms) {
 async function loginService(name, manual, connection) {
   try {
     if (DIRECT_LOGIN[name] && !manual) {
-      await apiWithTimeout(DIRECT_LOGIN[name], { method: "POST" }, 20000);
+      await apiWithTimeout(DIRECT_LOGIN[name], { method: "POST" }, 65000);
       checkLoginConnection(connection);
       state.authNotices[name] = { text: "已提交登录，正在核验。" };
       return;
@@ -1477,7 +1477,7 @@ async function loginService(name, manual, connection) {
       state.authNotices[name] = { text: "已在运行实例的电脑上打开验证窗口，完成后点「核验登录状态」。", manual: true };
       return;
     }
-    const result = await apiWithTimeout("/api/services/login", { method: "POST", body: { service: name } }, 20000);
+    const result = await apiWithTimeout("/api/services/login", { method: "POST", body: { service: name } }, 65000);
     if (result.job?.status === "busy") throw loginFailure("BROWSER_BUSY");
     if (typeof result.jobId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(result.jobId)) throw loginFailure("LOGIN_JOB_MISSING");
     await followLoginJob(result.jobId, name, connection);
@@ -1534,6 +1534,10 @@ function accountCard() {
           state.authNotices[name] = { text: "登录中…" };
           updateAuthPanels();
           await loginService(name, false, connection);
+          if (state.authNotices[name]?.code === "CAS_CAPTCHA_REQUIRED") {
+            state.authNotices.all = { error: true, text: "学校统一身份认证要求人工验证，已停止后续自动登录；请先完成人工验证再重试。" };
+            break;
+          }
         }
         await verifyAuthentication();
       } finally { state.authLoginBusy = ""; updateAuthPanels(); }

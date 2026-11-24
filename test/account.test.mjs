@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import test from 'node:test';
-import { accountPath, clearAccount, loadAccount, maskAccount, saveAccount } from '../lib/app/account.mjs';
+import { accountPath, clearAccount, defaultAccountDir, loadAccount, maskAccount, saveAccount } from '../lib/app/account.mjs';
 
 const tempState = async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'account-test-'));
@@ -56,4 +57,18 @@ test('account: 无法解密时不回退明文，不删除任何旧凭据', async
   await writeFile(legacy, input);
   await assert.rejects(() => loadAccount(stateDir), { code: 'ACCOUNT_STORAGE' });
   assert.equal(await readFile(legacy, 'utf8'), input);
+});
+
+test('account: 未设置环境变量时回退到用户状态目录，而不是当前目录', () => {
+  const savedApp = process.env.THU_CAMPUS_APP_STATE_DIR;
+  const savedSeat = process.env.SEAT_STATE_DIR;
+  delete process.env.THU_CAMPUS_APP_STATE_DIR;
+  delete process.env.SEAT_STATE_DIR;
+  try {
+    assert.equal(defaultAccountDir(), path.join(homedir(), '.thu-campus-mcp', 'app'));
+    assert.equal(accountPath().startsWith(path.join(homedir(), '.thu-campus-mcp', 'app')), true);
+  } finally {
+    if (savedApp === undefined) delete process.env.THU_CAMPUS_APP_STATE_DIR; else process.env.THU_CAMPUS_APP_STATE_DIR = savedApp;
+    if (savedSeat === undefined) delete process.env.SEAT_STATE_DIR; else process.env.SEAT_STATE_DIR = savedSeat;
+  }
 });

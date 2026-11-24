@@ -985,7 +985,8 @@ test("app: library seat view lists seats and surfaces the real booking error", a
       "GET /api/seat/floors?library=35": { ok: true, floors: [{ id: 37, name: "二层", valid: true }] },
       "GET /api/seat/areas?floor=37": { ok: true, areas: [{ id: 96, name: "A区", total: 40, free: 10 }] },
       [`GET /api/seat/seats?section=96&date=${day}`]: {
-        ok: true, sectionId: 96, date: day,
+        ok: true, sectionId: 96, date: day, segment: { id: 11, start: "08:00", end: "22:00" },
+        segments: [{ id: 11, start: "08:00", end: "12:00" }, { id: 12, start: "13:00", end: "18:00" }],
         seats: [
           { id: 5122, name: "A001", segment: 1586205, begin: "08:00", end: "22:00", status: 1, available: true, position: { x: 0, y: 0, width: 60, height: 50 } },
           { id: 5123, name: "A002", segment: 1586205, begin: "08:00", end: "22:00", status: 0, available: false, position: { x: 64, y: 0, width: 60, height: 50 } },
@@ -993,6 +994,7 @@ test("app: library seat view lists seats and surfaces the real booking error", a
         available: 1,
       },
       "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
+      [`GET /api/seat/seats?section=96&date=${day}&segment=12`]: { ok: true, sectionId: 96, date: day, segment: { id: 12, start: "13:00", end: "18:00" }, segments: [{ id: 11, start: "08:00", end: "12:00" }, { id: 12, start: "13:00", end: "18:00" }], seats: [{ id: 5124, name: "A003", segment: 12, begin: "13:00", end: "18:00", status: 1, available: true, position: { x: 128, y: 0, width: 60, height: 50 } }], available: 1 },
       "GET /api/seat/bookings": { ok: true, bookings: [{ id: 1, title: "北馆 A001", status: 2, start: "2026-11-24 08:00", end: "2026-11-24 22:00" }] },
       "POST /api/seat/reserve/prepare": { ok: true, token: "unit-token" },
       "POST /api/seat/reserve": { ok: false, error: { code: "SEAT_BOOK_FAILED", message: "当前用户在该时段已存在预约。" } },
@@ -1004,14 +1006,19 @@ test("app: library seat view lists seats and surfaces the real booking error", a
   assert.equal(a.all(".seat").length, 2);
   assert.equal(a.all('.seat[data-open="true"]').length, 1, "不可约座位标为不可用");
   assert.match(a.$(".seat-panel").textContent, /北馆\(李文正馆\)/);
+  const segmentChips = a.all(".seat-chips button").filter(button => /08:00|13:00/.test(button.textContent));
+  assert.equal(segmentChips.length, 2, "同一天多时段显示切换条");
+  a.click(segmentChips[1]);
+  await until(() => a.count("GET /api/seat/seats") === 2 && !!a.$(".seat-plan"), "segment switch");
+  assert.ok(a.calls.some(call => new URL(call.url).searchParams.get("segment") === "12"));
   assert.ok(a.$(".seat-plan"), "有坐标时显示分布图");
   a.click(a.$('[aria-label="放大座位图"]'));
   await flush();
   assert.equal(a.$(".seat-zoom-value").textContent, "125%");
   assert.match(a.$(".seat-plan").style.transform, /scale\(1\.25\)/);
   a.click(a.$('.seat[data-open="true"]'));
-  assert.match(a.$(".seat-confirm-line").textContent, /A001/);
-  assert.match(a.$(".seat-confirm-line").textContent, /08:00-22:00/);
+  assert.match(a.$(".seat-confirm-line").textContent, /A003/);
+  assert.match(a.$(".seat-confirm-line").textContent, /13:00-18:00/);
   a.click([...a.all(".seat-bookings button")].find(button => /读取预约记录/.test(button.textContent)));
   await until(() => /已预约/.test(a.$(".seat-bookings").textContent), "booking history");
   assert.match(a.$(".seat-bookings").textContent, /北馆 A001/);
