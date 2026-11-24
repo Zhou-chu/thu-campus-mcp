@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reserveRequest, createSportsReader, createSportsReadRecovery, createSportsSlotReader, normalizeDate, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
+import { reserveRequest, createSportsReader, createSportsReadRecovery, createSportsSlotReader, normalizeDate, normalizeReservations, normalizeSlots, normalizeSportsMenu, sportsLoginProof, sportsSessionStatus } from "../lib/app/sports.mjs";
 
 test("sports: concurrent expired queries recover once and only replay the original reads", async () => {
   let active = false, logins = 0;
@@ -389,4 +389,19 @@ test("reserveRequest 校验参数并生成官方表单时间", () => {
   for (const broken of [{}, { sceneUuid: "s" }, { sceneUuid: "s", siteUuid: "t" }, { sceneUuid: "s", siteUuid: "t", startTime: "19:00" }]) {
     assert.throws(() => reserveRequest(broken), (error) => error.code === "ARGUMENT_REQUIRED");
   }
+});
+
+test("sports: 预约记录归一保留场馆、时间与状态", () => {
+  const items = normalizeReservations({ data: [
+    { resvUuid: "r1", resvStatus: "RESV_APPROVE_PASS", resvCheckStatus: "PASS", resvTime: { startTime: "2026-11-20 19:30:00", endTime: "2026-11-20 21:00:00" }, siteVoList: [{ siteName: "游泳馆 3 号道", location: "陈明游泳馆" }] },
+    { resvUuid: "r2", resvStatus: "RESV_END", resvTime: { startTime: "2026-11-10 17:00:00", endTime: "2026-11-10 18:00:00" }, siteVoList: [] },
+    { bad: true },
+  ] });
+  assert.equal(items.length, 2);
+  assert.equal(items[0].site, "游泳馆 3 号道");
+  assert.equal(items[0].location, "陈明游泳馆");
+  assert.equal(items[0].start, "2026-11-20 19:30:00");
+  assert.equal(items[0].status, "RESV_APPROVE_PASS");
+  assert.equal(items[1].site, "");
+  assert.equal(normalizeReservations(null).length, 0);
 });

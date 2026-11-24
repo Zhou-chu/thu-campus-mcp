@@ -12,7 +12,7 @@ const statusText = session => {
 };
 
 export function createSportsView({ el, api }) {
-  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false, booking: null, bookingLoading: false };
+  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false, booking: null, bookingLoading: false, reservations: null, reservationsLoading: false };
 
   return function sportsPage() {
     const wrap = el("div", { class: "stack sports-page" });
@@ -133,8 +133,32 @@ export function createSportsView({ el, api }) {
         active
           ? el("p", { class: "sports-notice", role: "status", text: [state.booking.sport, state.booking.venue, state.booking.start, state.booking.end, "流程进行中"].filter(Boolean).join(" · ") })
           : el("p", { class: "sports-empty", text: state.booking ? "当前没有进行中的预约流程。历史预约请到体育官网「我的预约」查看。" : "读取后显示当前预约流程状态。" }),
-        el("a", { class: "ghost", href: "https://www.sports.tsinghua.edu.cn/venue/mobile/index.html", target: "_blank", rel: "noopener noreferrer", text: "打开体育官网查看预约历史" }),
+        el("button", { class: "ghost", type: "button", text: state.reservationsLoading ? "读取中…" : "读取预约历史", disabled: state.reservationsLoading,
+          onclick: () => { void loadReservations(); } }),
+        state.reservations === null
+          ? el("p", { class: "sports-empty", text: "读取后显示官网返回的预约记录。" })
+          : state.reservations.length
+            ? el("ul", { class: "sports-reservations" }, state.reservations.map(item => el("li", {
+                text: [item.site || "场馆预约", item.start, item.end, item.status].filter(Boolean).join(" · "),
+              })))
+            : el("p", { class: "sports-empty", text: "官网没有返回预约记录。" }),
+        el("a", { class: "ghost", href: "https://www.sports.tsinghua.edu.cn/venue/mobile/index.html", target: "_blank", rel: "noopener noreferrer", text: "打开体育官网" }),
       ]);
+    }
+
+    async function loadReservations() {
+      state.reservationsLoading = true;
+      render();
+      try {
+        const data = await api("/api/sports/reservations");
+        state.reservations = Array.isArray(data.reservations) ? data.reservations : [];
+      } catch (error) {
+        state.reservations = [];
+        state.notice = error?.code === "SPORTS_LOGIN_REQUIRED" ? "体育登录态已失效，请先登录。" : "读取预约历史失败：" + (error?.message || "请稍后重试。");
+      } finally {
+        state.reservationsLoading = false;
+        render();
+      }
     }
 
     async function loadBookingStatus() {
