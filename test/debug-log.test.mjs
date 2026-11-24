@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createDebugLog } from "../lib/app/debug-log.mjs";
+import { createDebugLog, withDebugLog } from "../lib/app/debug-log.mjs";
 
 const temp = async t => { const dir = await mkdtemp(path.join(tmpdir(), "debug-log-")); t.after(() => rm(dir, { recursive: true, force: true })); return dir; };
 
@@ -94,4 +94,18 @@ test("debug log: 缺省目录、写入失败与空目录都不影响业务", asy
   await broken.flush();
   assert.equal((await broken.status()).enabled, true);
   await writeFile(path.join(dir, "other.txt"), "x", "utf8");
+});
+
+test("debug log: 工具调用成功与失败都记录，失败仍抛回", async () => {
+  const records = [];
+  const log = { log: record => records.push(record) };
+  const host = { name: "fixture", async call(tool) { if (tool === "bad") throw Object.assign(new Error("boom"), { code: "E_TOOL" }); return { ok: true }; } };
+  const wrapped = withDebugLog(host, log);
+  assert.equal(wrapped.name, "fixture");
+  assert.deepEqual(await wrapped.call("read", {}), { ok: true });
+  await assert.rejects(() => wrapped.call("bad", {}), /boom/);
+  assert.equal(records[0].event, "call");
+  assert.equal(records[0].data.name, "read");
+  assert.equal(records[1].event, "call-error");
+  assert.equal(records[1].error.code, "E_TOOL");
 });
