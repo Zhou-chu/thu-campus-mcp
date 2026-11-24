@@ -1259,11 +1259,11 @@ test("app: auth login validates service and reports job ids", async (t) => {
   const host = { ...baseHost, async call(name, args) { if (name === "campus_browser_login") return { ok: true, data: { id: "job-1" } }; return baseHost.call(name, args); } };
   const { url } = await boot(t, { token: "t", host });
   const headers = { authorization: "Bearer t", "content-type": "application/json" };
-  const bad = await fetch(url + "/api/auth/login", { method: "POST", headers, body: JSON.stringify({ service: "nope" }) });
+  const bad = await fetch(url + "/api/services/login", { method: "POST", headers, body: JSON.stringify({ service: "nope" }) });
   assert.equal(bad.status, 400);
   assert.equal((await bad.json()).error.code, "INVALID_ARGUMENTS");
 
-  const ok = await fetch(url + "/api/auth/login", { method: "POST", headers, body: JSON.stringify({ service: "learnx", account: "2023000000" }) });
+  const ok = await fetch(url + "/api/services/login", { method: "POST", headers, body: JSON.stringify({ service: "learnx", account: "2023000000" }) });
   const okBody = await ok.json();
   assert.equal(ok.status, 200);
   assert.equal(typeof okBody.jobId, "string");

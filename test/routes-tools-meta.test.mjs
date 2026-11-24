@@ -98,21 +98,21 @@ test("登录路由：成功、失败、未知错误与任务 ID 回落", async (
     canonicalJson: value => JSON.stringify(value),
   });
 
-  const badService = await call(handler, { method: "POST", pathname: "/api/auth/login", body: { service: "nope" } });
+  const badService = await call(handler, { method: "POST", pathname: "/api/services/login", body: { service: "nope" } });
   assert.equal(badService.status, 400);
 
-  const cloud = await call(handler, { method: "POST", pathname: "/api/auth/login", body: { service: "cloud" } });
+  const cloud = await call(handler, { method: "POST", pathname: "/api/services/login", body: { service: "cloud" } });
   assert.equal(cloud.body.ok, true);
   assert.equal(jobs.get("job-cloud").service, "cloud");
 
-  const hetang = await call(handler, { method: "POST", pathname: "/api/auth/login", body: { service: "hetang" } });
+  const hetang = await call(handler, { method: "POST", pathname: "/api/services/login", body: { service: "hetang" } });
   assert.equal(hetang.body.ok, true);
   assert.equal(jobs.get("job-hetang").kind, "login");
 
-  const learnx = await call(handler, { method: "POST", pathname: "/api/auth/login", body: { service: "learnx" } });
+  const learnx = await call(handler, { method: "POST", pathname: "/api/services/login", body: { service: "learnx" } });
   assert.equal(learnx.body.ok, false, "learnx 分支走 learnx.login 前的 host.call 失败");
 
-  const explicitAccount = await call(handler, { method: "POST", pathname: "/api/auth/login", body: { service: "madmodel", account: " 2023210002 " } });
+  const explicitAccount = await call(handler, { method: "POST", pathname: "/api/services/login", body: { service: "madmodel", account: " 2023210002 " } });
   assert.equal(calls.at(-1).args.account, "2023210002");
   assert.equal(explicitAccount.body.ok, false);
 
@@ -124,7 +124,7 @@ test("登录路由：成功、失败、未知错误与任务 ID 回落", async (
     searchJob: () => null, confirmations: { consume: () => true, issue: () => ({ token: "t" }) },
     canonicalJson: value => JSON.stringify(value),
   });
-  const busy = await call(flaky, { method: "POST", pathname: "/api/auth/login", body: { service: "cloud" } });
+  const busy = await call(flaky, { method: "POST", pathname: "/api/services/login", body: { service: "cloud" } });
   assert.equal(busy.body.ok, false);
   assert.equal(busy.body.error.code, "BROWSER_BUSY");
 });

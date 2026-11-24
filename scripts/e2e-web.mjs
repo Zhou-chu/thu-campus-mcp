@@ -486,7 +486,7 @@ async function main() {
     const loginPosts = [];
     let loginStep = 0;
     await page.route("**/api/auth/learnx", route => route.fulfill({ status: 409, json: { ok: false, error: { code: "CAS_CAPTCHA_REQUIRED", message: "需要验证码" } } }));
-    await page.route("**/api/auth/login", async route => {
+    await page.route("**/api/services/login", async route => {
       loginPosts.push(route.request().postDataJSON()); loginStep = 0;
       await route.fulfill({ status: 200, json: { ok: true, jobId: "login-e2e-fixture", job: { status: "queued" } } });
     });
@@ -513,7 +513,7 @@ async function main() {
     }
     await page.unroute("**/api/auth/learnx");
     expectedCampusChallenge = false;
-    await page.unroute("**/api/auth/login");
+    await page.unroute("**/api/services/login");
     await page.unroute("**/api/jobs/login-e2e-fixture");
     await page.setViewportSize({ width: 1280, height: 900 });
 
