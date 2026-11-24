@@ -36,6 +36,7 @@ export function createSeatView({ el, api }) {
     libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
     date: today(), days: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1,
+    bookings: [], bookingsLoading: false, bookingsLoaded: false, bookingsError: "",
   };
 
   return function seatPage() {
@@ -195,7 +196,37 @@ export function createSeatView({ el, api }) {
       children.push(el("h3", { class: "seat-label", text: "座位" }));
       children.push(seatGrid());
       if (state.notice) children.push(el("p", { class: "seat-notice", text: state.notice }));
+      const bookingBody = state.bookingsError
+        ? el("p", { class: "seat-empty", text: state.bookingsError })
+        : state.bookings.length
+          ? el("ul", { class: "seat-bookings-list" }, state.bookings.map(item => el("li", {
+              text: [item.title || "座位预约", item.start, item.end, item.status === 2 ? "已预约" : "状态码 " + item.status].filter(Boolean).join(" · "),
+            })))
+          : el("p", { class: "seat-empty", text: state.bookingsLoaded ? "没有预约记录。" : "读取后显示预约状态与历史。" });
+      children.push(el("div", { class: "seat-bookings stack" }, [
+        el("div", { class: "seat-result-bar" }, [
+          el("h3", { class: "seat-label", text: "我的预约" }),
+          el("button", { class: "ghost", type: "button", text: state.bookingsLoading ? "读取中…" : "读取预约记录", disabled: state.bookingsLoading, onclick: () => { void loadBookings(); } }),
+        ]),
+        bookingBody,
+      ]));
       panel.replaceChildren(...children);
+    }
+
+    async function loadBookings() {
+      state.bookingsLoading = true;
+      state.bookingsError = "";
+      render();
+      try {
+        const data = await api("/api/seat/bookings");
+        state.bookings = Array.isArray(data.bookings) ? data.bookings : [];
+        state.bookingsLoaded = true;
+      } catch (error) {
+        state.bookingsError = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "读取预约记录失败：" + (error?.message || "请稍后重试。");
+      } finally {
+        state.bookingsLoading = false;
+        render();
+      }
     }
 
     async function openLogin() {

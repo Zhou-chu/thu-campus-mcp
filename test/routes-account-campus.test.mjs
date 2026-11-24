@@ -163,6 +163,7 @@ function campusFixture(overrides = {}) {
       days: async () => ({ days: [] }),
       seats: async () => ({ seats: [] }),
       sections: async () => ({ sections: [] }),
+      bookings: async () => ({ bookings: [] }),
       ...overrides.seat,
     },
     sports: {
@@ -196,6 +197,23 @@ function campusFixture(overrides = {}) {
   };
   return { base, issued, consumed, seatErrors };
 }
+
+test("座位预约记录：返回列表，登录失效与浏览器忙分别映射", async () => {
+  const ok = campusFixture({ seat: { bookings: async () => ({ bookings: [{ id: 1, title: "北馆 A001", status: 2 }] }) } });
+  const okCall = await call(createCampusRoutes(ok.base), { pathname: "/api/seat/bookings" });
+  assert.equal(okCall.status, 200);
+  assert.equal(okCall.body.bookings[0].title, "北馆 A001");
+
+  const expired = campusFixture();
+  expired.base.seat.bookings = async () => { throw new expired.base.SeatError("SEAT_LOGIN_REQUIRED", "登录已过期"); };
+  const expiredCall = await call(createCampusRoutes(expired.base), { pathname: "/api/seat/bookings" });
+  assert.equal(expiredCall.status, 401);
+
+  const busy = campusFixture();
+  busy.base.seat.bookings = async () => { throw new busy.base.SeatError("BROWSER_BUSY", "浏览器忙"); };
+  const busyCall = await call(createCampusRoutes(busy.base), { pathname: "/api/seat/bookings" });
+  assert.equal(busyCall.status, 409);
+});
 
 test("座位与体育：参数校验、二次确认与错误码映射", async () => {
   const { base, issued, consumed } = campusFixture({ body: {} });
