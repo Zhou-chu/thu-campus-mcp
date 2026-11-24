@@ -955,10 +955,15 @@ test("app: refreshing a throttled sports venue preserves selected date and reloa
     "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
     [`GET /api/sports/venues?sport=${encodeURIComponent("游泳")}`]: { ok: true, venues: ["陈明游泳馆"] },
     [slotKey]: { ok: false, error: { code: "SPORTS_THROTTLED", message: "请稍后查询" } },
+    "GET /api/sports/booking/status": { ok: true, active: true, sport: "游泳", venue: "陈明游泳馆", start: "19:30", end: "21:00" },
   } });
   a.nav("sports");
   await until(() => /请稍后查询/.test(a.$(".sports-panel").textContent), "rate limit shown");
   assert.equal(a.all(".sports-slot").length, 0);
+  a.click([...a.all(".sports-booking-status button")].find(button => /读取预约状态/.test(button.textContent)));
+  await until(() => /流程进行中/.test(a.$(".sports-booking-status").textContent), "booking status");
+  assert.match(a.$(".sports-booking-status").textContent, /陈明游泳馆/);
+  assert.ok(a.$(".sports-booking-status a").href.includes("sports.tsinghua.edu.cn"));
   assert.equal(a.$(".sports-panel a")?.textContent, "打开体育官网");
   const pickedDate = a.$('.sports-date[aria-selected="true"]').textContent;
   a.click(".sports-actions button");
@@ -984,6 +989,7 @@ test("app: library seat view lists seats and surfaces the real booking error", a
         available: 1,
       },
       "GET /api/seat/segments?section=96": { ok: true, segments: [{ id: 1, day, start: "08:00", end: "22:00" }] },
+      "GET /api/seat/bookings": { ok: true, bookings: [{ id: 1, title: "北馆 A001", status: 2, start: "2026-11-24 08:00", end: "2026-11-24 22:00" }] },
       "POST /api/seat/reserve/prepare": { ok: true, token: "unit-token" },
       "POST /api/seat/reserve": { ok: false, error: { code: "SEAT_BOOK_FAILED", message: "当前用户在该时段已存在预约。" } },
     },
@@ -1002,6 +1008,9 @@ test("app: library seat view lists seats and surfaces the real booking error", a
   a.click(a.$('.seat[data-open="true"]'));
   assert.match(a.$(".seat-confirm-line").textContent, /A001/);
   assert.match(a.$(".seat-confirm-line").textContent, /08:00-22:00/);
+  a.click([...a.all(".seat-bookings button")].find(button => /读取预约记录/.test(button.textContent)));
+  await until(() => /已预约/.test(a.$(".seat-bookings").textContent), "booking history");
+  assert.match(a.$(".seat-bookings").textContent, /北馆 A001/);
   a.click(a.$(".seat-confirm-button"));
   await until(() => !!a.$(".seat-notice"), "booking notice");
   assert.match(a.$(".seat-notice").textContent, /当前用户在该时段已存在预约/);

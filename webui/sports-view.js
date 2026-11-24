@@ -12,7 +12,7 @@ const statusText = session => {
 };
 
 export function createSportsView({ el, api }) {
-  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false };
+  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false, booking: null, bookingLoading: false };
 
   return function sportsPage() {
     const wrap = el("div", { class: "stack sports-page" });
@@ -118,7 +118,37 @@ export function createSportsView({ el, api }) {
         el("h3", { class: "sports-label", text: "场次" }),
     ...(state.notice ? [el("p", { class: "sports-notice", role: "status", text: state.notice })] : []),
         sessionList(),
+        bookingStatusCard(),
       );
+    }
+
+    function bookingStatusCard() {
+      const active = state.booking?.active === true;
+      return el("div", { class: "sports-booking-status stack" }, [
+        el("div", { class: "sports-result-bar" }, [
+          el("h3", { class: "sports-label", text: "我的预约" }),
+          el("button", { class: "ghost", type: "button", text: state.bookingLoading ? "读取中…" : "读取预约状态", disabled: state.bookingLoading,
+            onclick: () => { void loadBookingStatus(); } }),
+        ]),
+        active
+          ? el("p", { class: "sports-notice", role: "status", text: [state.booking.sport, state.booking.venue, state.booking.start, state.booking.end, "流程进行中"].filter(Boolean).join(" · ") })
+          : el("p", { class: "sports-empty", text: state.booking ? "当前没有进行中的预约流程。历史预约请到体育官网「我的预约」查看。" : "读取后显示当前预约流程状态。" }),
+        el("a", { class: "ghost", href: "https://www.sports.tsinghua.edu.cn/venue/mobile/index.html", target: "_blank", rel: "noopener noreferrer", text: "打开体育官网查看预约历史" }),
+      ]);
+    }
+
+    async function loadBookingStatus() {
+      state.bookingLoading = true;
+      render();
+      try {
+        state.booking = await api("/api/sports/booking/status");
+      } catch (error) {
+        state.booking = { active: false, error: error?.message || "读取失败" };
+        state.notice = "读取预约状态失败：" + (error?.message || "请稍后重试。");
+      } finally {
+        state.bookingLoading = false;
+        render();
+      }
     }
 
     async function loadSports() {
