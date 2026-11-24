@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -99,13 +99,28 @@ test("debug log: 缺省目录、写入失败与空目录都不影响业务", asy
 test("debug log: 工具调用成功与失败都记录，失败仍抛回", async () => {
   const records = [];
   const log = { log: record => records.push(record) };
-  const host = { name: "fixture", async call(tool) { if (tool === "bad") throw Object.assign(new Error("boom"), { code: "E_TOOL" }); return { ok: true }; } };
+  const host = { name: "fixture", async call(tool) { if (tool === "bad") throw Object.assign(new Error("boom"), { code: "E_TOOL" }); if (tool === "empty") return { ok: false }; return { ok: true }; } };
   const wrapped = withDebugLog(host, log);
   assert.equal(wrapped.name, "fixture");
-  assert.deepEqual(await wrapped.call("read", {}), { ok: true });
+  assert.deepEqual(await wrapped.call("read", {}, { sessionId: "s1" }), { ok: true });
+  assert.deepEqual(await wrapped.call("empty", {}, {}), { ok: false });
   await assert.rejects(() => wrapped.call("bad", {}), /boom/);
   assert.equal(records[0].event, "call");
   assert.equal(records[0].data.name, "read");
-  assert.equal(records[1].event, "call-error");
-  assert.equal(records[1].error.code, "E_TOOL");
+  const failed = records.find(record => record.event === "call-error");
+  assert.equal(failed.data.name, "bad");
+  assert.equal(failed.error.code, "E_TOOL");
+});
+
+test("debug log: 忽略非日志文件", async t => {
+  const dir = await temp(t);
+  const log = createDebugLog({ stateDir: dir, env: {} });
+  await log.setEnabled(true);
+  log.log({ event: "x" });
+  log.log({ event: "plain", error: { code: "PLAIN" }, data: [1, 2] });
+  await log.flush();
+  await mkdir(path.join(dir, "logs"), { recursive: true });
+  await writeFile(path.join(dir, "logs", "notes.txt"), "x", "utf8");
+  const files = (await log.status()).files.map(file => file.name);
+  assert.deepEqual(files, ["debug.jsonl"]);
 });

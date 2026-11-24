@@ -363,6 +363,21 @@ test("app: history restores reasoning, safe Markdown and failed/raw tool results
   assert.equal(a.$(".chat").dataset.empty, "true");
 });
 
+test("app: 设置里的工具记录对缺失名称与状态使用可读兜底", async t => {
+  const sessions = [{ id: sessionId, title: "空工具", updatedAt: checkedAt, messageCount: 2 }];
+  const a = await app(t, { routes: {
+    "GET /api/sessions": { ok: true, sessions },
+    [`GET /api/sessions/${sessionId}`]: { ok: true, session: { id: sessionId, messages: [
+      { role: "assistant", toolCalls: [{}] },
+    ] } },
+  } });
+  a.click(".recent-session");
+  await until(() => a.all("#messages .tool-card").length === 1, "empty tool card");
+  a.nav("settings");
+  assert.match(a.$(".tool-log").textContent, /工具/);
+  assert.match(a.$(".tool-log").textContent, /完成/);
+});
+
 test("app: sessions search, rename/save/cancel/delete and persistent refresh errors", async t => {
   let sessions = [{ id: sessionId, title: "原会话", updatedAt: checkedAt, messageCount: 2 }];
   const a = await app(t, { routes: { "GET /api/sessions": () => ({ ok: true, sessions }), [`PATCH /api/sessions/${sessionId}`]: request => { sessions = [{ ...sessions[0], title: request.body.title }]; return { ok: true }; }, [`DELETE /api/sessions/${sessionId}`]: () => { sessions = []; return { ok: true }; } } });
@@ -896,6 +911,26 @@ test("app: sports view lists sports, venues and dates from the real routes", asy
   await until(() => a.all(".sports-site").length >= 2, "sessions");
   assert.match(a.$(".sports-panel").textContent, /1\/2 可约/, "按可约数量统计");
   assert.equal(a.$('.sports-site[data-open="true"]').textContent, "羽02", "满场标为不可约");
+});
+
+test("app: 快速切换运动时旧场馆响应不会覆盖新选择", async t => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  const a = await app(t, { routes: {
+    "GET /api/sports/sports": { ok: true, sports: ["羽毛球", "游泳"] },
+    "GET /api/sports/venues?sport=%E7%BE%BD%E6%AF%9B%E7%90%83": async () => { await gate; return { ok: true, sport: "羽毛球", venues: ["旧场馆"] }; },
+    "GET /api/sports/venues?sport=%E6%B8%B8%E6%B3%B3": { ok: true, sport: "游泳", venues: ["新场馆"] },
+    [`GET /api/sports/slots?sport=%E6%B8%B8%E6%B3%B3&venue=%E6%96%B0%E5%9C%BA%E9%A6%86&date=${day}`]: { ok: true, sessions: [] },
+  } });
+  a.nav("sports");
+  await until(() => a.all(".sports-chips button").length >= 2, "sports chips");
+  const swim = a.all(".sports-chips button").find(button => button.textContent === "游泳");
+  a.click(swim);
+  await until(() => /新场馆/.test(a.$(".sports-panel").textContent), "new venue");
+  release();
+  await flush();
+  assert.equal(/旧场馆/.test(a.$(".sports-panel").textContent), false, "迟到的旧响应不得覆盖新运动");
 });
 
 test("app: sports view asks for login instead of pretending there is no data", async t => {
