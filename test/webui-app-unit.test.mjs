@@ -916,7 +916,7 @@ test("app: sports view lists sports, venues and dates from the real routes", asy
 test("app: 快速切换运动时旧场馆响应不会覆盖新选择", async t => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  const day = new Date().toLocaleDateString("sv-SE");
   const a = await app(t, { routes: {
     "GET /api/sports/sports": { ok: true, sports: ["羽毛球", "游泳"] },
     "GET /api/sports/venues?sport=%E7%BE%BD%E6%AF%9B%E7%90%83": async () => { await gate; return { ok: true, sport: "羽毛球", venues: ["旧场馆"] }; },
