@@ -8,6 +8,8 @@ import { SessionStore } from "../lib/app/sessions.mjs";
 import { DeviceStore } from "../lib/app/devices.mjs";
 import { PairingCodes } from "../lib/app/pairing.mjs";
 import { TimetableService, buildTimetable, parseSchedule } from "../lib/app/timetable.mjs";
+import { bigPeriodTime, sectionsInfo } from "../lib/app/school-time.mjs";
+import { normalizeCustomCourse } from "../lib/app/timetable-local.mjs";
 import { assignLanes, periodText, todayIndex, weekText, weeklyLayout } from "../webui/timetable-model.js";
 
 test("timetable: parses single, paired and week-limited slots with locations", () => {
@@ -29,6 +31,16 @@ test("timetable: parses single, paired and week-limited slots with locations", (
   assert.equal(parseSchedule("星期一第6节(全周)")[0].from, 6, "第6大节保留");
 });
 
+test("school time: 大节时间与可变小节数", () => {
+  assert.equal(bigPeriodTime(1, 2), "08:00–09:35");
+  assert.equal(bigPeriodTime(3, 5), "09:50–12:15", "第二大节有 3 个小节");
+  assert.equal(bigPeriodTime(12, 14), "19:20–21:45");
+  assert.equal(bigPeriodTime(2, 1), "");
+  assert.deepEqual(sectionsInfo([3, 4]), { sections: [3, 4], label: "第3-4小节", time: "09:50–11:25", from: 3, to: 5 });
+  assert.equal(sectionsInfo([15]), null);
+  assert.equal(sectionsInfo([]), null);
+});
+
 test("timetable: builds a grid-ready table and counts courses without time", () => {
   const table = buildTimetable([
     { id: "b", name: "乙课", teacher: "乙老师", timeAndLocation: "星期一第2节(全周)，一教101" },
@@ -38,9 +50,19 @@ test("timetable: builds a grid-ready table and counts courses without time", () 
   ], { semester: { id: "2026-2027-1" } });
   assert.deepEqual(table.courses.map(course => course.name), ["甲课", "乙课"], "按名称稳定排序");
   assert.equal(table.courses.find(course => course.id === "a").slots.length, 2);
+  assert.equal(table.courses.find(course => course.id === "b").slots[0].time, "08:00–09:35", "官方课程也带大节时间");
   assert.equal(table.unscheduled, 2, "没有时间或没有名称的课程单独计数");
   assert.equal(table.semester.id, "2026-2027-1");
   assert.deepEqual(buildTimetable(null).courses, []);
+});
+
+test("timetable: 自定义课程可用小节精确定位", () => {
+  const result = normalizeCustomCourse({ name: "实验课", day: 3, sections: [3, 4, 5] });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.course.sections, [3, 4, 5]);
+  assert.equal(result.course.sectionLabel, "第3-5小节");
+  assert.deepEqual(result.course.slots[0], { day: 3, from: 3, to: 5, sections: [3, 4, 5], sectionLabel: "第3-5小节", time: "09:50–12:15" });
+  assert.equal(normalizeCustomCourse({ name: "坏小节", day: 1, sections: [0] }).error.code, "INVALID_SECTIONS");
 });
 
 test("timetable model: overlapping courses get separate lanes and readable labels", () => {

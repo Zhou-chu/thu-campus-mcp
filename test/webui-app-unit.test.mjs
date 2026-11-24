@@ -1291,20 +1291,27 @@ test("app: seat refresh keeps the current selection and reloads the current area
 test("app: timetable add form posts and returns to grid", async t => {
   const checkedAt = new Date().toISOString();
   const base = { ok: true, state: "ready", fetchedAt: checkedAt, semester: { name: "秋季学期" }, unscheduled: 0 };
-  const course = { id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 2, from: 1, to: 2, location: "一教101" }] };
+  const course = { id: "c1", name: "甲课", teacher: "甲老师", slots: [{ day: 2, from: 1, to: 2, location: "一教101", time: "08:00–09:35" }] };
   const a = await app(t, { routes: { "GET /api/timetable": { ...base, courses: [course] }, "GET /api/timetable?refresh=1": { ...base, courses: [course] } } });
   a.routes.set("POST /api/timetable/custom", { ...base, courses: [course] });
   a.nav("timetable");
   await until(() => a.all(".course-block").length === 1, "grid");
+  assert.match(a.$(".course-block").textContent, /08:00–09:35/, "课程块显示节次时间");
   const addButton = a.all(".timetable-actions button").find(button => /添加课程/.test(button.textContent));
   a.click(addButton);
   await until(() => /添加课程/.test(a.$(".timetable-detail")?.textContent || ""), "add form");
   a.input(".timetable-detail input", "自习");
+  const selects = a.all(".timetable-detail select");
+  const [sectionFrom, sectionTo] = selects.slice(-2);
+  sectionFrom.value = "3"; a.event(sectionFrom, "change");
+  sectionTo.value = "4"; a.event(sectionTo, "change");
   a.click(a.all(".timetable-detail button").find(button => /保存到课表/.test(button.textContent)));
   await until(() => a.calls.some(item => /timetable\/custom/.test(item.path || item.url || "") && item.body), "custom post");
   const call = a.calls.find(item => /timetable\/custom/.test(item.path || item.url || "") && item.body);
   assert.equal(call.body.name, "自习");
   assert.equal(call.body.day >= 1 && call.body.day <= 7, true);
+  assert.deepEqual(call.body.sections, [3, 4], "选择精确小节时提交小节数组");
+  assert.equal(call.body.from, undefined);
 });
 
 test("app: timetable add failure stays on the form and shows the reason", async t => {
