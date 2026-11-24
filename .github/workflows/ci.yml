@@ -58,6 +58,9 @@ jobs:
       - name: WebUI 端到端（真实 Chromium）
         if: matrix.node == 22
         run: npm run e2e:web
+      - name: 邮箱模式服务页端到端（真实 Chromium）
+        if: matrix.node == 22
+        run: npm run e2e:auth-services
       - run: npm run verify:clients
       - run: npm run smoke
       - run: npm run bundle
