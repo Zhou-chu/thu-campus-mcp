@@ -151,7 +151,8 @@ jobs:
 
   release:
     name: Manual release gate
-    if: github.event_name == 'workflow_dispatch'
+    needs: [verify, sonar]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 45
     steps:

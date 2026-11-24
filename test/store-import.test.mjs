@@ -37,7 +37,7 @@ test("导入本机 JSON：设置、会话与消息、定时任务", async t => {
   ] }));
 
   const report = await importLocalState({ userId: user.id, stateDir: dir, repos });
-  assert.deepEqual({ ...report, warnings: undefined }, { settings: 3, sessions: 1, messages: 2, schedules: 2, skippedSessions: 0, warnings: undefined });
+  assert.deepEqual({ ...report, warnings: undefined }, { settings: 3, sessions: 1, messages: 2, schedules: 2, skippedSessions: 0, repairedSessions: 0, warnings: undefined });
   assert.equal(await repos.settings.get(user.id, "theme"), undefined);
   assert.equal(await repos.settings.get(user.id, "modelName"), "qwen");
   const session = await repos.chat.getSession(user.id, "s-1");
@@ -68,6 +68,36 @@ test("重复导入不产生副本，缺目录也能完成并提示凭据未导�
   assert.equal((await repos.chat.listMessages("s-2")).length, 1);
   await assert.rejects(() => importLocalState({ stateDir: dir, repos }), (error) => error.code === "IMPORT_NO_USER");
   await assert.rejects(() => importLocalState({ userId: user.id, repos }), (error) => error.code === "IMPORT_NO_STATE_DIR");
+});
+
+test("导入中途失败后重跑补齐剩余消息，不重复也不丢", async t => {
+  const { dir, user, repos } = await boot(t);
+  await mkdir(path.join(dir, "sessions"));
+  await writeFile(path.join(dir, "sessions", "s-half.json"), JSON.stringify({
+    id: "s-half", title: "半完成", createdAt: "2026-11-01T00:00:00.000Z",
+    messages: [{ role: "user", content: "一" }, { role: "assistant", content: "二" }],
+  }));
+  const original = repos.chat.appendMessage;
+  let calls = 0;
+  repos.chat.appendMessage = async input => {
+    calls += 1;
+    if (calls === 2) throw Object.assign(new Error("注入失败"), { code: "INJECTED" });
+    return original(input);
+  };
+  await assert.rejects(() => importLocalState({ userId: user.id, stateDir: dir, repos }), (error) => error.code === "INJECTED");
+  assert.equal((await repos.chat.listMessages("s-half")).length, 1, "失败时留下可修复的半完成会话");
+
+  repos.chat.appendMessage = original;
+  const retry = await importLocalState({ userId: user.id, stateDir: dir, repos });
+  assert.equal(retry.repairedSessions, 1);
+  assert.equal(retry.messages, 1);
+  assert.equal(retry.skippedSessions, 0);
+  assert.equal((await repos.chat.listMessages("s-half")).length, 2, "重跑补齐第二条消息");
+
+  const third = await importLocalState({ userId: user.id, stateDir: dir, repos });
+  assert.equal(third.skippedSessions, 1);
+  assert.equal(third.messages, 0);
+  assert.equal((await repos.chat.listMessages("s-half")).length, 2, "再次重跑不重复");
 });
 
 test("坏 JSON 明确报错而不是静默跳过", async t => {

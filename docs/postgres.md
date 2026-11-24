@@ -36,7 +36,14 @@ node bin/thu-campus.mjs app serve
 & '...\pg_restore.exe' -h 127.0.0.1 -p 5434 -U postgres --clean --if-exists -d postgres .local\backup\campus-20261124-0200.dump
 ```
 
-恢复后启动应用，检查 `/api/auth/config`、登录与 `/api/sessions`。旧版本数据可用 `node scripts/import-local.mjs --state-dir <旧状态目录> --email <账号邮箱>` 导入到指定账号；导入是幂等 upsert，原文件不删除。
+恢复后启动应用，检查 `/api/auth/config`、登录与 `/api/sessions`。旧版本数据用随仓库发布的导入入口：
+
+```powershell
+node scripts/import-local.mjs --help
+node scripts/import-local.mjs --state-dir <旧状态目录> --email <账号邮箱>
+```
+
+需要 `DATABASE_URL` 或 `--database-url`；账号必须已经注册。只导入 `settings.json`、`sessions/*.json`、`schedules.json`，源目录不改动；重复执行幂等，导入中断后重跑会补齐缺失消息而不是整条跳过。DPAPI 凭据需单独在本机解密后重新配置。
 
 ## 迁移与回滚
 
