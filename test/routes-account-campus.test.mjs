@@ -29,7 +29,7 @@ async function call(handler, { method = "GET", pathname, body, req } = {}) {
   const url = new URL(pathname, "http://127.0.0.1");
   const incoming = req || request({ method });
   if (body !== undefined) incoming.body = body;
-  const handled = await handler(incoming, res, { pathname, method, url });
+  const handled = await handler(incoming, res, { pathname: url.pathname, method, url });
   return { handled, status: state.status, body: state.body };
 }
 
@@ -208,6 +208,26 @@ test("体育预约历史：返回列表，未登录映射 401", async () => {
   const expired = campusFixture({ sports: { reservations: async () => { throw new expired.base.SportsError("SPORTS_LOGIN_REQUIRED", "需要登录"); } } });
   const expiredCall = await call(createCampusRoutes(expired.base), { pathname: "/api/sports/reservations" });
   assert.equal(expiredCall.status, 401);
+});
+
+test("座位多时段与取消：segment 透传，取消需要一次性确认", async () => {
+  const seen = [];
+  const fixture = campusFixture({ seat: { seats: async (...args) => { seen.push(args); return { seats: [], segments: [{ id: 12, start: "13:00", end: "18:00" }] }; }, cancel: async id => ({ id, cancelled: true }) } });
+  const handler = createCampusRoutes(fixture.base);
+  const query = await call(handler, { pathname: "/api/seat/seats?section=96&date=2026-12-01&segment=12" });
+  assert.equal(query.status, 200);
+  assert.deepEqual(seen[0], ["96", "2026-12-01", "12"]);
+
+  const missing = await call(handler, { method: "POST", pathname: "/api/seat/bookings/cancel/prepare", body: {} });
+  assert.equal(missing.status, 400);
+  const prepared = await call(handler, { method: "POST", pathname: "/api/seat/bookings/cancel/prepare", body: { id: 7 } });
+  assert.equal(prepared.status, 200);
+  const denied = await call(handler, { method: "POST", pathname: "/api/seat/bookings/cancel", body: { id: 7 } });
+  assert.equal(denied.status, 428);
+  fixture.base.confirmations.consume = () => true;
+  const cancel = await call(createCampusRoutes(fixture.base), { method: "POST", pathname: "/api/seat/bookings/cancel", body: { id: 7 } });
+  assert.equal(cancel.status, 200);
+  assert.equal(cancel.body.cancelled, true);
 });
 
 test("座位预约记录：返回列表，登录失效与浏览器忙分别映射", async () => {

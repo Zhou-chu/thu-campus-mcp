@@ -35,7 +35,7 @@ export function createSeatView({ el, api }) {
   const state = {
     libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
-    date: today(), days: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1,
+    date: today(), days: [], segment: null, segments: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1,
     bookings: [], bookingsLoading: false, bookingsLoaded: false, bookingsError: "",
   };
 
@@ -189,10 +189,18 @@ export function createSeatView({ el, api }) {
           dataset: { active: String(value === state.date) },
           "aria-pressed": String(value === state.date),
           text: value.slice(5),
-          onclick: () => { state.date = value; state.seat = null; state.notice = ""; void loadSeats(); },
+          onclick: () => { state.date = value; state.seat = null; state.segment = null; state.segments = []; state.notice = ""; void loadSeats(); },
         }));
       }
       children.push(candidates.length ? strip : el("p", { class: "seat-empty", text: state.area ? "未取得可预约日期。" : "先选择分区。" }));
+      if (state.segments.length > 1) {
+        children.push(el("h3", { class: "seat-label", text: "时段" }));
+        children.push(chips(state.segments.map(item => ({ id: item.id, name: item.start + "–" + item.end })), state.segment ? { id: state.segment } : null, "时段", item => {
+          state.segment = item.id;
+          state.seat = null;
+          void loadSeats(item.id);
+        }));
+      }
       children.push(el("h3", { class: "seat-label", text: "座位" }));
       children.push(seatGrid());
       if (state.notice) children.push(el("p", { class: "seat-notice", text: state.notice }));
@@ -311,13 +319,17 @@ export function createSeatView({ el, api }) {
       if (ok && state.days.length) await loadSeats();
     }
 
-    async function loadSeats() {
+    async function loadSeats(segmentId = state.segment) {
       if (!state.area || !state.days.includes(state.date)) return;
       const { id } = state.area;
       const date = state.date;
-      await readScoped("/api/seat/seats?" + new URLSearchParams({ section: id, date }), data => {
+      const params = { section: id, date };
+      if (segmentId) params.segment = String(segmentId);
+      await readScoped("/api/seat/seats?" + new URLSearchParams(params), data => {
         if (data.sectionId !== id || data.date !== date) throw new Error("Seat scope mismatch");
         state.seats = Array.isArray(data.seats) ? data.seats : [];
+        state.segments = Array.isArray(data.segments) ? data.segments : [];
+        state.segment = data.segment?.id ?? segmentId ?? null;
         state.queryWindow = data.queryWindow ?? null;
       }, "暂时读不到座位。");
     }
