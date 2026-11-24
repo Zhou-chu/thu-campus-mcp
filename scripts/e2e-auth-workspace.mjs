@@ -98,6 +98,7 @@ async function main() {
     });
     const errors = []; page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (/\/api\/jobs\//.test(request.url())) jobRequests++; if (request.method() !== "GET" && /\/api\/(?:workspace\/storage|tools\/(?:cloud_workspace|workspace_initialize|workspace_sync))/.test(request.url())) directWrites++; });
+    await page.addInitScript(() => { try { localStorage.setItem("thu-campus.toolDetails", "on"); } catch { /* 存储不可用时保持默认隐藏 */ } });
     await page.goto(base + "/#token=" + TOKEN); await page.waitForSelector("#composer");
     check("顶部服务运行状态不代表四服务登录", await page.locator("#account").innerText() === "服务运行中");
     await page.click('button[data-view="services"]');

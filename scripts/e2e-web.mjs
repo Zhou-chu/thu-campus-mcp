@@ -404,7 +404,12 @@ async function main() {
     await page.click('button[data-view="sessions"]');
     await page.fill('input[type="search"]', "历史会话回归");
     await page.locator(".session-row .item").filter({ hasText: "历史会话回归" }).first().click();
-    await page.waitForSelector("#messages .tool-card");
+    await page.waitForSelector("#messages .tool-card", { state: "attached" });
+    record("工具调用默认不占用对话主界面", await page.locator("#messages .tool-card").first().isHidden());
+    await page.click('button[data-view="settings"]');
+    await page.waitForSelector(".tool-log .tool-card", { state: "attached" });
+    record("设置中可查看工具调用记录", (await page.locator(".tool-log").innerText()).length > 0);
+    await page.click('button[data-view="chat"]');
     for (const width of [1920, 2560, 1536, 1280, 390]) {
       await page.setViewportSize({ width, height: width < 900 ? 844 : 1080 });
       await page.click('button[data-view="chat"]');

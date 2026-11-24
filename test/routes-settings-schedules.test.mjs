@@ -12,7 +12,7 @@ function response() {
   const res = {
     writableEnded: false,
     writeHead(status) { state.status = status; },
-    end(payload) { state.body = payload ? JSON.parse(payload) : undefined; res.writableEnded = true; },
+    end(payload) { try { state.body = payload ? JSON.parse(payload) : undefined; } catch { state.body = String(payload); } res.writableEnded = true; },
   };
   return { res, state };
 }
@@ -153,4 +153,34 @@ test("定时任务路由：没有执行器时 runner 为 null", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+test("调试日志路由：读取、切换、导出与清空；未注入时明确不可用", async () => {
+  let enabled = false;
+  const debugLog = {
+    status: async () => ({ enabled, dir: "logs", files: [], totalBytes: enabled ? 12 : 0 }),
+    setEnabled: async value => { enabled = value; return enabled; },
+    readRecent: async () => '{"event":"x"}\n',
+    clear: async () => { enabled = false; },
+  };
+  const bodies = [];
+  const handler = createSettingsRoutes({
+    config: { stateDir: ".", modelRoute: "madmodel" }, overrides: {}, setEffort: () => {}, efforts: new Set(),
+    settingsFile: path.join(await mkdtemp(path.join(tmpdir(), "settings-debug-")), "settings.json"),
+    debugLog, readBody: async () => bodies.shift() || {},
+  });
+  assert.equal((await call(handler, { pathname: "/api/debug-log" })).body.enabled, false);
+  assert.equal((await call(handler, { method: "PUT", pathname: "/api/debug-log", req: request({}) })).body.enabled, false);
+  bodies.push({ enabled: true });
+  const enabledCall = await call(handler, { method: "PUT", pathname: "/api/debug-log", req: request({}) });
+  assert.equal(enabledCall.body.enabled, true);
+  const download = await call(handler, { pathname: "/api/debug-log/download" });
+  assert.equal(download.body.event, "x");
+  bodies.push({});
+  assert.equal((await call(handler, { method: "POST", pathname: "/api/debug-log/clear", req: request({}) })).body.enabled, false);
+
+  const unavailable = createSettingsRoutes({ config: { stateDir: "." }, overrides: {}, setEffort: () => {}, efforts: new Set(), settingsFile: "x", readBody: async () => ({}) });
+  assert.equal((await call(unavailable, { pathname: "/api/debug-log" })).body.enabled, false);
+  assert.equal((await call(unavailable, { method: "PUT", pathname: "/api/debug-log", req: request({}) })).status, 503);
+  assert.equal((await call(unavailable, { pathname: "/api/debug-log/download" })).status, 503);
+  assert.equal((await call(unavailable, { method: "POST", pathname: "/api/debug-log/clear", req: request({}) })).status, 503);
 });

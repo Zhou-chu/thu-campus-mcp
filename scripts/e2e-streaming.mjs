@@ -73,7 +73,8 @@ async function main() {
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     const start = async name => {
-      await page.goto(base + "/?case=" + encodeURIComponent(name) + "#token=" + TOKEN);
+      await page.addInitScript(() => { try { localStorage.setItem("thu-campus.toolDetails", "on"); } catch { /* 存储不可用时保持默认隐藏 */ } });
+    await page.goto(base + "/?case=" + encodeURIComponent(name) + "#token=" + TOKEN);
       try {
         await page.waitForFunction(() => document.querySelector("#chat-send") && !document.querySelector("#chat-send").disabled, null, { timeout: 8000 });
       } catch (error) {
