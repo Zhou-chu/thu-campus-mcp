@@ -172,6 +172,7 @@ function campusFixture(overrides = {}) {
       scenes: async () => ({ scenes: [] }),
       available: async () => ({ slots: [] }),
       slots: async () => ({ slots: [] }),
+      reservations: async () => ({ reservations: [] }),
       ...overrides.sports,
     },
     confirmations: {
@@ -197,6 +198,17 @@ function campusFixture(overrides = {}) {
   };
   return { base, issued, consumed, seatErrors };
 }
+
+test("体育预约历史：返回列表，未登录映射 401", async () => {
+  const ok = campusFixture({ sports: { reservations: async () => ({ reservations: [{ id: "r1", site: "游泳馆" }] }) } });
+  const okCall = await call(createCampusRoutes(ok.base), { pathname: "/api/sports/reservations" });
+  assert.equal(okCall.status, 200);
+  assert.equal(okCall.body.reservations[0].site, "游泳馆");
+
+  const expired = campusFixture({ sports: { reservations: async () => { throw new expired.base.SportsError("SPORTS_LOGIN_REQUIRED", "需要登录"); } } });
+  const expiredCall = await call(createCampusRoutes(expired.base), { pathname: "/api/sports/reservations" });
+  assert.equal(expiredCall.status, 401);
+});
 
 test("座位预约记录：返回列表，登录失效与浏览器忙分别映射", async () => {
   const ok = campusFixture({ seat: { bookings: async () => ({ bookings: [{ id: 1, title: "北馆 A001", status: 2 }] }) } });

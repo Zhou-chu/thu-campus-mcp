@@ -956,6 +956,7 @@ test("app: refreshing a throttled sports venue preserves selected date and reloa
     [`GET /api/sports/venues?sport=${encodeURIComponent("游泳")}`]: { ok: true, venues: ["陈明游泳馆"] },
     [slotKey]: { ok: false, error: { code: "SPORTS_THROTTLED", message: "请稍后查询" } },
     "GET /api/sports/booking/status": { ok: true, active: true, sport: "游泳", venue: "陈明游泳馆", start: "19:30", end: "21:00" },
+    "GET /api/sports/reservations": { ok: true, reservations: [{ id: "r1", site: "游泳馆 3 号道", start: "2026-11-20 19:30:00", end: "2026-11-20 21:00:00", status: "RESV_APPROVE_PASS" }] },
   } });
   a.nav("sports");
   await until(() => /请稍后查询/.test(a.$(".sports-panel").textContent), "rate limit shown");
@@ -964,6 +965,9 @@ test("app: refreshing a throttled sports venue preserves selected date and reloa
   await until(() => /流程进行中/.test(a.$(".sports-booking-status").textContent), "booking status");
   assert.match(a.$(".sports-booking-status").textContent, /陈明游泳馆/);
   assert.ok(a.$(".sports-booking-status a").href.includes("sports.tsinghua.edu.cn"));
+  a.click([...a.all(".sports-booking-status button")].find(button => /读取预约历史/.test(button.textContent)));
+  await until(() => /游泳馆 3 号道/.test(a.$(".sports-booking-status").textContent || ""), "sports reservations");
+  assert.match(a.$(".sports-booking-status").textContent, /RESV_APPROVE_PASS/);
   assert.equal(a.$(".sports-panel a")?.textContent, "打开体育官网");
   const pickedDate = a.$('.sports-date[aria-selected="true"]').textContent;
   a.click(".sports-actions button");
