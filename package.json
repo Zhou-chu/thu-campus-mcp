@@ -45,7 +45,8 @@
     "mobile:core": "node scripts/build-mobile-core.mjs",
     "mobile:core:check": "node scripts/build-mobile-core.mjs --check",
     "audit:ignores": "node scripts/audit-ignores.mjs",
-    "probe:live": "node scripts/live-read-probe.mjs"
+    "probe:live": "node scripts/live-read-probe.mjs",
+    "e2e:auth-services": "node scripts/e2e-auth-services.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
