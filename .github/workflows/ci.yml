@@ -64,6 +64,12 @@ jobs:
       - name: 座位取消端到端（真实 Chromium，校园替身）
         if: matrix.node == 22
         run: npm run e2e:seat-cancel
+      - name: 课表用户旅程（真实 Chromium，网络学堂替身）
+        if: matrix.node == 22
+        run: npm run e2e:course
+      - name: 邮箱首轮对话旅程（真实 Chromium，模型替身）
+        if: matrix.node == 22
+        run: npm run e2e:email-chat
       - run: npm run verify:clients
       - run: npm run smoke
       - run: npm run bundle

@@ -21,7 +21,7 @@ export const PACKAGE_ROOTS = SDKS.map(name => `packages/${name}/src`);
 /** 夹具与历史报告可以显式要求全量作用域；生产收集默认只用应用源码。 */
 export const ALL_ROOTS = [...SOURCE_ROOTS, ...PACKAGE_ROOTS];
 export const TOOLING_ROOTS = ["scripts"];
-export const E2E_SCRIPTS = ["e2e-web.mjs", "e2e-streaming.mjs", "e2e-workspace.mjs", "e2e-auth-workspace.mjs"];
+export const E2E_SCRIPTS = ["e2e-web.mjs", "e2e-streaming.mjs", "e2e-workspace.mjs", "e2e-auth-workspace.mjs", "e2e-auth-services.mjs", "e2e-seat-cancel.mjs", "e2e-course-journey.mjs", "e2e-email-chat.mjs"];
 const EXCLUDED_PARTS = new Set(["node_modules", "vendor", "runtime", ".runtime", "dist", "coverage", "test", "tests", "__tests__"]);
 const EXTENSIONS = [".js", ".mjs", ".cjs", ".ts"];
 export const hashSource = text => createHash("sha256").update(text).digest("hex");

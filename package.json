@@ -47,7 +47,9 @@
     "audit:ignores": "node scripts/audit-ignores.mjs",
     "probe:live": "node scripts/live-read-probe.mjs",
     "e2e:auth-services": "node scripts/e2e-auth-services.mjs",
-    "e2e:seat-cancel": "node scripts/e2e-seat-cancel.mjs"
+    "e2e:seat-cancel": "node scripts/e2e-seat-cancel.mjs",
+    "e2e:course": "node scripts/e2e-course-journey.mjs",
+    "e2e:email-chat": "node scripts/e2e-email-chat.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
