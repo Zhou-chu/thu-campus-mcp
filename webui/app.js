@@ -1492,8 +1492,9 @@ async function loginService(name, manual, connection) {
     if (name === "cloud") { state.workspaceStorageError = "云盘登录任务已结束，请重新核验工作区。"; updateStoragePanels(); }
   } catch (error) {
     if (error.code === "LOGIN_TARGET_CHANGED" || state.base !== connection.base || state.token !== connection.token) return;
+    const manualCodes = new Set(["CAS_CAPTCHA_REQUIRED", "SEAT_LOGIN_UNCONFIRMED", "SPORTS_MANUAL_VERIFICATION"]);
     state.authNotices[name] = { error: true, text: "登录未完成：" + error.message,
-      manual: !!DIRECT_LOGIN[name] && error.code !== "ACCOUNT_NOT_CONFIGURED" };
+      manual: !!DIRECT_LOGIN[name] && manualCodes.has(error.code) };
   }
 }
 async function openLogin(name, manual = false) {
