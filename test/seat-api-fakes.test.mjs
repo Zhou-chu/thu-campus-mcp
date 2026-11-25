@@ -266,6 +266,7 @@ test("取消预约：成功、登录过期后重试与参数校验", async () =>
   const result = await ok.cancel(66);
   assert.equal(result.id, 66);
   assert.equal(result.ok, true);
+  assert.equal(result.cancelled, true);
 
   let calls = 0;
   const retryPage = fakePage(seatState({ cancelResponse: () => { calls += 1; return calls === 1 ? { status: 0, msg: "登录已超时" } : { status: 1, msg: "已取消" }; } }));
@@ -276,4 +277,31 @@ test("取消预约：成功、登录过期后重试与参数校验", async () =>
   const invalid = apiWith({ browser: fakeBrowser(fakePage(seatState({}))), probe: async () => ({ verified: true }) }).api;
   await assert.rejects(() => invalid.cancel(0), (error) => error.code === "ARGUMENT_REQUIRED");
   await assert.rejects(() => invalid.cancel("abc"), (error) => error.code === "ARGUMENT_REQUIRED");
+});
+
+test("取消预约：明确拒绝报错且不再读取记录", async () => {
+  let reads = 0;
+  const { api } = apiWith({
+    browser: fakeBrowser(fakePage(seatState({ cancelResponse: () => ({ status: 0, msg: "无效的预约" }) }))),
+    probe: async () => ({ verified: true }),
+    read: () => { reads += 1; return { data: { list: [] } }; },
+  });
+  await assert.rejects(() => api.cancel(66), (error) => error.code === "SEAT_CANCEL_FAILED" && error.message === "无效的预约");
+  assert.equal(reads, 0, "明确拒绝不需要核对记录");
+});
+
+test("取消预约：回执丢失后核对记录，不重发取消", async () => {
+  const cancelled = [];
+  const lost = (read) => apiWith({
+    browser: fakeBrowser(fakePage(seatState({ cancelResponse: () => { cancelled.push(1); throw new Error("socket hang up"); } }))),
+    probe: async () => ({ verified: true }),
+    read,
+  }).api;
+
+  const verified = await lost(() => ({ data: { list: [] } })).cancel(66);
+  assert.deepEqual(verified, { id: 66, ok: true, cancelled: true, verified: true, message: "" });
+  assert.equal(cancelled.length, 1, "结果不明时不再发一次取消");
+
+  await assert.rejects(() => lost(() => ({ data: { list: [{ id: 66, title: "北馆 A001" }] } })).cancel(66), (error) => error.code === "SEAT_CANCEL_FAILED");
+  await assert.rejects(() => lost(() => { throw new Error("读取失败"); }).cancel(66), (error) => error.code === "SEAT_CANCEL_UNKNOWN" && /读取预约记录/.test(error.message));
 });

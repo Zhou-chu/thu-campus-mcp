@@ -230,6 +230,39 @@ test("座位多时段与取消：segment 透传，取消需要一次性确认", 
   assert.equal(cancel.body.cancelled, true);
 });
 
+test("座位取消：拒绝、登录失效与结果未知分别映射，未确认不写", async () => {
+  const confirmed = () => {
+    const fixture = campusFixture();
+    fixture.base.confirmations.consume = () => true;
+    return fixture.base;
+  };
+
+  const refused = confirmed();
+  refused.seat.cancel = async () => { throw new refused.SeatError("SEAT_CANCEL_FAILED", "无效的预约"); };
+  const refusedCall = await call(createCampusRoutes(refused), { method: "POST", pathname: "/api/seat/bookings/cancel", body: { id: 7 } });
+  assert.equal(refusedCall.status, 409);
+  assert.equal(refusedCall.body.error.code, "SEAT_CANCEL_FAILED");
+
+  const unknown = confirmed();
+  unknown.seat.cancel = async () => { throw new unknown.SeatError("SEAT_CANCEL_UNKNOWN", "结果未知，请核对"); };
+  const unknownCall = await call(createCampusRoutes(unknown), { method: "POST", pathname: "/api/seat/bookings/cancel", body: { id: 7 } });
+  assert.equal(unknownCall.status, 502);
+  assert.equal(unknownCall.body.error.code, "SEAT_CANCEL_UNKNOWN");
+  assert.equal(unknownCall.body.ok, false, "结果未知不能报成功");
+
+  const expired = confirmed();
+  expired.seat.cancel = async () => { throw new expired.SeatError("SEAT_LOGIN_REQUIRED", "登录已过期"); };
+  const expiredCall = await call(createCampusRoutes(expired), { method: "POST", pathname: "/api/seat/bookings/cancel", body: { id: 7 } });
+  assert.equal(expiredCall.status, 401);
+
+  let writes = 0;
+  const unconfirmed = campusFixture();
+  unconfirmed.base.seat.cancel = async () => { writes += 1; return { id: 7, cancelled: true }; };
+  const denied = await call(createCampusRoutes(unconfirmed.base), { method: "POST", pathname: "/api/seat/bookings/cancel", body: { id: 7 } });
+  assert.equal(denied.status, 428);
+  assert.equal(writes, 0, "没有一次性确认就不能调用取消");
+});
+
 test("座位预约记录：返回列表，登录失效与浏览器忙分别映射", async () => {
   const ok = campusFixture({ seat: { bookings: async () => ({ bookings: [{ id: 1, title: "北馆 A001", status: 2 }] }) } });
   const okCall = await call(createCampusRoutes(ok.base), { pathname: "/api/seat/bookings" });

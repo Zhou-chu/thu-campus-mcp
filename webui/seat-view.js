@@ -36,7 +36,7 @@ export function createSeatView({ el, api }) {
     libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
     date: today(), days: [], segment: null, segments: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1,
-    bookings: [], bookingsLoading: false, bookingsLoaded: false, bookingsError: "",
+    bookings: [], bookingsLoading: false, bookingsLoaded: false, bookingsError: "", cancelTarget: null, cancelBusy: false,
   };
 
   return function seatPage() {
@@ -204,19 +204,37 @@ export function createSeatView({ el, api }) {
       children.push(el("h3", { class: "seat-label", text: "座位" }));
       children.push(seatGrid());
       if (state.notice) children.push(el("p", { class: "seat-notice", text: state.notice }));
+      const bookingLabel = item => [item.title || "座位预约", item.start, item.end, item.status === 2 ? "已预约" : "状态码 " + item.status].filter(Boolean).join(" · ");
       const bookingBody = state.bookingsError
         ? el("p", { class: "seat-empty", text: state.bookingsError })
         : state.bookings.length
-          ? el("ul", { class: "seat-bookings-list" }, state.bookings.map(item => el("li", {
-              text: [item.title || "座位预约", item.start, item.end, item.status === 2 ? "已预约" : "状态码 " + item.status].filter(Boolean).join(" · "),
-            })))
+          ? el("ul", { class: "seat-bookings-list" }, state.bookings.map(item => {
+              const active = state.cancelTarget === item.id;
+              return el("li", {}, [
+                el("span", { text: bookingLabel(item) }),
+                el("button", {
+                  class: "ghost danger",
+                  type: "button",
+                  text: active ? "取消中…" : "取消预约",
+                  disabled: state.cancelBusy,
+                  "aria-expanded": active ? "true" : "false",
+                  onclick: () => { state.cancelTarget = active ? null : item.id; render(); },
+                }),
+              ]);
+            }))
           : el("p", { class: "seat-empty", text: state.bookingsLoaded ? "没有预约记录。" : "读取后显示预约状态与历史。" });
+      const target = state.bookings.find(item => item.id === state.cancelTarget);
       children.push(el("div", { class: "seat-bookings stack" }, [
         el("div", { class: "seat-result-bar" }, [
           el("h3", { class: "seat-label", text: "我的预约" }),
           el("button", { class: "ghost", type: "button", text: state.bookingsLoading ? "读取中…" : "读取预约记录", disabled: state.bookingsLoading, onclick: () => { void loadBookings(); } }),
         ]),
         bookingBody,
+        target ? el("div", { class: "seat-confirm seat-cancel" }, [
+          el("p", { class: "seat-confirm-line", text: "确认取消这条预约？" + bookingLabel(target) + "。取消后座位释放，无法撤销。" }),
+          el("button", { class: "seat-chip ghost danger", type: "button", text: state.cancelBusy ? "取消中…" : "确认取消", disabled: state.cancelBusy, onclick: () => { void cancelBooking(); } }),
+          el("button", { class: "ghost", type: "button", text: "保留", disabled: state.cancelBusy, onclick: () => { state.cancelTarget = null; render(); } }),
+        ]) : null,
       ]));
       panel.replaceChildren(...children);
     }
@@ -229,11 +247,43 @@ export function createSeatView({ el, api }) {
         const data = await api("/api/seat/bookings");
         state.bookings = Array.isArray(data.bookings) ? data.bookings : [];
         state.bookingsLoaded = true;
+        if (state.cancelTarget !== null && !state.bookings.some(item => item.id === state.cancelTarget)) state.cancelTarget = null;
       } catch (error) {
         state.bookingsError = error?.code === "SEAT_LOGIN_REQUIRED" ? "需要先登录图书馆座位系统。" : "读取预约记录失败：" + (error?.message || "请稍后重试。");
       } finally {
         state.bookingsLoading = false;
         render();
+      }
+    }
+
+    /**
+     * 取消一条预约：先取一次性确认令牌再提交；结果不明时提示核对，不自动重发。
+     * 提交期间禁用按钮，避免双击产生第二次写入。
+     */
+    async function cancelBooking() {
+      const id = state.cancelTarget;
+      if (state.cancelBusy || id === null) return;
+      state.cancelBusy = true;
+      state.notice = "";
+      render();
+      try {
+        const prepared = await api("/api/seat/bookings/cancel/prepare", { method: "POST", body: { id } });
+        await api("/api/seat/bookings/cancel", { method: "POST", headers: { "x-campus-approval": prepared.token }, body: { id } });
+        state.cancelTarget = null;
+        state.notice = "已取消预约 #" + id + "。";
+      } catch (error) {
+        state.cancelTarget = null;
+        state.notice = error?.code === "SEAT_LOGIN_REQUIRED"
+          ? "登录已过期，请重新登录后再取消。"
+          : error?.code === "SEAT_CANCEL_UNKNOWN"
+            ? "取消结果未确认，请点「读取预约记录」核对，不要立即重复取消。"
+            : error?.code === "SEAT_CANCEL_FAILED"
+              ? "取消没有生效：" + (error.message || "预约仍在。")
+              : "取消失败：" + (error?.message || "请稍后重试。");
+      } finally {
+        state.cancelBusy = false;
+        render();
+        await loadBookings();
       }
     }
 

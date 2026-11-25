@@ -61,6 +61,9 @@ jobs:
       - name: 邮箱模式服务页端到端（真实 Chromium）
         if: matrix.node == 22
         run: npm run e2e:auth-services
+      - name: 座位取消端到端（真实 Chromium，校园替身）
+        if: matrix.node == 22
+        run: npm run e2e:seat-cancel
       - run: npm run verify:clients
       - run: npm run smoke
       - run: npm run bundle
