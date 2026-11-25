@@ -23,6 +23,19 @@
 
 顺序：A 优先；B 交付写用例样板后再决定是否推广，而非强迫其他模块照搬。C1 与 C2 可并行。风险或产品入口有分歧时，只暂缓该入口，不绕过授权、不把未知改成成功。
 
+### 实施进度（2026-11-25）
+
+四批均已交付，每批独立提交，证据是本地运行结果，不是线上核验：
+
+| 批次 | 落地 | 已验证 |
+| --- | --- | --- |
+| A | `reserve` 拆出可注入传输层的 `reserveWith`；失败补偿改用当前页面并保留原错误（`error.unlock`）；回执无明确成功依据时报 `SPORTS_RESERVE_UNKNOWN` | `test/sports.test.mjs` 覆盖锁场失败不解锁、拒绝后解锁一次同锁键、未知回执、解锁失败不覆盖原错 |
+| B | `cancel` 统一为“明确拒绝抛错、结果不明先读记录核对”；HTTP 按 401/400/409/502 分档；座位页新增取消入口（就地确认、提交禁用、未知提示核对） | `test/seat-api-fakes.test.mjs`、`test/routes-account-campus.test.mjs`；`scripts/e2e-seat-cancel.mjs` 13 项检查（双击只写一次、420px 触控高度） |
+| C1 | 新增 `scripts/e2e-course-journey.mjs` | 10 项检查：桌面周视图与窄屏日程同一门课、未排课不画格、上游不可用保留本地课、恢复后不重复 |
+| C2 | 新增 `scripts/e2e-email-chat.mjs` | 9 项检查：邮箱注册后首轮流式正文、模型替身一次、缺 CSRF 被拒、刷新后回读同一轮 |
+
+给 `createAppServer` 增加了 `campus` 测试接缝：只替换校园适配器，HTTP、会话与页面保持真实。三个新旅程已加入 `E2E_SCRIPTS` 与 CI（Windows / Node 22）。**未做**：`npm run test:coverage` 的全量收集、真实校园写入与线上只读核验；这些仍按第 3 节口径单独报告。
+
 ## 3. 验收证据与发布边界
 
 1. **用例层**用可计数的适配器替身验证写入、补偿次数、参数绑定和失败分支。详细复现见[体育预约缺陷记录](../issues/BUG-002-sports-unlock.md)。
