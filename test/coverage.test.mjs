@@ -189,17 +189,17 @@ test("关闭包装在finally执行真实关闭但保留原始采集异常", asyn
     assert.ok(events.includes(`${close}-close`));
   }
 });
-test("原生计划覆盖四组测试和四个E2E，NODE_V8_COVERAGE跨子进程原样保留", async t => {
+test("原生计划覆盖单元测试与全部E2E，NODE_V8_COVERAGE跨子进程原样保留", async t => {
   const root = await fixture(t);
   for (const file of ["test/root.test.mjs", "test/coverage.test.mjs", "desktop/test/desktop.test.mjs", "packages/browser/test/browser.test.mjs", "packages/thu-cloud/test/workspace-storage.test.mjs", "packages/browser/test/manual-close.mjs"]) await put(root, file, "// fixture");
   const runDirectory = path.join(root, "coverage-run"); await mkdir(runDirectory);
   const env = { NODE_V8_COVERAGE: path.join(runDirectory, "native/raw"), CAMPUS_COVERAGE_RUN_DIR: runDirectory, CAMPUS_COVERAGE_MANIFEST: path.join(runDirectory, "manifest.json") };
   await put(runDirectory, "native/raw/unit.json", "{}");
-  const plan = await nativePlan(root, env); assert.equal(plan.length, 5); assert.equal((await nativeTestFiles(root)).length, 5);
+  const plan = await nativePlan(root, env); assert.equal(plan.length, 1 + E2E_SCRIPTS.length); assert.equal((await nativeTestFiles(root)).length, 5);
   assert.ok(plan[0].args.includes("--test")); assert.ok(!plan[0].args.some(arg => arg.includes("manual-close")));
   assert.deepEqual(plan.slice(1).map(stage => path.basename(stage.args.at(-1))), E2E_SCRIPTS); assert.ok(plan.every(stage => stage.env.NODE_V8_COVERAGE === env.NODE_V8_COVERAGE)); assert.ok(plan.slice(1).every(stage => stage.args.includes("--import")));
   assert.ok(!JSON.stringify(plan).includes("e2e-sandbox")); await assert.rejects(nativePlan(root, {}));
-  const calls = []; assert.equal(await nativeMain(root, env, async args => { calls.push(args); if (calls.length === 3) await put(runDirectory, "native/raw/e2e.json", "{}"); return { code: calls.length === 2 ? 1 : 0 }; }), 1); assert.equal(calls.length, 6);
+  const calls = []; assert.equal(await nativeMain(root, env, async args => { calls.push(args); if (calls.length === 3) await put(runDirectory, "native/raw/e2e.json", "{}"); return { code: calls.length === 2 ? 1 : 0 }; }), 1); assert.equal(calls.length, 2 + E2E_SCRIPTS.length);
   assert.equal(calls[1][1], "report"); assert.ok(calls[1].includes("--clean=false"));
   assert.deepEqual(await readdir(path.join(runDirectory, "unit/raw")), ["unit.json"]); assert.ok((await readdir(env.NODE_V8_COVERAGE)).includes("e2e.json"));
   const c8 = nativeCoverageArgs(ROOT, runDirectory); assert.equal(c8.filter(arg => arg === "--clean=true").length, 1); assert.ok(c8.includes("--all=true")); assert.ok(path.isAbsolute(c8[0])); assert.ok(c8.includes(process.execPath));
