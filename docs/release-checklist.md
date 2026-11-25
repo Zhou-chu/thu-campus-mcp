@@ -64,10 +64,11 @@ node scripts/verify-prepared.mjs
 ## 4.2 WebUI 上线前必跑
 
 ```powershell
-npm run e2e:web     # 真实 Chromium 跑一遍：配对页、五个视图、编号索引、设计目录、主题持久化、控制台无报错
+npm run e2e:web            # 真实 Chromium 跑一遍：配对页、主要视图、编号索引、设计目录、主题持久化、控制台无报错
+npm run e2e:auth-services  # 邮箱注册后进入服务页：核验状态、独立服务登录路径、窄屏无溢出
 ```
 
-这条命令会自己起一个临时服务端、自己找仓库内 Chromium，跑完即清理；目前覆盖 21 项断言。它抓过四个只在浏览器里才暴露的问题（meta 里的 frame-ancestors 无效、favicon 404、只改 hash 不重载、版本号注入取错字段），所以不要再绕过它。
+这两条命令会自己起临时服务端、自己找仓库内 Chromium，跑完即清理；`e2e:web` 目前覆盖 105 项断言，`e2e:auth-services` 覆盖 7 项检查；后者专门防 #112 这类“认证路由吞掉服务接口”的回归。它抓过四个只在浏览器里才暴露的问题（meta 里的 frame-ancestors 无效、favicon 404、只改 hash 不重载、版本号注入取错字段），所以不要再绕过它。
 
 托管（HTTPS）自测：
 

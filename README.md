@@ -28,7 +28,7 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 **常驻**：`node bin/thu-campus.mjs app service install` 会给当前用户注册一个**登录计划任务**（Task Scheduler COM，不需要管理员权限；`schtasks.exe` 在普通权限下会被拒绝，已实测），`app service start|status|uninstall` 可启可查可卸；`install --startup` 是等价的「启动」文件夹备选。刻意不做 Windows 系统服务——SYSTEM 身份解不开 DPAPI 凭据，会变成永远登录不上的空壳。
 
 **界面**：纸墨单色的PWA，规范见[UIdesign.md](<UIdesign.md>)，色板/字阶/组件状态在[组件预览](<webui/preview.html>)（设置页有入口）。静态资源版本号由服务端在分发时注入（`__ASSET_VERSION__`），只有 `package.json` 一处来源。
-**上线前自检**：`npm run e2e:web` 用仓库内 Chromium 真跑一遍界面与交互（21 项断言），详见 `docs/release-checklist.md`。
+**上线前自检**：`npm run e2e:web` 用仓库内 Chromium 真跑一遍界面与交互（105 项断言）；`npm run e2e:auth-services` 另用真实邮箱注册走一遍服务页（7 项检查），详见 `docs/release-checklist.md`。
 
 **会话保活**：运行时每 30 分钟自检四个服务的登录态（`THU_CAMPUS_APP_KEEPALIVE_MINUTES`，0 关闭），发现过期就调用既有的 `browser restore` 尝试续期，结果可在 `/api/keepalive` 与「设置」页查看。
 
@@ -37,6 +37,10 @@ node bin/thu-campus.mjs app serve            # 默认 http://127.0.0.1:8971
 **精简工具模式**：默认把 86 个工具的完整 Schema 交给模型（约 1 万 token）。打开「设置 → 对话模型 → 精简工具模式」后，模型只拿到 `campus_tool_search` 与 `campus_tool_call` 两个入口，按关键词检索后再调用，首轮约 300 token。该模式**只提供只读工具**：写入类操作（提交作业、预约场馆、上传文件）仍需关闭精简模式或到「工具」页用完整模式逐次确认，避免把写操作藏在转发层后面。设置保存在本机 `settings.json`，下一轮对话生效。
 
 **第三方模型提供商**：默认走内置 MadModel；也可以在「设置 → 模型提供商」添加自己的接口。支持三种协议——OpenAI 兼容（`/chat/completions`）、OpenAI Responses（`/v1/responses`）、Anthropic（`/v1/messages`）。填好地址与密钥后可「测试」连接并「导入模型」列表，启用某个提供商后对话改走它，停用即回到 MadModel。密钥只保存在本机 `stateDir/model-providers.json`，接口只回掩码；请求与流式响应由应用在内部双向翻译，工具调用、图片输入与增量输出都保留。
+
+**工具调用与日志**：对话主界面默认不展示工具调用流程，统一收进「设置 → 工具调用记录」，点开每条可看参数与结果，需要时可开启「在对话中显示完整工具调用卡片」。「设置 → 详细调试日志」提供默认关闭的 JSONL 日志：可随时开关、导出与清空，记录 HTTP 请求与 MCP 工具调用，字段统一脱敏并截断超长内容；日志位于 `stateDir/logs/`，10MB 轮转、最多保留 5 个文件。浏览器自动化、定时任务与未捕获异常的采集尚未纳入。
+
+**图书馆、体育与课表**：座位页支持一天内多个时段切换，可读取预约记录，并能在确认后取消；体育页显示当前预约流程状态，并从官网读取预约历史（取消/支付仍在官网完成）。课表按学校作息显示大节对应的时间段，自定义课程可精确到 1–14 小节；官方课程数据只到大节，不能虚构同一大节内的小节拆分。
 
 **定时任务**：左侧「定时」页或直接对助手说“每天早上 8:30 汇总作业”即可创建。支持单次、每天、每周（本地时间）；到点会新建一个会话并跑一轮完整对话，结果记录在任务卡片里（成功/失败与原因，失败不冒充成功）。执行失败不会重试或阻塞其它任务，单次任务执行后自动停用。计划保存在 `stateDir/schedules.json`，模型侧工具为 `schedule_list/create/update/delete`，与界面共用同一份数据。
 
