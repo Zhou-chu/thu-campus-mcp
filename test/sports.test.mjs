@@ -360,7 +360,7 @@ test("sports: 工具层未知工具与缺场景参数直接报错", async () => 
   await assert.rejects(() => callSportsTool("sports_available", { scene: 42 }), error => error.code === "ARGUMENT_REQUIRED");
 });
 
-test("sports: 下单结果区分成功、失败与需要人工验证", async () => {
+test("sports: 下单结果只在有明确依据时算成功", async () => {
   const { reserveOutcome } = await import("../lib/app/sports.mjs");
   assert.deepEqual(reserveOutcome({ code: 0, message: "预约成功" }), { ok: true, message: "预约成功" });
   assert.equal(reserveOutcome({ code: 500, message: "场地已满" }).code, "SPORTS_RESERVE_FAILED");
@@ -368,7 +368,104 @@ test("sports: 下单结果区分成功、失败与需要人工验证", async () 
   assert.equal(captcha.ok, false);
   assert.equal(captcha.code, "SPORTS_MANUAL_VERIFICATION");
   assert.match(captcha.message, /人工/);
-  assert.equal(reserveOutcome({}).ok, true, "没有错误码时按成功处理");
+  const empty = reserveOutcome({});
+  assert.equal(empty.ok, false, "回执缺失不能报成功");
+  assert.equal(empty.code, "SPORTS_RESERVE_UNKNOWN");
+  assert.match(empty.message, /核对/);
+  assert.equal(reserveOutcome({ message: "预约成功" }).ok, true, "只有成功文案也算明确依据");
+});
+
+function reservationFixture(overrides = {}) {
+  return {
+    sceneUuid: "scene-1", siteUuid: "site-1", date: "2026-11-25", startTime: "19:00", endTime: "20:00",
+    payload: { sceneUuid: "scene-1", siteUuid: "site-1", lockKey: "", ignoreError: 0 },
+    ...overrides,
+  };
+}
+
+function recordingApi(handlers) {
+  const calls = [];
+  const api = async (page, url, options = {}) => {
+    const step = url.split("/").pop();
+    calls.push({ step, body: options.body, page });
+    const handler = handlers[step];
+    if (!handler) throw new Error("unexpected call " + step);
+    return handler(options);
+  };
+  return { api, calls };
+}
+
+test("sports: 下单被拒后用同一锁键解锁一次并保留原错误", async () => {
+  const { reserveWith } = await import("../lib/app/sports.mjs");
+  const page = { id: "page-1" };
+  const { api, calls } = recordingApi({
+    lockSite: () => ({ ok: true, data: { code: 0, data: { lockKey: "lock-1" } } }),
+    addReserve: () => ({ ok: true, data: { code: 500, message: "场地已满" } }),
+    unLockSite: () => ({ ok: true, data: { code: 0 } }),
+  });
+  await assert.rejects(() => reserveWith(api, reservationFixture(), page), error => {
+    assert.equal(error.code, "SPORTS_RESERVE_FAILED");
+    assert.equal(error.message, "场地已满", "原始拒绝原因不能被补偿结果覆盖");
+    assert.deepEqual(error.unlock, { ok: true, message: "" });
+    return true;
+  });
+  assert.deepEqual(calls.map(c => c.step), ["lockSite", "addReserve", "unLockSite"]);
+  assert.equal(calls[2].body.lockKey, "lock-1", "解锁必须用同一把锁");
+  assert.equal(calls.every(c => c.page === page), true, "整段流程复用同一个页面，不能引用未定义的会话");
+});
+
+test("sports: 锁场失败或没拿到锁键时不解锁", async () => {
+  const { reserveWith } = await import("../lib/app/sports.mjs");
+  const rejected = recordingApi({ lockSite: () => ({ ok: false, data: { message: "场地已被占用" } }) });
+  await assert.rejects(() => reserveWith(rejected.api, reservationFixture(), {}), error => error.code === "SPORTS_LOCK_FAILED");
+  assert.deepEqual(rejected.calls.map(c => c.step), ["lockSite"]);
+
+  const emptyKey = recordingApi({ lockSite: () => ({ ok: true, data: { code: 0 } }) });
+  await assert.rejects(() => reserveWith(emptyKey.api, reservationFixture(), {}), error => error.code === "SPORTS_LOCK_FAILED");
+  assert.deepEqual(emptyKey.calls.map(c => c.step), ["lockSite"]);
+});
+
+test("sports: 回执未知时解锁并报未知，不假装成功", async () => {
+  const { reserveWith } = await import("../lib/app/sports.mjs");
+  const { api, calls } = recordingApi({
+    lockSite: () => ({ ok: true, data: { data: { lockKey: "lock-2" } } }),
+    addReserve: () => ({ ok: true, data: {} }),
+    unLockSite: () => ({ ok: true, data: { code: 0 } }),
+  });
+  await assert.rejects(() => reserveWith(api, reservationFixture(), {}), error => {
+    assert.equal(error.code, "SPORTS_RESERVE_UNKNOWN");
+    assert.match(error.message, /核对/);
+    return true;
+  });
+  assert.deepEqual(calls.map(c => c.step), ["lockSite", "addReserve", "unLockSite"]);
+});
+
+test("sports: 解锁失败不覆盖原始错误，并如实记录补偿结果", async () => {
+  const { reserveWith } = await import("../lib/app/sports.mjs");
+  const { api, calls } = recordingApi({
+    lockSite: () => ({ ok: true, data: { data: { lockKey: "lock-3" } } }),
+    addReserve: () => ({ ok: false, data: { message: "预约失败" } }),
+    unLockSite: () => { throw new Error("network reset"); },
+  });
+  await assert.rejects(() => reserveWith(api, reservationFixture(), {}), error => {
+    assert.equal(error.code, "SPORTS_RESERVE_FAILED");
+    assert.equal(error.message, "预约失败");
+    assert.deepEqual(error.unlock, { ok: false, message: "network reset" });
+    return true;
+  });
+  assert.deepEqual(calls.map(c => c.step), ["lockSite", "addReserve", "unLockSite"]);
+});
+
+test("sports: 正常下单不触发解锁", async () => {
+  const { reserveWith } = await import("../lib/app/sports.mjs");
+  const { api, calls } = recordingApi({
+    lockSite: () => ({ ok: true, data: { data: { lockKey: "lock-4" } } }),
+    addReserve: () => ({ ok: true, data: { code: 0, message: "预约成功" } }),
+  });
+  const result = await reserveWith(api, reservationFixture(), {});
+  assert.equal(result.ok, true);
+  assert.equal(result.lockKey, "lock-4");
+  assert.deepEqual(calls.map(c => c.step), ["lockSite", "addReserve"]);
 });
 
 
