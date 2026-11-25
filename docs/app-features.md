@@ -7,12 +7,14 @@
 | UI-APPROVAL-CARD | 紧凑、可伸缩、处理后收起的审批卡 | 本批修复，验收见[审批卡验证](approval-card-verification.md) |
 | MODEL-REASONING-EFFORT | 按模型能力选择思考强度 | **待实现**，不是现有思考文本展示 |
 | SECURITY-APPROVAL-MODE | 明确、可选择且由服务端强制执行的审批模式 | **待实现**，不是现有启动开关或单次允许/拒绝 |
-| TIMETABLE | 同级的“课表”视图：周视图（7 天 × 6 大节）、窄屏日程、课程详情 | 已实现，验收见[课表验证](#timetable课表视图) |
-| SPORTS-BOOKING | 清华体育场馆预约：运动 → 场馆 → 日期 → 场次，一键登录 | **部分实现**：只读链路已上线，下单与支付未做 |
-| LIBRARY-SEAT | 图书馆座位预约：分区 → 座位 → 预约 / 取消 | **可用**：读取、预约、取消、界面与工具均已打通 |
+| TIMETABLE | 同级的“课表”视图：周视图（7 天 × 6 大节）、窄屏日程、课程详情；显示大节时间段，自定义课程可精确到 1–14 小节 | 已实现，验收见[课表验证](#timetable课表视图) |
+| SPORTS-BOOKING | 清华体育场馆：运动 → 场馆 → 日期 → 场次、预约流程状态与官网预约历史 | **部分实现**：只读与流程状态已上线，下单与支付未做 |
+| LIBRARY-SEAT | 图书馆座位预约：分区 → 日期/时段 → 座位 → 预约 / 取消，读取预约记录 | **可用**：多时段切换、预约、确认后取消、界面与工具均已打通 |
 | MODEL-PROVIDERS | 第三方模型提供商：OpenAI 兼容 / Responses / Anthropic，支持导入模型与启用切换 | 已实现，验收见[模型提供商](#model-providers第三方模型提供商) |
 | SCHEDULED-TASKS | 定时任务：界面创建/修改/删除，到点新建会话执行；模型也可创建 | 已实现，验收见[定时任务](#scheduled-tasks定时任务) |
 | TOOL-COMPACT-MODE | 精简工具模式：用检索/调用两个入口替代 86 个工具的完整清单 | 已实现，验收见[精简工具模式](#tool-compact-mode精简工具模式) |
+| TOOL-CALL-VIEW | 工具调用流程默认收进设置，可展开查看参数与结果，也保留在对话中显示的开关 | 已实现，见[工具调用展示](#tool-call-view工具调用展示) |
+| DEBUG-LOG | 可选详细运行日志：默认关闭、设置即时开关、JSONL、脱敏、轮转、导出与清空 | **部分实现**：HTTP 与 MCP 工具调用已采集；浏览器步骤、定时任务、未捕获异常待扩展 |
 
 ## MODEL-PROVIDERS：第三方模型提供商
 
@@ -202,3 +204,20 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 - 从旧应用状态目录迁移时，`account.json` 优先于 `seat-credentials.json`，与旧读取顺序一致。原来生效的账号在加密写入、读回校验后才会移除应用状态目录内的旧文件。显式指定的外部 `SEAT_CREDENTIALS` 文件仍仅作旧座位入口，不由程序迁移或删除。
 - 已配对设备令牌在服务端设备列表中只保存摘要；独立浏览器会话另由DPAPI保护。固定实例令牌和令牌传输不属于统一账号密码加密的范围：远程使用应启用HTTPS，泄露令牌应单独撤销或轮换。
 
+
+## TOOL-CALL-VIEW：工具调用展示
+
+对话主界面默认只显示正文与推理，不把工具调用流程堆在消息前。工具调用统一进入「设置 → 工具调用记录」，每条可展开查看参数与结果；设置中提供「在对话中显示完整工具调用卡片」开关，偏好保存在本机 localStorage。
+
+验收：`test/webui-app-unit.test.mjs` 覆盖默认隐藏、设置中查看、开启后恢复、缺失名称/状态兜底；`scripts/e2e-web.mjs` 在真实 Chromium 中断言隐藏与设置可见，当前 105 项通过。
+
+## DEBUG-LOG：详细运行日志
+
+默认关闭，不创建日志文件；环境变量 `THU_CAMPUS_APP_DEBUG_LOG=1` 可在启动阶段强制开启并优先于持久化开关。设置页「详细调试日志」可即时开关、显示目录与大小、导出最近日志、清空。
+
+- 追加到 `stateDir/logs/debug.jsonl`，单文件 10MB、最多保留 5 个文件；写入异步，失败不影响主流程。
+- 采集 HTTP 请求（方法、路径、状态、耗时）与 MCP 工具调用（工具名、耗时、成功/失败、错误）。
+- password/passwd/secret/cookie/authorization/token/apiKey/pairCode/sessionId 等字段统一 `[REDACTED]`；字符串超过 4KB 截断并标注原长度。
+- 浏览器自动化步骤、定时任务与 `uncaughtException` 采集尚未加入，不能把当前实现当成“全链路日志”。
+
+验收：`test/debug-log.test.mjs`（默认不写、动态开关、环境变量优先、脱敏、截断、轮转/清空、损坏配置、工具调用成功/失败）、`test/routes-settings-schedules.test.mjs`（GET/PUT/导出/清空/未注入 503）、WebUI 单测（开关、失败提示、不可用说明）。生产 8973 实测开启后 `/api/meta` 入日志、无 Cookie 泄露，关闭后停止写入，清空后 0 字节。
