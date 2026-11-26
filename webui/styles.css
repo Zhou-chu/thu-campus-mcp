@@ -443,11 +443,9 @@ a:focus-visible {
 .effort-picker .effort-field select {
   min-width: 84px;
 }
-.effort-picker .effort-field.compact > span {
-  display: none;
-}
+.effort-picker .effort-field.compact > span { display: inline; font-size: var(--text-meta); white-space: nowrap; }
 .effort-picker .effort-field.compact select {
-  min-width: 74px;
+  min-width: 64px;
 }
 @media (max-width: 600px) {
   .chat-dock { gap: var(--space-2); }
@@ -1139,6 +1137,8 @@ a:focus-visible {
 .settings-content .model-picker {align-items:center;}
 .settings-content .model-field {flex:0 1 440px;}
 .settings-content .model-field > span {display:none;}
+  /* 思考强度在设置里保留可见标签：否则只看到一个没有说明的“默认”下拉。 */
+  .settings-content .effort-field > span {display:block;}
 .settings-content .model-status {flex-basis:100%;}
 .settings-content .help-panel {width:100%;background:transparent;border:0;padding:0;}
 .settings-content .help-panel > summary {padding:0;}
@@ -1232,11 +1232,20 @@ input,select {background:var(--control-fill);}
 .chat[data-empty="true"] {flex:0 0 auto;gap:var(--space-7);}
 .chat[data-empty="true"] .messages {display:none;}
 .chat[data-empty="false"] .chat-home,.chat[data-empty="false"] .home-shortcuts {display:none;}
-.chat .composer {display:flex;flex-direction:column;gap:0;padding:0;align-items:stretch;position:relative;}
+.chat .composer {display:flex;flex-direction:column;gap:0;padding:0;align-items:stretch;position:relative;container-type:inline-size;}
+/* 输入区变窄时（停靠右侧栏或窄窗口）把操作与选择拆成两行，否则模型名只剩一个字。 */
+@container (max-width: 620px) {
+  .composer-footer {grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-2);}
+  .composer-actions {grid-column:1/-1;}
+  .composer .model-picker {grid-column:1;justify-self:stretch;width:100%;}
+  .composer .effort-picker {grid-column:2;align-self:stretch;}
+  .composer .effort-picker .effort-field {height:100%;justify-content:flex-end;}
+  .composer-submit {grid-column:3;}
+}
 .chat .composer textarea {min-height:56px;padding:var(--space-4) var(--space-5);border:0;border-radius:var(--radius-panel) var(--radius-panel) 0 0;background:transparent;}
 .chat[data-empty="true"] .composer textarea {min-height:132px;padding:var(--space-5);}
 .chat .composer textarea:focus-visible {border:0;}
-.composer-footer {display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:var(--space-4);align-items:center;border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);}
+.composer-footer {display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:var(--space-2);align-items:center;border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);}
 .composer-actions {display:flex;align-items:center;gap:var(--space-4);min-width:0;}
 .composer-submit {display:flex;gap:var(--space-2);}
 .composer .composer-send,.composer .composer-stop {display:grid;place-items:center;width:52px;min-width:52px;height:52px;padding:0;font-size:var(--text-ui);}
@@ -1244,6 +1253,8 @@ input,select {background:var(--control-fill);}
 .composer .model-picker {justify-self:end;display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:var(--space-1);width:min(360px,100%);align-items:center;}
 .composer .model-field {display:block;min-width:0;}
 .composer .model-field > span {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+.composer .effort-picker .effort-field.compact > span {position:static;width:auto;height:auto;overflow:visible;clip-path:none;}
+.composer .effort-picker .effort-field.compact {display:inline-flex;flex-direction:row;align-items:center;gap:var(--space-1);}
 .composer .model-field select {min-height:44px;padding:8px 24px 8px 8px;border:0;background:transparent;font-size:var(--text-body);text-overflow:ellipsis;}
 .composer .model-status {grid-column:1/-1;min-width:0;overflow-wrap:anywhere;}
 .composer .model-refresh {width:44px;height:44px;padding:0;}
@@ -1480,6 +1491,11 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 .seat-confirm-button {padding:8px 16px;border:1px solid var(--ink);border-radius:var(--radius-control);background:var(--ink);color:var(--paper);cursor:pointer;font-size:var(--text-meta);}
 .seat-confirm-button[disabled] {opacity:.5;cursor:progress;}
 .seat-notice {margin:0;padding:var(--space-3);border:1px dashed var(--line);border-radius:var(--radius-control);color:var(--ink);font-size:var(--text-meta);}
+
+@media (max-width: 899px) {
+  /* 九个入口一行放不下：按 64px 最小宽度自动换行，避免「服务/设置」被藏在没有滚动条的横滑区外。 */
+  .tabbar { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); overflow-x: visible; }
+}
 
 @media (max-width: 430px) {
   .tabbar { padding-inline: 2px; gap: 0; }

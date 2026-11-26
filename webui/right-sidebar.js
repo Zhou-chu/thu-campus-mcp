@@ -185,7 +185,13 @@ export function createRightSidebar({ el, api, toast, renderRich, uploadFile, sto
       ]);
     }
     const data = panel.data;
-    if (!data) return el("div", { class: "rsidebar-note", text: "尚未读取作业列表。" });
+    if (!data) {
+      // 自动读取失败或还没触发时，给一个可点的入口，而不是只留一句“尚未读取”。
+      return el("div", { class: "rsidebar-note" }, [
+        el("p", { text: "尚未读取作业列表。" }),
+        el("button", { class: "ghost", type: "button", text: "读取作业列表", onclick: () => { void refreshData(kind, true); } }),
+      ]);
+    }
     if (data.state === "unavailable") {
       return el("div", { class: "rsidebar-note", role: "alert" }, [
         el("p", { text: "暂时读不到作业：" + (data.error?.message || "网络学堂未登录或接口不可用。") }),

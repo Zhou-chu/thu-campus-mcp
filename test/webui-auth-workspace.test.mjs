@@ -16,8 +16,8 @@ test("已登录必须有真实受保护核验标记、固定来源和有效时�
   }
 });
 
-test("认证枚举不混淆未登录、过期、未核验、网络无法核验和模拟", () => {
-  for (const [state, label] of Object.entries({ "login-required": "未登录", expired: "登录已过期", unverified: "未核验", unknown: "无法核验", mock: "模拟" })) assert.equal(authPresentation({ state }).label, label);
+test("认证枚举不混淆未登录、过期、未核验、暂时不可用和模拟", () => {
+  for (const [state, label] of Object.entries({ "login-required": "未登录", expired: "登录已过期", unverified: "未核验", unknown: "暂时不可用", mock: "模拟" })) assert.equal(authPresentation({ state }).label, label);
   assert.equal(authPresentation({ ...verified, mode: "mock" }).state, "mock");
   assert.equal(authPresentation({ ...verified, mock: true }).state, "mock");
   assert.equal(authPresentation({ state: "toString" }).state, "unverified");
@@ -29,13 +29,13 @@ test("正在核验或状态刷新失败时不将旧证据显示为当前已登�
   assert.equal(checking.verified, false);
   assert.equal(checking.checkedAt, checkedAt);
   const stale = authPresentation(verified, { stale: true });
-  assert.equal(stale.label, "无法核验");
+  assert.equal(stale.label, "暂时不可用");
   assert.equal(stale.verified, false);
 });
 
 test("只保留核验白名单，不将配置账号、token或原始响应带入UI记录", () => {
   assert.deepEqual(authPresentation({ ...verified, code: "VERIFIED", account: "do-not-display", token: "do-not-display", raw: { secret: "do-not-display" } }), { state: "ready", label: "已登录", verified: true, source: verified.source, checkedAt, code: "VERIFIED" });
-  assert.deepEqual(authPresentation({ state: "unknown", source: 1, code: false, checkedAt: "bad" }), { state: "unknown", label: "无法核验", verified: false });
+  assert.deepEqual(authPresentation({ state: "unknown", source: 1, code: false, checkedAt: "bad" }), { state: "unknown", label: "暂时不可用", verified: false });
 });
 
 test("云盘可用必须审计通过且绑定固定私有目录精确范围", () => {

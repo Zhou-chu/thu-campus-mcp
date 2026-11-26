@@ -107,6 +107,7 @@ async function main() {
     check("配置未核验、已登录、未登录、模拟分别呈现", await label("learnx") === "未核验" && await label("cloud") === "已登录" && await label("hetang") === "未登录" && await label("madmodel") === "模拟");
     check("不显示配置身份作为登录证据", !(await page.locator("#view").innerText()).includes("configured-account-not-proof"));
     await service("cloud").locator(".auth-evidence > summary").click();
+    await service("cloud").locator(".auth-diagnostic > summary").click();
     check("核验记录可主动展开来源与时间", (await service("cloud").locator(".auth-evidence").innerText()).includes("protected-api:cloud-account-info"));
     await page.waitForSelector(".timeline-item");
     check("旧ready历史无证据降未核验，新证据仍显示已登录", (await page.locator(".timeline-item").nth(0).innerText()).includes("未核验") && (await page.locator(".timeline-item").nth(1).innerText()).includes("已登录"));
@@ -116,10 +117,10 @@ async function main() {
     await verify(); check("窗口未产生核验证据仍为未登录", await label("hetang") === "未登录");
     statuses.rain_status = proof("rain-basic-info"); await verify(); check("有效保存会话无需新扫码也可真实核验", await label("hetang") === "已登录");
     statuses.rain_status = { error: { code: "AUTH_EXPIRED", message: "fixture expired" } }; statuses.learn_status = { error: { code: "NETWORK_ERROR", message: "fixture unavailable" } }; await verify();
-    check("真实过期与网络无法核验分开", await label("hetang") === "登录已过期" && await label("learnx") === "无法核验");
+    check("真实过期与暂时不可用分开", await label("hetang") === "登录已过期" && await label("learnx") === "暂时不可用");
     check("校园核验失败不误报应用停止运行", await page.locator("#account").innerText() === "服务运行中");
     await page.route("**/api/auth/status", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ ok: false, error: { message: "fixture status unavailable" } }) }));
-    await verify(); check("HTTP核验失败不保留旧已登录标签且有恢复入口", await label("cloud") === "无法核验" && await page.locator(".auth-panel > .error").count() === 1);
+    await verify(); check("HTTP核验失败不保留旧已登录标签且有恢复入口", await label("cloud") === "暂时不可用" && await page.locator(".auth-panel > .error").count() === 1);
     await page.unroute("**/api/auth/status"); await verify(); check("主动重试恢复真实认证证据", await label("cloud") === "已登录");
     await page.screenshot({ path: path.join(screenshotDir, "auth-light-1920.png") });
     await page.click('button[data-view="settings"]');

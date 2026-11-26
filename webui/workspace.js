@@ -46,7 +46,7 @@ export function workspaceJob(result) {
   return { ...job, sessionId: match[1], statusUrl: job.statusUrl };
 }
 
-const AUTH_LABELS = Object.freeze({ ready: "已登录", "login-required": "未登录", expired: "登录已过期", unverified: "未核验", unknown: "无法核验", mock: "模拟" });
+const AUTH_LABELS = Object.freeze({ ready: "已登录", "login-required": "未登录", expired: "登录已过期", unverified: "未核验", unknown: "暂时不可用", mock: "模拟" });
 /** Presentation trusts normalized verification evidence, never local configuration or browser state. */
 export function authPresentation(info, { checking = false, stale = false } = {}) {
   const value = typeof info === "string" ? { state: info } : info || {};

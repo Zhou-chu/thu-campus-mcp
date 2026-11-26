@@ -84,6 +84,39 @@ async function main() {
 
     await page.setViewportSize({ width: 420, height: 900 });
     check("窄屏服务页无横向溢出", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    const tabs = await page.evaluate(() => {
+      const all = [...document.querySelectorAll(".tab")];
+      const inside = all.filter(tab => {
+        const box = tab.getBoundingClientRect();
+        return box.left >= -1 && box.right <= innerWidth + 1;
+      });
+      return { total: all.length, inside: inside.length, labels: inside.map(tab => tab.textContent.trim()) };
+    });
+    check("窄屏九个入口都在屏幕内", tabs.total === 9 && tabs.inside === 9 && ["服务", "工具", "设置"].every(name => tabs.labels.includes(name)));
+    await page.click('.tab[data-view="chat"]');
+    await page.waitForSelector("#chat-model", { timeout: 5000 });
+    const effortLabel = await page.evaluate(() => {
+      const label = document.querySelector("#chat-effort")?.closest(".effort-field")?.querySelector("span");
+      const select = document.querySelector("#chat-model");
+      return { text: label?.textContent || "", visible: (label?.getBoundingClientRect().width || 0) > 2, modelWidth: Math.round(select?.getBoundingClientRect().width || 0) };
+    });
+    check("思考强度有可见标签且模型名不再挤成一个字", effortLabel.text === "思考" && effortLabel.visible && effortLabel.modelWidth >= 96);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.click('.tab[data-view="services"]');
+    await page.waitForTimeout(400);
+    const gitlabButton = page.locator('.auth-service[data-service="gitlab"]').getByRole("button", { name: "配置访问令牌" });
+    check("GitLab 行给出可点的配置入口", (await gitlabButton.count()) === 1);
+    await gitlabButton.click();
+    check("点配置入口能到设置里的 GitLab 分区", await page.evaluate(() => {
+      const section = document.querySelector(".settings-gitlab");
+      return document.querySelector("#view")?.dataset.view === "settings" && !!section && section.getBoundingClientRect().top < innerHeight;
+    }));
+    const hint = await page.locator("#auth-hint").textContent();
+    check("登录页说明这是本机账号而不是清华密码", /不是清华统一账号/.test(hint || ""));
+    // #152：邮箱模式下右侧作业面板要真的去取数据，不能停在“尚未读取作业列表”这个死胡同。
+    await page.waitForTimeout(1500);
+    const sidebarText = (await page.locator(".rsidebar-body").innerText()).replace(/\s+/g, " ").trim();
+    check("邮箱模式下右侧作业面板会加载而不是停在未读取", sidebarText.length > 0 && !/^尚未读取作业列表。\s*(读取作业列表)?$/.test(sidebarText));
     check("页面无未捕获异常", pageErrors.length === 0);
     console.log(`auth-services gate: ${checks} checks passed`);
   } finally {

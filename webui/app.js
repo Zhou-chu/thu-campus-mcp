@@ -90,7 +90,7 @@ const seatPage = createSeatView({ el, api });
 const rightSidebar = createRightSidebar({
   el, api, toast, renderRich, uploadFile,
   onResize: () => chatWidthUI.refresh(),
-  canLoad: () => !!state.token,
+  canLoad: () => !!state.token || state.cookieAuth === true,
 });
 let toastTimer = 0;
 function toast(message) {
@@ -486,7 +486,7 @@ const EFFORTS = [["", "默认"], ["low", "低"], ["medium", "中"], ["high", "�
 function effortPicker(id, compact = false) {
   const select = el("select", { id, "aria-label": "思考强度" });
   for (const [value, text] of EFFORTS) select.append(el("option", { value, text }));
-  const field = el("label", { class: "model-field effort-field" + (compact ? " compact" : ""), htmlFor: id, title: "思考强度" }, [el("span", { text: "思考强度" }), select]);
+  const field = el("label", { class: "model-field effort-field" + (compact ? " compact" : ""), htmlFor: id, title: "思考强度" }, [el("span", { text: compact ? "思考" : "思考强度" }), select]);
   const node = el("div", { class: "effort-picker" }, [field]);
   node.updateEffort = () => {
     select.value = state.effort ?? "";
@@ -559,8 +559,8 @@ function modelPicker(id, compact = false) {
   const picker = el("div", { class: "model-picker" }, [label, refresh, status]);
   picker.updateModels = () => {
     clear(select);
-    for (const model of state.models)
-      select.append(el("option", { value: model.id, text: compact ? model.label || model.id : model.label === model.id ? model.id : `${model.label} · ${model.id}` }));
+    const textOf = model => (compact ? model.label || model.id : model.label === model.id ? model.id : `${model.label} · ${model.id}`);
+    for (const model of state.models) select.append(el("option", { value: model.id, text: textOf(model) }));
     if (!state.models.some((model) => model.id === state.selectedModel)) {
       select.prepend(el("option", {
         value: state.selectedModel,
@@ -570,6 +570,9 @@ function modelPicker(id, compact = false) {
     }
     select.value = state.selectedModel;
     select.disabled = state.modelSaving || state.modelsLoading || !state.models.length;
+    // 输入区空间有限：完整模型名放进 title，避免只剩一个被裁掉的字。
+    const current = state.models.find(model => model.id === state.selectedModel);
+    select.title = current ? textOf(current) : (state.selectedModel ? `${state.selectedModel}（当前目录中不可用）` : "暂无可用模型");
     select.setAttribute("aria-label", state.busy ? "下一轮模型" : "对话模型");
     refresh.disabled = state.modelSaving || state.modelsLoading;
     refresh.setAttribute("aria-busy", String(state.modelsLoading));
@@ -670,7 +673,7 @@ function updateReasoning(block) {
 }
 const workspaceJobs = new Map();
 const jobPoller = createJobPoller({
-  isActive: () => state.view === "chat" && !document.hidden && !!state.token && !$("#app").hidden,
+  isActive: () => state.view === "chat" && !document.hidden && (!!state.token || state.cookieAuth === true) && !$("#app").hidden,
   getJobs: () => [...workspaceJobs.values()].filter(job => job.sessionId === state.sessionId),
   readJob: (job, signal) => api(job.statusUrl, { signal }),
   onUpdate: job => rememberJob(job),
@@ -1562,6 +1565,7 @@ function accountCard() {
   card.append(
     el("h3", { text: "清华账号" }),
     status,
+    el("p", { class: "small muted", text: "用于登录网络学堂、云盘、雨课堂等校园站点。密码只保存在运行实例的本机账号文件里，登录时由它提交给学校统一身份认证；点“清除账号”可删除。这不是上面应用登录的密码。" }),
     el("label", { class: "field" }, [el("span", { text: "学号" }), username]),
     el("label", { class: "field" }, [el("span", { text: "密码" }), password]),
     el("div", { class: "settings-actions" }, [loginButton, clearButton]),
@@ -1581,6 +1585,13 @@ function servicesView() {
       el("button", { class: "ghost", type: "button", text: state.authChecking ? "核验中…" : "核验登录状态", disabled: state.authChecking, onclick: verifyAuthentication }),
     ]));
     if (state.authError) panel.append(el("div", { class: "error", role: "alert", text: state.authError }));
+    // 每种状态对应的下一步，只补一句能照着做的话，正常状态不堆说明。
+    const nextStep = {
+      unverified: "还没有核验过：点上方“核验登录状态”，或右侧登录一次。",
+      unknown: "最近一次核验没拿到可用结果：稍后重试，或重新登录。",
+      mock: "当前显示的是模拟数据，不代表真实登录状态。",
+    };
+    const describeSource = source => /^protected-api:/.test(source) ? "受保护接口核验" : /^tool:/.test(source) ? "工具调用核验" : source;
     for (const [name, label] of Object.entries(labels)) {
       const info = authPresentation(state.meta?.services?.[name], { checking: state.authChecking, stale: !!state.authError });
       const row = el("section", { class: "auth-service", dataset: { service: name } }, [
@@ -1592,13 +1603,27 @@ function servicesView() {
       if (name !== "gitlab") {
         row.append(el("button", { class: "ghost", type: "button", text: notice?.manual ? "人工验证" : state.authLoginBusy === name ? "登录中…" : "登录",
           disabled: !!state.authLoginBusy || state.authChecking, onclick: () => openLogin(name, !!notice?.manual) }));
+      } else if (!info.verified) {
+        // GitLab 用访问令牌而不是统一身份认证；入口在设置里，这里给出可点的下一步。
+        row.append(el("button", { class: "ghost", type: "button", text: "配置访问令牌", onclick: () => {
+          state.view = "settings";
+          render();
+          requestAnimationFrame(() => document.querySelector(".settings-gitlab")?.scrollIntoView({ block: "start" }));
+        } }));
       }
       if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : ""), role: notice.error ? "alert" : "status", text: notice.text }));
+      const hint = nextStep[info.state];
+      if (hint) row.append(el("div", { class: "small muted auth-hint", text: hint }));
       const record = el("details", { class: "auth-evidence" }, [el("summary", { text: "核验记录" })]);
-      if (info.checkedAt) record.append(el("div", { class: "small", text: "核验时间：" + new Date(info.checkedAt).toLocaleString() }));
-      if (info.source) record.append(el("div", { class: "small", text: "来源：" + info.source }));
-      if (info.code) record.append(el("div", { class: "small", text: "状态码：" + info.code }));
-      if (!info.checkedAt && !info.source && !info.code) record.append(el("div", { class: "small", text: "暂无受保护接口核验记录。" }));
+      if (info.checkedAt) record.append(el("div", { class: "small", text: "最近核验：" + new Date(info.checkedAt).toLocaleString() }));
+      if (info.source) record.append(el("div", { class: "small", text: "核验方式：" + describeSource(info.source) }));
+      if (!info.checkedAt && !info.source && !info.code) record.append(el("div", { class: "small", text: "还没有核验记录。" }));
+      if (info.source || info.code) {
+        const raw = el("details", { class: "auth-diagnostic" }, [el("summary", { class: "small", text: "诊断详情" })]);
+        if (info.source) raw.append(el("div", { class: "small", text: "来源：" + info.source }));
+        if (info.code) raw.append(el("div", { class: "small", text: "状态码：" + info.code }));
+        record.append(raw);
+      }
       row.append(record);
       panel.append(row);
     }

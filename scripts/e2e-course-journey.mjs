@@ -103,24 +103,24 @@ async function main() {
     check("窄屏课表无横向溢出", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.setViewportSize({ width: 1280, height: 900 });
 
-    await page.getByRole("button", { name: "添加课程", exact: true }).click();
+    await page.locator("#view").getByRole("button", { name: "添加课程", exact: true }).click();
     await page.getByPlaceholder("例如 大学物理").fill("本地自习");
     await page.getByPlaceholder("例如 六教6A216").fill("图书馆");
     await page.getByLabel("星期").selectOption("3");
     await page.getByLabel("开始节次").selectOption("3");
     await page.getByLabel("结束节次").selectOption("3");
-    await page.getByRole("button", { name: "保存到课表", exact: true }).click();
+    await page.locator("#view").getByRole("button", { name: "保存到课表", exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll('.course-block[data-custom="true"]').length === 1, null, { timeout: 15000 });
     check("本地自定义课程保存后出现在课表", /本地自习/.test(await page.locator('.course-block[data-custom="true"]').innerText()));
 
     learnx.state.failing = true;
-    await page.getByRole("button", { name: "刷新", exact: true }).click();
+    await page.locator("#view").getByRole("button", { name: "刷新", exact: true }).click();
     await page.waitForFunction(() => /教务课表读不到/.test(document.querySelector(".timetable-page")?.textContent || ""), null, { timeout: 15000 });
     check("上游不可用时说明原因并只显示本地课程", (await page.locator(".course-block").count()) === 1 && /本地自习/.test(await page.locator(".course-block").innerText()));
     check("失败状态不把旧教务课程当新结果", !/数据结构/.test(await page.locator(".timetable-page").innerText()));
 
     learnx.state.failing = false;
-    await page.getByRole("button", { name: "重新读取", exact: true }).click();
+    await page.locator("#view").getByRole("button", { name: "重新读取", exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll(".course-block").length === 2, null, { timeout: 15000 });
     const restored = await page.locator(".timetable-page").innerText();
     check("恢复后同时显示教务课与本地课且不重复", /数据结构/.test(restored) && /本地自习/.test(restored) && (restored.match(/数据结构/g) || []).length === 1);
