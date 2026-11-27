@@ -123,7 +123,9 @@
 - 统一登录：`POST /api/account/login` 一次编排 learnx/seat/sports/cloud/hetang/madmodel，逐服务归因（`ready/needs-manual/busy/unavailable/not-configured/queued/timeout/failed`），单服务 120 秒超时，界面按状态渲染并跟随 worker 任务进度（刷新后仍可续跟）。
 - 身份代际：账号变更/清除时递增代际并回收校园站点 Cookie 与网络学堂授权；契约见 `docs/identity-lifecycle.md`。
 - 座位链路 HTTP 化：规则、CAS 登录（SM2）、只读查询、预约、取消全部走普通 HTTP，浏览器只在无法建立会话时回退。真实 CAS 校验：不存在的账号返回官方「您的用户名或密码不正确，请重试！」，0.2 秒、无浏览器。
-- 门禁：全量单测 1144 项通过；分层规则 5 条通过；真实 Chromium `e2e:seat-cancel` 18 项、`e2e:session-journey` 34 项、`e2e:auth-services` 13 项通过。
+- 门禁（最终）：全量单测 **1149 项**通过；分层规则 5 条通过；真实 Chromium `e2e:seat-cancel` 18 项、`e2e:session-journey` **39 项**、`e2e:auth-services` 13 项通过；`packages/thu-cloud` 260 项、`packages/hetang` 365 项包内测试通过。
+- 部署实例 `a3a5c62`：`/healthz` 200、`/api/seat/rules` 200（3.6 秒，真实规则）；真实设备令牌走查服务页 7 行正常、无控制台异常、420px 无溢出。
+- **未冒充验证**：#171 的成功登录路径、#174 的预约窗口闪退原因、#166 的真实账号总验收，都需要用户本人操作；仓库内只有失败路径与夹具证据。
 
 ## 2026-11-25 上游 issue 批次与运行日志
 
