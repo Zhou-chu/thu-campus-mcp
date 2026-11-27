@@ -1886,3 +1886,24 @@ test("app: 右侧栏归档、详情与刷新真实交互", async t => {
   await flush();
   assert.equal(second.count("GET /api/sidebar/assignments/c1/h1"), 1, "详情走真实接口");
 });
+
+test("app: 导出调试日志带鉴权头取 Blob，而不是裸链接", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/debug-log": { ok: true, enabled: true, dir: "fixture", files: [], totalBytes: 0 },
+    "GET /api/debug-log/download": () => new Response('{"line":1}\n', { headers: { "content-type": "application/x-ndjson" } }),
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+  } });
+  const created = [];
+  const original = URL.createObjectURL;
+  URL.createObjectURL = blob => { created.push(blob); return "blob:fixture"; };
+  t.after(() => { URL.createObjectURL = original; });
+  a.nav("settings");
+  await flush();
+  a.click(a.button("导出最近日志"));
+  await flush();
+  const call = a.calls.find(item => item.method === "GET" && item.url.includes("/api/debug-log/download"));
+  assert.ok(call, "必须通过 fetch 下载");
+  assert.equal(call.options.headers.authorization, "Bearer fixture-device-token", "下载必须带设备令牌");
+  assert.equal(created.length, 1, "应生成 Blob 下载而不是跳转链接");
+  assert.equal(a.$('a[href="/api/debug-log/download"]'), undefined, "不应再保留裸链接");
+});

@@ -124,3 +124,19 @@ test("debug log: 忽略非日志文件", async t => {
   const files = (await log.status()).files.map(file => file.name);
   assert.deepEqual(files, ["debug.jsonl"]);
 });
+
+test("debug log: 按字节上限读取时对齐到行首，不切坏中文或多字节字符", async t => {
+  const dir = await temp(t);
+  const log = createDebugLog({ stateDir: dir, env: {} });
+  await log.setEnabled(true);
+  for (let index = 0; index < 20; index += 1)
+    log.log({ module: "http", event: "request", data: { path: "/api/会话/" + index, note: "中文记录内容" } });
+  await log.flush();
+  const text = await log.readRecent(120);
+  assert.notEqual(text, "", "上限内至少要给出完整行");
+  assert.doesNotMatch(text, /�/, "不能出现被切断的多字节字符");
+  for (const line of text.split("\n").filter(Boolean)) {
+    const parsed = JSON.parse(line);
+    assert.equal(parsed.event, "request");
+  }
+});

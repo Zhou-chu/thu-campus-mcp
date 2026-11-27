@@ -136,6 +136,29 @@ async function downloadArtifact(link, anchor) {
     anchor.after(el("span", { class: "download-error error", role: "alert", text: "下载失败：" + error.message + " 点击链接重试。" }));
   } finally { anchor.removeAttribute("aria-busy"); }
 }
+/** 导出调试日志：必须带鉴权头取 Blob，原生 <a> 在令牌模式下必然 401。 */
+async function downloadDebugLog(button) {
+  if (button.getAttribute("aria-busy") === "true") return;
+  button.setAttribute("aria-busy", "true");
+  try {
+    const response = await fetch(endpoint("/api/debug-log/download"), {
+      headers: { authorization: "Bearer " + state.token },
+      credentials: "omit",
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.error?.message || `导出失败（HTTP ${response.status}）`);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = el("a", { href: url, download: "debug.jsonl", hidden: true });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    toast("导出日志失败：" + (error?.message || "请稍后重试。"));
+  } finally { button.removeAttribute("aria-busy"); }
+}
 function endpoint(path) {
   // 只有校验通过的路径与服务器地址才会进入 fetch，避免把存储/查询串里的任意值拼成请求地址。
   return buildApiUrl(state.base, path);
@@ -2229,7 +2252,7 @@ function settingsView() {
     catch (error) { debugState.textContent = "切换失败：" + (error?.message || "请稍后重试。"); }
   });
   debugActions.append(
-    el("a", { class: "ghost", href: "/api/debug-log/download", download: "debug.jsonl", text: "导出最近日志" }),
+    el("button", { class: "ghost", type: "button", text: "导出最近日志", onclick: event => void downloadDebugLog(event.currentTarget) }),
     el("button", { class: "ghost danger", type: "button", text: "清空日志", onclick: async () => {
       try { paintDebug(await api("/api/debug-log/clear", { method: "POST", body: {} })); }
       catch (error) { debugState.textContent = "清空失败：" + (error?.message || "请稍后重试。"); }
