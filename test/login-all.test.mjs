@@ -103,3 +103,13 @@ test("统一登录编排：单个服务超时不会拖垮整体", async () => {
   assert.equal(result.results.sports.state, "ready");
   assert.equal(result.ok, true, "其它服务仍算成功");
 });
+
+test("统一登录编排：MadModel 只检查不自动开窗，缺授权归为需要本人", async () => {
+  assert.equal(classifyLoginOutcome({ code: "MADMODEL_LOGIN_REQUIRED" }).state, "needs-manual");
+  const result = await loginAll({
+    account: { username: "u", password: "p" },
+    adapters: { madmodel: async () => ({ ok: false, code: "MADMODEL_LOGIN_REQUIRED", message: "MadModel 需要在本机打开登录窗口完成一次授权。" }) },
+  });
+  assert.equal(result.results.madmodel.state, "needs-manual");
+  assert.match(result.results.madmodel.message, /登录窗口/);
+});

@@ -11,6 +11,7 @@
  */
 import assert from "node:assert/strict";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { mkdtemp, readdir, rm, stat, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { chromium } from "playwright-core";
@@ -208,6 +209,26 @@ async function main() {
     await page.getByRole("button", { name: "保存并登录", exact: true }).click();
     await page.waitForFunction(() => /登录任务/.test(document.querySelector('[data-service="cloud"] .auth-notice')?.textContent || ""), null, { timeout: 20000 });
     check("编排把 worker 服务标成任务进行中", /正在运行|正在启动/.test(await page.locator('[data-service="cloud"] .auth-notice').innerText()));
+
+    // 并发矩阵：座位与体育查询同时发起，都要在预算内返回，且不留浏览器窗口/租约。
+    sequence.length = 0;
+    sequence.push({
+      ok: true, total: 6, ready: 6, needsManual: [], busy: 0,
+      results: Object.fromEntries(["learnx", "seat", "sports", "cloud", "hetang", "madmodel"].map(name => [name, { ok: true, state: "ready", code: "VERIFIED" }])),
+    });
+    const probeStarted = Date.now();
+    const concurrent = await page.evaluate(async () => {
+      // 两个服务各走一条读接口：这里验证的是“同一时刻两个请求都能被处理”，不依赖伪造的校园数据。
+      const call = path => fetch(path, { headers: { "x-csrf-token": "gate" } })
+        .then(async response => ({ status: response.status, json: await response.json().catch(() => null) }));
+      const [seat, sports] = await Promise.all([call("/api/seat/bookings"), call("/api/sports/reservations")]);
+      return { seat, sports };
+    });
+    const answered = value => value?.json && typeof value.json.ok === "boolean";
+    check("并发查询两个服务都得到结构化应答", answered(concurrent.seat) && answered(concurrent.sports), JSON.stringify(concurrent));
+    check("并发查询在 5 秒预算内", Date.now() - probeStarted < 5000, `${Date.now() - probeStarted}ms`);
+    const leaseFile = path.join(dir, "browser-lease.json");
+    check("并发查询不起浏览器也不留租约", !existsSync(leaseFile), "存在租约文件");
 
     check("页面无未捕获异常", pageErrors.length === 0, pageErrors.join(" | "));
     console.log(`session journey gate: ${checks} checks passed`);

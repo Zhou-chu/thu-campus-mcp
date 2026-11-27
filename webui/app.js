@@ -1714,11 +1714,18 @@ function accountCard() {
         }
         updateAuthPanels();
         const skip = Object.keys(DIRECT_LOGIN).filter(name => authPresentation(state.meta?.services?.[name]).state === "ready");
-        const batch = await apiWithTimeout("/api/account/login", { method: "POST", body: { skip, services: ["learnx", "seat", "sports", "cloud", "hetang"] } }, 180000);
+        const batch = await apiWithTimeout("/api/account/login", { method: "POST", body: { skip, services: ["learnx", "seat", "sports", "cloud", "hetang", "madmodel"] } }, 180000);
         checkLoginConnection(connection);
         const queued = [];
         for (const [name, item] of Object.entries(batch?.results || {})) {
-          if (name === "cloud" || name === "hetang" || name === "madmodel") {
+          if (name === "madmodel") {
+            // MadModel 的授权窗口只能本人操作：这里只显示结论与下一步，不自动开窗。
+            state.authNotices[name] = item.ok
+              ? { text: "已登录。" }
+              : { error: true, code: item.code, text: item.message || "MadModel 需要在本机完成一次授权登录。" };
+            continue;
+          }
+          if (name === "cloud" || name === "hetang") {
             // 走 worker 任务的服务：提交成功就继续跟进度，不再重复点登录。
             if (item.state === "queued" && item.jobId) { state.authNotices[name] = { text: "登录任务已提交，正在运行…" }; queued.push([name, item.jobId]); }
             else if (!item.ok) state.authNotices[name] = { error: true, code: item.code, text: "登录未完成：" + (item.message || item.code || "请重试。") };
