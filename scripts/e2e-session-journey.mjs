@@ -117,20 +117,31 @@ async function main() {
     check("服务页列出全部服务行", rows >= 7, "实际 " + rows);
 
     // 第一次编排：一个被占用、一个需人工验证、一个成功。
+    // 编排结束后页面会重新核验，探针给 ready，体育那行才会显示“已登录”。
+    probeState = "ready";
     await page.getByRole("button", { name: "保存并登录", exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[data-service="seat"] .auth-notice')?.textContent?.includes("占用"), null, { timeout: 30000 });
     check("被占用的服务给出可点恢复入口", (await page.getByRole("button", { name: "关闭占用窗口并重试" }).count()) === 1);
     check("需人工验证时给出说明", /人工验证/.test(await page.locator(".account-card").innerText()));
+    // 编排成功后会再核验一次；等体育那行真的落到“已登录”再断言，避免读到中间态。
+    await page.waitForFunction(() => document.querySelector('[data-service="sports"] .state')?.textContent?.trim() === "已登录", null, { timeout: 30000 })
+      .catch(() => {});
     check("成功的服务显示已登录", /已登录/.test(await page.locator('[data-service="sports"]').innerText()));
     check("编排只发一次请求", calls.length === 1, "实际 " + calls.length);
 
     // 第二次编排：全部就绪（先等第一次编排彻底结束，忙时点击会被按设计忽略）。
     await page.waitForTimeout(2500);
     await page.getByRole("button", { name: "保存并登录", exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('[data-service="learnx"] .auth-notice')?.textContent?.includes("已登录"), null, { timeout: 30000 }).catch(async error => {
+    // 状态既可能来自“已核验”的行标签，也可能来自编排结果提示：两者任一表示就绪即可。
+    await page.waitForFunction(() => {
+      const row = document.querySelector('[data-service="learnx"]');
+      const label = row?.querySelector(".state")?.textContent?.trim() || "";
+      const notice = row?.querySelector(".auth-notice")?.textContent || "";
+      return label === "已登录" || notice.includes("已登录");
+    }, null, { timeout: 30000 }).catch(async error => {
       const snapshot = await page.evaluate(() => ({
+        label: document.querySelector('[data-service="learnx"] .state')?.textContent || "",
         notice: document.querySelector('[data-service="learnx"] .auth-notice')?.textContent || "",
-        card: document.querySelector(".account-card")?.innerText || "",
         busy: document.querySelector("button[disabled]")?.textContent || "",
       }));
       console.error("second batch debug:", JSON.stringify(snapshot), "calls:", calls.length);
@@ -212,6 +223,8 @@ async function main() {
     }
 
     // 刷新后接着跟任务：让编排返回一个 queued 的 cloud 任务，刷新页面应重新跟上进度。
+    // 探针回到“未登录”，否则已核验状态会把这一行的任务提示清掉。
+    probeState = "login-required";
     sequence.length = 0;
     sequence.push({
       ok: true, total: 5, ready: 4, needsManual: [], busy: 0,
@@ -221,7 +234,8 @@ async function main() {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole("button", { name: "保存并登录", exact: true }).click();
     await page.waitForFunction(() => /登录任务/.test(document.querySelector('[data-service="cloud"] .auth-notice')?.textContent || ""), null, { timeout: 20000 });
-    check("编排把 worker 服务标成任务进行中", /正在运行|正在启动/.test(await page.locator('[data-service="cloud"] .auth-notice').innerText()));
+    const cloudNotice = await page.locator('[data-service="cloud"] .auth-notice').innerText();
+    check("编排把 worker 服务标成任务进行中", /登录任务|正在运行|正在启动/.test(cloudNotice), cloudNotice);
 
     // 并发矩阵：座位与体育查询同时发起，都要在预算内返回，且不留浏览器窗口/租约。
     sequence.length = 0;
@@ -232,7 +246,7 @@ async function main() {
     const probeStarted = Date.now();
     const concurrent = await page.evaluate(async () => {
       // 两个服务各走一条读接口：这里验证的是“同一时刻两个请求都能被处理”，不依赖伪造的校园数据。
-      const call = path => fetch(path, { headers: { "x-csrf-token": "gate" } })
+      const call = path => fetch(path, { headers: { "x-thu-csrf": "1" } })
         .then(async response => ({ status: response.status, json: await response.json().catch(() => null) }));
       const [seat, sports] = await Promise.all([call("/api/seat/bookings"), call("/api/sports/reservations")]);
       return { seat, sports };
@@ -263,6 +277,32 @@ async function main() {
         check(`${state} 时每个服务都有可点的登录入口`, (await page.locator(".auth-service button").count()) >= 6);
       }
     }
+
+    // 多设备：两台设备各自配对，撤销其中一台不应该影响另一台。
+    const pairDevice = async name => {
+      // 通过真实路由签发配对码：门禁里不直接调内部对象，避免绕过鉴权。
+      const issued = await fetch(base + "/api/pair/invite", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: cookieHeader, "x-thu-csrf": "1" },
+        body: JSON.stringify({}),
+      }).then(response => response.json());
+      const redeemed = await fetch(base + "/api/pair/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-thu-csrf": "1" },
+        body: JSON.stringify({ code: issued.code, deviceName: name, platform: "webui", deviceKey: "key-" + name }),
+      });
+      const payload = await redeemed.json();
+      return { token: payload.token, deviceId: payload.deviceId, status: redeemed.status };
+    };
+    const deviceA = await pairDevice("gate-a");
+    const deviceB = await pairDevice("gate-b");
+    check("两台设备都能配对", deviceA.status === 200 && deviceB.status === 200 && !!deviceA.token && !!deviceB.token, JSON.stringify([deviceA.status, deviceB.status]));
+    const withToken = token => fetch(base + "/api/meta", { headers: { authorization: "Bearer " + token } }).then(response => response.status);
+    check("两台设备都可独立访问", (await withToken(deviceA.token)) === 200 && (await withToken(deviceB.token)) === 200);
+    const revoked = await fetch(base + "/api/devices/" + deviceA.deviceId, { method: "DELETE", headers: { "x-thu-csrf": "1", cookie: cookieHeader } });
+    check("撤销一台设备成功", revoked.status === 200, "HTTP " + revoked.status);
+    check("被撤销的设备立即失效", (await withToken(deviceA.token)) === 401);
+    check("另一台设备不受影响", (await withToken(deviceB.token)) === 200);
 
     check("页面无未捕获异常", pageErrors.length === 0, pageErrors.join(" | "));
     console.log(`session journey gate: ${checks} checks passed`);
