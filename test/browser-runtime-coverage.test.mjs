@@ -78,7 +78,7 @@ async function fixture(t) {
     context.pages = () => context._pages;
     context.newPage = async () => {
       const page = Object.assign(new EventEmitter(), { urlText: ORIGIN + "/", setDefaultTimeout(value) { assert.equal(value, 1000); }, isClosed: () => Boolean(f.pageClosed), url: () => f.urls?.length ? f.urls.shift() : page.urlText,
-        goto: async url => { f.gotoCalls.push(url); page.urlText = url; page.emit("framenavigated", frame); if (f.onGoto) await f.onGoto(page, url, context); },
+        goto: async (url, options = {}) => { f.gotoCalls.push(url); page.urlText = url; page.emit("framenavigated", frame); if (f.onGoto) await f.onGoto(page, url, context, options); options.signal?.throwIfAborted?.(); },
         content: async () => '<meta name="_csrf" content="fixture-csrf">',
         evaluate: async (fn, arg) => fn(arg),
         locator: selector => { const loc = { first: () => loc, count: async () => selector === "#c_code" && f.challenge ? 1 : 0, isVisible: async () => true, getAttribute: async () => null }; return loc; },
@@ -281,4 +281,40 @@ test("browser jobs: 没有 PID 的 queued 过期后不再当作运行中", async
   const now = new Date().toISOString();
   await f.put(`state/jobs/${freshId}.json`, { id: freshId, action: "open", service: "all", status: "queued", createdAt: now, updatedAt: now });
   assert.equal((await browserJobs()).find(job => job.id === freshId).status, "queued", "刚开始的任务仍在排队");
+});
+
+test("停止请求在时间预算内让挂起的导航进入终态并释放租约", async t => {
+  const f = await fixture(t);
+  f.installSpawn();
+  await f.installed();
+  const job = { id: randomUUID(), status: "queued", action: "open", service: "learnx", updatedAt: "0" };
+  await f.put(`state/jobs/${job.id}.json`, job);
+
+  // 导航挂起：只有收到 abort 才会结束，模拟真实 Playwright 的行为。
+  f.onGoto = (_page, _url, _context, options = {}) => new Promise((_resolve, reject) => {
+    const signal = options.signal;
+    const abort = () => { const error = new Error("navigation aborted"); error.name = "AbortError"; reject(error); };
+    if (signal?.aborted) return abort();
+    signal?.addEventListener?.("abort", abort, { once: true });
+  });
+
+  const started = Date.now();
+  const running = jobs.runBrowserJob(job.id);
+  // 等 worker 真正进到导航。
+  for (let attempt = 0; attempt < 50 && !f.gotoCalls.length; attempt += 1) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(f.gotoCalls.length > 0, true, "应当已经进入导航");
+
+  await jobs.cancelBrowserJob(job.id);
+  f.intervals.findLast(timer => timer.ms === 500)?.fn();
+
+  const settled = await Promise.race([running.then(() => "done"), new Promise(resolve => setTimeout(() => resolve("timeout"), 5000))]);
+  const elapsed = Date.now() - started;
+  assert.equal(settled, "done", "停止后导航必须收敛，不能一直挂着");
+  assert.ok(elapsed < 5000, `应在预算内结束，实际 ${elapsed}ms`);
+
+  const saved = JSON.parse(await readFile(f.path(`state/jobs/${job.id}.json`), "utf8"));
+  assert.equal(saved.status, "stopped");
+  assert.match(saved.detail || "", /interrupted|navigation/i, "停止原因要是导航被中断");
+  const lease = await readFile(path.join(f.cfg.stateDir, "browser-lease.json"), "utf8").catch(() => "");
+  assert.equal(lease, "", "任务结束后不残留租约");
 });
