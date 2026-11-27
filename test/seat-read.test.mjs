@@ -114,3 +114,33 @@ test("seat: 同一天多个时段时可按 segment 选择，默认取第一个",
   assert.throws(() => chooseSeatSegment(dayList, day, "99", checked), { code: "SEAT_SEGMENT_INVALID" });
   assert.throws(() => chooseSeatSegment([], day, "", checked), { code: "SEAT_EMPTY" });
 });
+
+test("座位只读：登录页或跳转识别为会话失效，触发一次性恢复", async () => {
+  const { createSeatReader, createSeatReadSession, SeatError } = await import("../lib/app/seat-read.mjs");
+  const snapshot = async () => ({ cookies: [{ domain: "seat.lib.tsinghua.edu.cn", path: "/", name: "access_token", value: "t", expires: -1 }] });
+  const html = () => new Response("<html>统一身份认证</html>", { status: 200, headers: { "content-type": "text/html" } });
+  const reader = createSeatReader({ snapshot, fetchImpl: async () => html() });
+  await assert.rejects(async () => (await reader())( "/api.php/v3areas/35"), (error) => error instanceof SeatError && error.code === "SEAT_LOGIN_REQUIRED");
+
+  const redirect = createSeatReader({ snapshot, fetchImpl: async () => new Response("", { status: 302, headers: { location: "https://id.tsinghua.edu.cn/do/off/ui/auth/login" } }) });
+  await assert.rejects(async () => (await redirect())( "/api.php/v3areas/35"), (error) => error.code === "SEAT_LOGIN_REQUIRED");
+
+  const elsewhere = createSeatReader({ snapshot, fetchImpl: async () => new Response("", { status: 302, headers: { location: "https://proxy.example/x" } }) });
+  await assert.rejects(async () => (await elsewhere())( "/api.php/v3areas/35"), (error) => error.code === "SEAT_BAD_RESPONSE");
+
+  // 恢复只发起一次，并且只重试只读查询。
+  let refreshes = 0;
+  let calls = 0;
+  const session = createSeatReadSession({
+    createReader: () => async () => {
+      calls += 1;
+      if (calls === 1) throw new SeatError("SEAT_LOGIN_REQUIRED", "会话已失效");
+      return { data: { ok: true } };
+    },
+    refresh: async () => { refreshes += 1; return { ok: true }; },
+  });
+  const result = await session(async ({ call }) => call("/api.php/v3areas/35"));
+  assert.deepEqual(result, { data: { ok: true } });
+  assert.equal(refreshes, 1, "只恢复一次");
+  assert.equal(calls, 2, "恢复后只重试一次");
+});
