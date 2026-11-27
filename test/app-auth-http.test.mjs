@@ -59,7 +59,7 @@ async function boot(t, options = {}) {
     await app.close();
     await rm(dir, { recursive: true, force: true });
   });
-  return { url, session };
+  return { url, session, dir };
 }
 
 function cookieOf(response) {
@@ -420,4 +420,22 @@ test("清华账号直连登录：固定令牌实例不开放账号登录", async
   });
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error.code, "UNIFIED_LOGIN_DISABLED");
+});
+
+test("统一登录：账号提交失败时回收刚签发的设备令牌", async t => {
+  const { url, dir } = await boot(t, {
+    unifiedLogin: async () => ({
+      ok: true,
+      username: "2024000000",
+      commit: async () => { throw new Error("磁盘写入失败"); },
+    }),
+  });
+  const response = await fetch(url + "/api/auth/unified", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ account: "2024000000", password: "right-pass-123", deviceKey: "commit-fail-key" }),
+  });
+  assert.equal(response.status, 500, "提交失败不能返回成功令牌");
+  const devices = await new DeviceStore(dir, { encrypt: async buffer => buffer }).list();
+  assert.equal(devices.length, 0, "失败后不应残留设备记录");
 });
