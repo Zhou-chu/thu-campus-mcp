@@ -165,6 +165,30 @@ async function main() {
     const buttonBox = await page.getByRole("button", { name: "保存并登录", exact: true }).boundingBox();
     check("窄屏保存按钮高度不小于 44px", buttonBox && buttonBox.height >= 44, JSON.stringify(buttonBox));
 
+    // 进程重启：同一状态目录换一个新实例，已建立的会话必须继续可用。
+    const cookies = await page.context().cookies(base);
+    const cookieHeader = cookies.map(cookie => cookie.name + "=" + cookie.value).join("; ");
+    check("页面持有登录会话", cookieHeader.length > 0);
+    const restarted = createAppServer({
+      config: { root: ROOT, host: "127.0.0.1", port: 0, stateDir: dir, token: "", modelRoute: "madmodel", modelName: "", hostname: "session-gate-2", version: "gate" },
+      host, route,
+      devices: new DeviceStore(dir, { encrypt: async buffer => buffer }),
+      pairing: new PairingCodes(),
+      sessions: new SessionStore(dir),
+      version: "gate",
+      webuiDir: path.join(ROOT, "webui"),
+      auth: session.auth,
+      store: session,
+      loginAll,
+    });
+    try {
+      const base2 = await restarted.listen();
+      const meta = await fetch(base2 + "/api/meta", { headers: { cookie: cookieHeader } });
+      check("重启后原登录会话仍可用", meta.status === 200, "HTTP " + meta.status);
+    } finally {
+      await restarted.close();
+    }
+
     check("页面无未捕获异常", pageErrors.length === 0, pageErrors.join(" | "));
     console.log(`session journey gate: ${checks} checks passed`);
   } finally {
