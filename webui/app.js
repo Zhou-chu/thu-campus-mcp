@@ -1669,16 +1669,24 @@ function accountCard() {
           describe(await api("/api/account", { method: "PUT", body: { username: username.value.trim(), password: password.value } }));
           password.value = "";
         }
+        // 一次请求交给服务端统一编排：每个服务独立成败，按状态给出下一步。
         for (const name of Object.keys(DIRECT_LOGIN)) {
-          checkLoginConnection(connection);
+          if (authPresentation(state.meta?.services?.[name]).state === "ready") continue;
           state.authNotices[name] = { text: "登录中…" };
-          updateAuthPanels();
-          await loginService(name, false, connection);
-          if (state.authNotices[name]?.code === "CAS_CAPTCHA_REQUIRED") {
-            state.authNotices.all = { error: true, text: "学校统一身份认证要求人工验证，已停止后续自动登录；请先完成人工验证再重试。" };
-            break;
-          }
         }
+        updateAuthPanels();
+        const skip = Object.keys(DIRECT_LOGIN).filter(name => authPresentation(state.meta?.services?.[name]).state === "ready");
+        const batch = await apiWithTimeout("/api/account/login", { method: "POST", body: { skip } }, 180000);
+        checkLoginConnection(connection);
+        for (const [name, item] of Object.entries(batch?.results || {})) {
+          if (!DIRECT_LOGIN[name]) continue;
+          state.authNotices[name] = item.ok
+            ? { text: item.alreadyLoggedIn ? "已登录，无需重复登录。" : "已登录。" }
+            : { error: true, code: item.code, text: "登录未完成：" + (item.message || item.code || "请重试。"),
+                manual: ["CAS_CAPTCHA_REQUIRED", "SEAT_LOGIN_UNCONFIRMED", "SPORTS_MANUAL_VERIFICATION"].includes(item.code) };
+        }
+        if (batch?.needsManual?.length)
+          state.authNotices.all = { error: true, text: "学校统一身份认证要求人工验证，其余服务未自动登录；请先在运行实例上完成验证再重试。" };
         await verifyAuthentication();
       } finally { state.authLoginBusy = ""; updateAuthPanels(); }
     }, { pending: "登录中…", errorNode }),

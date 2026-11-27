@@ -481,3 +481,17 @@ test("体育预约窗口：失败要把原因写进日志，并区分未登录/�
   assert.match(result.body.error.message, /尚未开放/);
   assert.deepEqual(logged, [["sports-booking-prepare-failed", { code: "DATE_NOT_AVAILABLE" }]]);
 });
+
+test("统一登录：POST /api/account/login 把已核验服务作为 skip 传下去", async () => {
+  await withDir(async stateDir => {
+    const seen = [];
+    const handler = createAccountRoutes({
+      config: { stateDir, host: "0.0.0.0" },
+      loginAll: async options => { seen.push(options); return { ok: true, total: 2, ready: 2, results: {} }; },
+      readBody: async () => ({ skip: ["seat", 42, "sports", "learnx"] }),
+    });
+    const result = await call(handler, { pathname: "/api/account/login", method: "POST" });
+    assert.equal(result.status, 200);
+    assert.deepEqual(seen[0].skip, ["seat", "sports", "learnx"], "只接受字符串");
+  });
+});

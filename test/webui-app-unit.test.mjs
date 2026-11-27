@@ -492,6 +492,30 @@ test("app: 浏览器被占用时给出可点的关闭窗口动作", async t => {
   assert.equal(a.$('[data-service="seat"] .auth-notice'), undefined, "重试后旧提示应清掉");
 });
 
+test("app: 保存并登录走统一编排，一次请求拿到各服务状态", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "PUT /api/account": { ok: true, configured: true, masked: "2024****19" },
+    "GET /api/account": { ok: true, configured: true, masked: "2024****19" },
+    "POST /api/account/login": { ok: true, total: 3, ready: 2, needsManual: [], busy: 0, results: {
+      learnx: { ok: true, state: "ready", code: "VERIFIED", message: "" },
+      seat: { ok: false, state: "busy", code: "BROWSER_BUSY", message: "浏览器正被占用" },
+      sports: { ok: true, state: "ready", code: "VERIFIED", message: "" },
+    } },
+    "GET /api/auth/status": { ok: true, services: {} },
+  } });
+  a.nav("services");
+  await flush();
+  a.click(a.button("保存并登录"));
+  await flush();
+  assert.equal(a.count("POST /api/account/login"), 1, "一次请求完成全部服务");
+  assert.equal(a.count("POST /api/auth/learnx"), 0, "不再逐服务打直达登录接口");
+  assert.equal(a.count("POST /api/seat/login"), 0);
+  assert.match(a.$('[data-service="learnx"] .auth-notice').textContent, /已登录/);
+  assert.match(a.$('[data-service="seat"] .auth-notice').textContent, /浏览器正被占用/);
+  assert.ok(a.button("关闭占用窗口并重试", a.$('[data-service="seat"]')), "被占用时要给可点的恢复入口");
+});
+
 test("app: login polls queued, downloading and running without claiming a window or duplicate starts", async t => {
   const jobs = [{ status: "queued" }, { status: "running", phase: "downloading" }, { status: "running", phase: "login" }, { status: "complete" }];
   const a = await app(t, { routes: {
@@ -907,7 +931,7 @@ test("app: sports view lists sports, venues and dates from the real routes", asy
     routes: {
       "GET /api/sports/sports": { ok: true, sports: ["羽毛球", "游泳"] },
       "GET /api/sports/venues?sport=%E7%BE%BD%E6%AF%9B%E7%90%83": { ok: true, sport: "羽毛球", venues: ["气膜馆羽毛球", "综体羽毛球"] },
-      [`GET /api/sports/slots?sport=%E7%BE%BD%E6%AF%9B%E7%90%83&venue=%E6%B0%94%E8%86%9C%E9%A6%86%E7%BE%BD%E6%AF%9B%E7%90%83&date=${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`]: {
+      [`GET /api/sports/slots?sport=%E7%BE%BD%E6%AF%9B%E7%90%83&venue=%E6%B0%94%E8%86%9C%E9%A6%86%E7%BE%BD%E6%AF%9B%E7%90%83&date=${new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" })}`]: {
         ok: true,
         sessions: [
           { site: "羽01", begin: "07:00", end: "08:00", capacity: 1, reserved: 1, status: "N", statusReason: "当前场次预约人数已满", price: 0 },
@@ -933,7 +957,7 @@ test("app: sports view lists sports, venues and dates from the real routes", asy
 test("app: 快速切换运动时旧场馆响应不会覆盖新选择", async t => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, { routes: {
     "GET /api/sports/sports": { ok: true, sports: ["羽毛球", "游泳"] },
     "GET /api/sports/venues?sport=%E7%BE%BD%E6%AF%9B%E7%90%83": async () => { await gate; return { ok: true, sport: "羽毛球", venues: ["旧场馆"] }; },
@@ -1030,7 +1054,7 @@ test("app: sports shows manual verification and exposes the matching login actio
 });
 
 test("app: refreshing a throttled sports venue preserves selected date and reloads only its slots", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const slotKey = `GET /api/sports/slots?sport=${encodeURIComponent("游泳")}&venue=${encodeURIComponent("陈明游泳馆")}&date=${day}`;
   const a = await app(t, { routes: {
     "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
@@ -1478,7 +1502,7 @@ test("app: sports view reports empty catalog and venue failures honestly", async
 });
 
 test("app: sports sessions show price, capacity and status truthfully", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, {
     routes: {
       "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
@@ -1545,7 +1569,7 @@ test("app: gitlab settings surface save and connection failures instead of prete
 
 
 test("app: sports booking buttons report the prepared step and failures honestly", async t => {
-  const day = new Date().toLocaleDateString("sv-SE");
+  const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
   const a = await app(t, {
     routes: {
       "GET /api/sports/sports": { ok: true, sports: ["游泳"] },
