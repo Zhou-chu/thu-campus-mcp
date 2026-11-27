@@ -479,7 +479,7 @@ test("体育预约窗口：失败要把原因写进日志，并区分未登录/�
   assert.equal(result.status, 409);
   assert.equal(result.body.error.code, "DATE_NOT_AVAILABLE");
   assert.match(result.body.error.message, /尚未开放/);
-  assert.deepEqual(logged, [["sports-booking-prepare-failed", { code: "DATE_NOT_AVAILABLE" }]]);
+  assert.deepEqual(logged, [["sports-booking-prepare-failed", { code: "DATE_NOT_AVAILABLE", phase: "" }]]);
 });
 
 test("统一登录：POST /api/account/login 把已核验服务作为 skip 传下去", async () => {
@@ -529,4 +529,34 @@ test("账号变更：凭据变了才回收会话，清除总会回收并返回�
     assert.equal(cleared.body.generation, 2, "保存一次 + 清除一次");
     assert.deepEqual(events, ["account-changed", "account-cleared"]);
   });
+});
+
+test("预约窗口：非预期异常也会在日志里留下代码，并给用户可读提示", async () => {
+  const logged = [];
+  const fixture = campusFixture({});
+  fixture.base.prepareBooking = async () => { const error = new Error("boom"); error.name = "TargetClosedError"; error.code = "BROWSER_CLOSED"; throw error; };
+  fixture.base.bookingFailureLog = error => ({ code: error.code, name: error.name, phase: "" });
+  fixture.base.logger = (name, meta) => logged.push({ name, meta });
+  const response = await call(createCampusRoutes(fixture.base), {
+    method: "POST",
+    pathname: "/api/sports/booking/prepare",
+    body: { sport: "游泳", venue: "陈明游泳馆" },
+  });
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error.code, "BOOKING_PREPARE_FAILED");
+  assert.ok(!/boom/.test(response.body.error.message), "不能把内部错误直接抛给用户");
+  assert.equal(logged.at(-1)?.name, "sports-booking-prepare-crashed");
+  assert.equal(logged.at(-1)?.meta.code, "BROWSER_CLOSED");
+  assert.equal(logged.at(-1)?.meta.name, "TargetClosedError");
+});
+
+test("预约窗口：BookingError 记下失败的步骤", async () => {
+  const logged = [];
+  const fixture = campusFixture({});
+  fixture.base.prepareBooking = async () => { const error = new fixture.base.BookingError("BOOKING_PAGE_UNEXPECTED", "页面没加载"); error.phase = "page-ready"; throw error; };
+  fixture.base.logger = (name, meta) => logged.push({ name, meta });
+  const response = await call(createCampusRoutes(fixture.base), { method: "POST", pathname: "/api/sports/booking/prepare", body: {} });
+  assert.equal(response.status, 409);
+  assert.equal(logged.at(-1)?.name, "sports-booking-prepare-failed");
+  assert.equal(logged.at(-1)?.meta.phase, "page-ready");
 });
