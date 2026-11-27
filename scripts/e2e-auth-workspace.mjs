@@ -174,11 +174,13 @@ async function main() {
       const actual = await page.evaluate(() => { const font = selector => Number.parseFloat(getComputedStyle(document.querySelector(selector)).fontSize); const r = document.querySelector("#composer").getBoundingClientRect(); return { width: innerWidth, body: font(".rich p"), tool: font(".tool-name"), state: font(".tool-state"), sync: font(".job-storage-state"), button: font("#chat-send"), overflow: document.documentElement.scrollWidth > innerWidth, reachable: r.top >= 0 && r.bottom <= innerHeight }; });
       const expected = width < 900 ? [16,16,14,15] : width < 1600 ? [18,16,15,16] : [20,17,16,17];
       check(width + "px真实长消息、双状态与输入区字号可达", [actual.body,actual.tool,actual.state,actual.button].every((value, index) => value === expected[index]) && actual.sync === expected[2] && !actual.overflow && actual.reachable);
-      sizes.push(actual); await page.screenshot({ path: path.join(screenshotDir, `cloud-light-${width}.png`) });
+      sizes.push(actual);
+      // 截图只是排查证据：渲染进程在长跑覆盖率采集后偶尔已被回收，不应把诊断文件当断言。
+      await page.screenshot({ path: path.join(screenshotDir, `cloud-light-${width}.png`) }).catch(error => console.warn("screenshot skipped", width, error.message));
     }
     await page.setViewportSize({ width: 390, height: 640 }); await page.click("#theme-dark"); await cleanup.locator(":scope > summary").scrollIntoViewIfNeeded();
     check("窄屏深色双状态与输入不溢出", await page.evaluate(() => document.documentElement.dataset.theme === "dark" && document.documentElement.scrollWidth <= innerWidth && document.querySelector("#composer").getBoundingClientRect().bottom <= innerHeight));
-    await page.screenshot({ path: path.join(screenshotDir, "cloud-dark-390.png") });
+    await page.screenshot({ path: path.join(screenshotDir, "cloud-dark-390.png") }).catch(error => console.warn("screenshot skipped", 390, error.message));
     await page.locator("#composer").focus();
     const keyboardOrder = [];
     for (const selector of ['.add-menu > summary', '.cloud-picker > summary', '#chat-model', '.model-refresh', '#chat-effort', '#chat-send']) {

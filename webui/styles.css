@@ -1495,6 +1495,8 @@ body[data-sidebar="closed"] .rsidebar {display:none;}
 @media (max-width: 899px) {
   /* 九个入口一行放不下：按 64px 最小宽度自动换行，避免「服务/设置」被藏在没有滚动条的横滑区外。 */
   .tabbar { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); overflow-x: visible; }
+  /* 两行导航占用的高度要还一些给正文，否则 390×640 时消息区只剩三行。 */
+  .tabbar .tab { min-height: 44px; padding-block: 4px; }
 }
 
 @media (max-width: 430px) {
