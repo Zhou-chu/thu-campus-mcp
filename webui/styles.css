@@ -756,6 +756,7 @@ a:focus-visible {
 
 /* 运行状态与认证真值分离，核验证据按需展开。 */
 .auth-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.auth-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .auth-service { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
 .auth-service .item-title { white-space: normal; }
 .auth-service-main { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }

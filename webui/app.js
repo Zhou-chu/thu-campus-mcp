@@ -1405,6 +1405,19 @@ async function verifyAuthentication() {
   } catch (error) { state.authError = "核验失败：" + error.message; }
   finally { state.authChecking = false; updateAuthPanels(); }
 }
+/** 关闭运行实例上打开过的登录/预约窗口，释放浏览器占用；远程用户也能收尾。 */
+async function closeBrowserWindows() {
+  try {
+    await apiWithTimeout("/api/tools/campus_browser_close", { method: "POST", body: {} }, 20000);
+  } catch (error) {
+    toast("关闭登录窗口失败：" + (error?.message || "请稍后重试。"));
+    return false;
+  }
+  for (const name of Object.keys(state.authNotices)) delete state.authNotices[name];
+  updateAuthPanels();
+  await verifyAuthentication();
+  return true;
+}
 function loginFailure(code) {
   const messages = {
     BROWSER_ACCOUNT_REQUIRED: "请先在清华账号中保存账号，再打开登录窗口。",
@@ -1496,7 +1509,7 @@ async function loginService(name, manual, connection) {
   } catch (error) {
     if (error.code === "LOGIN_TARGET_CHANGED" || state.base !== connection.base || state.token !== connection.token) return;
     const manualCodes = new Set(["CAS_CAPTCHA_REQUIRED", "SEAT_LOGIN_UNCONFIRMED", "SPORTS_MANUAL_VERIFICATION"]);
-    state.authNotices[name] = { error: true, text: "登录未完成：" + error.message,
+    state.authNotices[name] = { error: true, text: "登录未完成：" + error.message, code: error.code,
       manual: !!DIRECT_LOGIN[name] && manualCodes.has(error.code) };
   }
 }
@@ -1582,8 +1595,16 @@ function servicesView() {
     clear(panel);
     panel.append(el("div", { class: "auth-header" }, [
       el("h2", { text: "服务状态" }),
-      el("button", { class: "ghost", type: "button", text: state.authChecking ? "核验中…" : "核验登录状态", disabled: state.authChecking, onclick: verifyAuthentication }),
+      el("div", { class: "auth-actions" }, [
+        el("button", {
+          class: "ghost", type: "button", text: "关闭登录窗口",
+          title: "关闭本机打开过的登录/预约窗口，释放浏览器占用",
+          onclick: () => { void closeBrowserWindows(); },
+        }),
+        el("button", { class: "ghost", type: "button", text: state.authChecking ? "核验中…" : "核验登录状态", disabled: state.authChecking, onclick: verifyAuthentication }),
+      ]),
     ]));
+    if (state.authChecking) panel.append(el("p", { class: "small muted", role: "status", text: "正在核验全部服务；浏览器被占用时最多等待 45 秒。" }));
     if (state.authError) panel.append(el("div", { class: "error", role: "alert", text: state.authError }));
     // 每种状态对应的下一步，只补一句能照着做的话，正常状态不堆说明。
     const nextStep = {
@@ -1612,6 +1633,9 @@ function servicesView() {
         } }));
       }
       if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : ""), role: notice.error ? "alert" : "status", text: notice.text }));
+      // 浏览器被占用时，“先关闭窗口”必须是一个能点的动作，而不是一句让远程用户无从下手的话。
+      if (notice?.code === "BROWSER_BUSY")
+        row.append(el("button", { class: "ghost", type: "button", text: "关闭占用窗口并重试", onclick: () => { void closeBrowserWindows(); } }));
       const hint = nextStep[info.state];
       if (hint) row.append(el("div", { class: "small muted auth-hint", text: hint }));
       const record = el("details", { class: "auth-evidence" }, [el("summary", { text: "核验记录" })]);

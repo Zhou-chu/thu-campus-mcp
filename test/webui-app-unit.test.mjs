@@ -475,6 +475,23 @@ test("app: unified service rows need no second account field and retain failed v
   assert.notEqual(a.$('[data-service="learnx"] .state').dataset.s, "ready");
 });
 
+test("app: 浏览器被占用时给出可点的关闭窗口动作", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "POST /api/seat/login": { ok: false, error: { code: "BROWSER_BUSY", message: "另一个浏览器任务正在运行。" } },
+    "POST /api/tools/campus_browser_close": { ok: true, data: {} },
+    "GET /api/auth/status": { ok: true, services: {} },
+  } });
+  a.nav("services"); await flush();
+  assert.ok(a.button("关闭登录窗口"), "服务页应常驻一个关闭登录窗口的入口");
+  a.click(a.button("登录", a.$('[data-service="seat"]'))); await flush();
+  assert.match(a.$('[data-service="seat"] .auth-notice').textContent, /另一个浏览器任务/);
+  a.click(a.button("关闭占用窗口并重试", a.$('[data-service="seat"]'))); await flush();
+  assert.equal(a.count("POST /api/tools/campus_browser_close"), 1);
+  assert.equal(a.count("GET /api/auth/status"), 1, "关闭窗口后应自动重新核验");
+  assert.equal(a.$('[data-service="seat"] .auth-notice'), undefined, "重试后旧提示应清掉");
+});
+
 test("app: login polls queued, downloading and running without claiming a window or duplicate starts", async t => {
   const jobs = [{ status: "queued" }, { status: "running", phase: "downloading" }, { status: "running", phase: "login" }, { status: "complete" }];
   const a = await app(t, { routes: {
