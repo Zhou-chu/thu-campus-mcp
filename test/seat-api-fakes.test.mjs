@@ -76,6 +76,8 @@ function apiWith({ probe = async () => ({ verified: false, state: "login-require
       return browser;
     },
     casFill: casFill || (async () => ({ ok: true })),
+    openEphemeral: overrides.openEphemeral ?? (async () => { throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); }),
+    persistCookies: overrides.persistCookies ?? (async () => {}),
     now,
     createReadSession: () => async (action, options) => action({ call: async path => { calls.push({ path, options }); return read ? read(path) : { data: { list: [] } }; } }),
     // 规则默认走 HTTP；单元测试不应触网，除非显式注入。
@@ -365,4 +367,29 @@ test("预约规则：HTTP 页面能读到时不打开浏览器", async () => {
   assert.equal(rules.source, "page:ska.bookRule");
   assert.deepEqual(rules.window, { open: "06:00", close: "23:00" });
   assert.equal(opened, 0, "HTTP 拿到规则就不该开浏览器");
+});
+
+test("座位会话：持久档案被占用时改用一次性浏览器并合并 Cookie", async () => {
+  const saved = [];
+  const page = fakePage(seatState({ url: SEAT + "/web/seat3", token: true }));
+  const ephemeral = { context: { newPage: async () => page, cookies: async () => [{ domain: "seat.lib.tsinghua.edu.cn", path: "/", name: "access_token", value: "fresh", expires: -1 }] }, close: async () => {} };
+  const api = createSeatApi({
+    probe: async () => ({ verified: true }),
+    readCredentials: async () => ({ username: "u", password: "p" }),
+    withLock: async (_n, fn) => fn(),
+    openBrowser: async () => { throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    openEphemeral: async () => ephemeral,
+    persistCookies: async context => { saved.push(await context.cookies()); },
+    now: () => new Date("2026-11-24T02:00:00.000Z"),
+  });
+  const result = await api.withSeatSession(async session => session.page.url());
+  assert.match(result, /^https:\/\/seat\.lib\.tsinghua\.edu\.cn\/web\/seat3\?area=3/);
+  assert.deepEqual(saved, [[{ domain: "seat.lib.tsinghua.edu.cn", path: "/", name: "access_token", value: "fresh", expires: -1 }]], "一次性会话结束后应把座位 Cookie 写回快照");
+
+  const closed = createSeatApi({
+    withLock: async (_n, fn) => fn(),
+    openBrowser: async () => { throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    openEphemeral: async () => { throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+  });
+  await assert.rejects(() => closed.withSeatSession(async () => 1), error => error.code === "BROWSER_BUSY");
 });
