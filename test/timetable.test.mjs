@@ -32,11 +32,20 @@ test("timetable: parses single, paired and week-limited slots with locations", (
 });
 
 test("school time: 大节时间与可变小节数", () => {
-  assert.equal(bigPeriodTime(1, 2), "08:00–09:35");
-  assert.equal(bigPeriodTime(3, 5), "09:50–12:15", "第二大节有 3 个小节");
-  assert.equal(bigPeriodTime(12, 14), "19:20–21:45");
+  assert.equal(bigPeriodTime(1), "08:00–09:35");
+  assert.equal(bigPeriodTime(2), "09:50–12:15", "第二大节有 3 个小节");
+  assert.equal(bigPeriodTime(3), "13:30–15:05");
+  assert.equal(bigPeriodTime(4), "15:20–16:55");
+  assert.equal(bigPeriodTime(5), "17:05–18:40");
+  assert.equal(bigPeriodTime(6), "19:20–21:45");
+  assert.equal(bigPeriodTime(1, 6), "08:00–21:45");
   assert.equal(bigPeriodTime(2, 1), "");
-  assert.deepEqual(sectionsInfo([3, 4]), { sections: [3, 4], label: "第3-4小节", time: "09:50–11:25", from: 3, to: 5 });
+  assert.equal(bigPeriodTime(7), "", "第7大节不成立");
+  assert.equal(bigPeriodTime(0), "");
+  // 小节 3–4 属于第 2 大节（1–6 编号），不是“第 3–5 大节”。
+  assert.deepEqual(sectionsInfo([3, 4]), { sections: [3, 4], label: "第3-4小节", time: "09:50–11:25", from: 2, to: 2 });
+  assert.deepEqual(sectionsInfo([12, 13, 14]), { sections: [12, 13, 14], label: "第12-14小节", time: "19:20–21:45", from: 6, to: 6 });
+  assert.deepEqual(sectionsInfo([2, 3]), { sections: [2, 3], label: "第2-3小节", time: "08:50–10:35", from: 1, to: 2 });
   assert.equal(sectionsInfo([15]), null);
   assert.equal(sectionsInfo([]), null);
 });
@@ -50,7 +59,7 @@ test("timetable: builds a grid-ready table and counts courses without time", () 
   ], { semester: { id: "2026-2027-1" } });
   assert.deepEqual(table.courses.map(course => course.name), ["甲课", "乙课"], "按名称稳定排序");
   assert.equal(table.courses.find(course => course.id === "a").slots.length, 2);
-  assert.equal(table.courses.find(course => course.id === "b").slots[0].time, "08:00–09:35", "官方课程也带大节时间");
+  assert.equal(table.courses.find(course => course.id === "b").slots[0].time, "09:50–12:15", "官方课程也带大节时间（第2大节）");
   assert.equal(table.unscheduled, 2, "没有时间或没有名称的课程单独计数");
   assert.equal(table.semester.id, "2026-2027-1");
   assert.deepEqual(buildTimetable(null).courses, []);
@@ -61,7 +70,13 @@ test("timetable: 自定义课程可用小节精确定位", () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.course.sections, [3, 4, 5]);
   assert.equal(result.course.sectionLabel, "第3-5小节");
-  assert.deepEqual(result.course.slots[0], { day: 3, from: 3, to: 5, sections: [3, 4, 5], sectionLabel: "第3-5小节", time: "09:50–12:15" });
+  assert.deepEqual(result.course.slots[0], { day: 3, from: 2, to: 2, sections: [3, 4, 5], sectionLabel: "第3-5小节", time: "09:50–12:15" });
+  // 下午与晚间小节必须能用，且落在第 3 / 第 6 大节。
+  const evening = normalizeCustomCourse({ name: "晚课", day: 5, sections: [12, 14] });
+  assert.equal(evening.ok, true, "第 12–14 小节以前会报 INVALID_PERIOD");
+  assert.deepEqual({ from: evening.course.slots[0].from, to: evening.course.slots[0].to }, { from: 6, to: 6 });
+  const afternoon = normalizeCustomCourse({ name: "午后", day: 2, sections: [6, 7] });
+  assert.deepEqual({ from: afternoon.course.slots[0].from, to: afternoon.course.slots[0].to }, { from: 3, to: 3 });
   assert.equal(normalizeCustomCourse({ name: "坏小节", day: 1, sections: [0] }).error.code, "INVALID_SECTIONS");
 });
 
