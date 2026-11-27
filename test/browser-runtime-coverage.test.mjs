@@ -11,6 +11,7 @@ import { chromium } from "playwright-core";
 import * as runtime from "../packages/browser/runtime.mjs";
 import * as profile from "../packages/browser/profile.mjs";
 import * as jobs from "../lib/browser.mjs";
+import { acquireLease, readLease } from "../lib/browser-lease.mjs";
 import { browserLogin as madLogin } from "../lib/madmodel/browser.mjs";
 import { ORIGIN, LOGIN_URL, parseToken } from "../lib/madmodel/protocol.mjs";
 import { SessionManager } from "../lib/madmodel/auth.mjs";
@@ -332,4 +333,30 @@ test("启动失败在时间预算内终结任务，不留下进行中状态", as
   const saved = JSON.parse(await readFile(f.path(`state/jobs/${id}.json`), "utf8"));
   assert.equal(saved.status, "failed");
   assert.equal(saved.error, "BROWSER_FAILED");
+});
+
+test("回收：进程已消失的任务落成 interrupted，活着的任务不受影响", async t => {
+  const f = await fixture(t);
+  const dead = { id: randomUUID(), status: "running", action: "open", service: "seat", pid: 999999, updatedAt: new Date().toISOString() };
+  const live = { id: randomUUID(), status: "running", action: "open", service: "seat", pid: process.pid, updatedAt: new Date().toISOString() };
+  await f.put(`state/jobs/${dead.id}.json`, dead);
+  await f.put(`state/jobs/${live.id}.json`, live);
+  await acquireLease(f.cfg.stateDir, { owner: `worker:${dead.id}`, label: "open:seat" });
+
+  const result = await jobs.reapInterruptedJobs();
+  assert.equal(result.reaped, 1);
+  const reaped = JSON.parse(await readFile(f.path(`state/jobs/${dead.id}.json`), "utf8"));
+  assert.equal(reaped.status, "interrupted");
+  assert.match(reaped.detail, /gone/);
+  const untouched = JSON.parse(await readFile(f.path(`state/jobs/${live.id}.json`), "utf8"));
+  assert.equal(untouched.status, "running", "活着的任务不能被回收");
+  assert.equal(await readLease(f.cfg.stateDir), null, "死任务名下的租约要释放");
+});
+
+test("回收：没有 PID 且超过 30 秒的排队任务也会被判中断", async t => {
+  const f = await fixture(t);
+  const stale = { id: randomUUID(), status: "queued", action: "open", service: "seat", updatedAt: new Date(Date.now() - 60_000).toISOString() };
+  await f.put(`state/jobs/${stale.id}.json`, stale);
+  assert.equal((await jobs.reapInterruptedJobs()).reaped, 1);
+  assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${stale.id}.json`), "utf8")).status, "interrupted");
 });
