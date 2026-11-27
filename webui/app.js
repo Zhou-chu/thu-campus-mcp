@@ -367,7 +367,7 @@ async function submitUnified() {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "omit",
-      body: JSON.stringify({ account, password, deviceName: navigator.platform || "浏览器", platform: "webui" }),
+      body: JSON.stringify({ account, password, deviceName: navigator.platform || "浏览器", platform: "webui", deviceKey: deviceKey() }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.ok)
@@ -387,6 +387,19 @@ async function submitUnified() {
   } finally {
     button.disabled = false;
     button.textContent = "登录";
+  }
+}
+/** 设备标识与显示名解耦：同名同平台的两台机器不会互相顶掉会话。 */
+function deviceKey() {
+  const KEY = "campus-device-key";
+  try {
+    const existing = localStorage.getItem(KEY);
+    if (existing && /^[A-Za-z0-9_-]{8,128}$/.test(existing)) return existing;
+    const generated = (crypto.randomUUID?.() || String(Date.now()) + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+    localStorage.setItem(KEY, generated);
+    return generated;
+  } catch {
+    return "";
   }
 }
 async function submitPair() {
@@ -415,6 +428,7 @@ async function submitPair() {
         code,
         deviceName: navigator.platform || "浏览器",
         platform: "webui",
+        deviceKey: deviceKey(),
       }),
     });
     const data = await response.json().catch(() => ({}));

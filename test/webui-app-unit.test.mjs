@@ -156,7 +156,9 @@ test("app: unpaired validation, mapped rejection, and successful atomic pairing"
   a.click("#pair-submit"); await until(() => !!a.$("#composer"));
   assert.equal(a.$("#pair").hidden, true);
   assert.deepEqual(JSON.parse(a.localStorage.getItem(connectionKey)), { version: 1, base: origin, token });
-  assert.deepEqual(a.calls.find(call => call.method === "POST").body, { code: "123456", deviceName: "unit-dom", platform: "webui" });
+  const pairBody = a.calls.find(call => call.method === "POST").body;
+  assert.deepEqual({ code: pairBody.code, deviceName: pairBody.deviceName, platform: pairBody.platform }, { code: "123456", deviceName: "unit-dom", platform: "webui" });
+  assert.match(pairBody.deviceKey, /^[A-Za-z0-9_-]{8,128}$/, "设备标识与显示名解耦，必须随请求带上");
   assert.equal(a.calls.at(-1).options.credentials, "omit");
 });
 
