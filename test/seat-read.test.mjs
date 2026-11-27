@@ -166,3 +166,30 @@ test("座位规则：优先从页面 HTML 解析，不发浏览器；Cookie 过�
   const noCookie = createSeatPageReader({ snapshot: async () => ({ cookies: [] }), fetchImpl: async () => new Response("", { status: 200 }) });
   await assert.rejects(() => noCookie(), error => error.code === "SEAT_LOGIN_REQUIRED");
 });
+
+test("纯 HTTP 登录：CAS 换到座位 Cookie 并核对受保护接口", async () => {
+  const { default: smCrypto } = await import("sm-crypto");
+  const keys = smCrypto.sm2.generateKeyPairHex();
+  const seen = [];
+  const fetchImpl = async (url, options = {}) => {
+    const href = String(url);
+    seen.push({ href, method: options.method || "GET" });
+    if (href.includes("/web/seat3")) return new Response("", { status: 302, headers: { location: "https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/abc/0" } });
+    if (href.includes("/do/off/ui/auth/login/form/")) {
+      return new Response('<span id="sm2publicKey">' + keys.publicKey + "</span>", { status: 200, headers: { "set-cookie": "JSESSIONID=x; Path=/" } });
+    }
+    if (href.includes("/do/off/ui/auth/login/check")) {
+      return new Response('<html>登录成功。正在重定向到 <a href="/cas/callback?ticket=T-1">目标</a></html>', { status: 200 });
+    }
+    if (href.includes("/cas/callback")) {
+      return new Response("", { status: 302, headers: { location: "https://seat.lib.tsinghua.edu.cn/web/seat3", "set-cookie": "access_token=http-seat; Domain=seat.lib.tsinghua.edu.cn; Path=/" } });
+    }
+    if (href.includes("/api.php/v3areas/")) return Response.json({ status: 1, data: { list: [] } });
+    return Response.json({ status: 0, msg: "没有登录" });
+  };
+  const { loginSeatHttp } = await import("../lib/app/seat-read.mjs");
+  const result = await loginSeatHttp({ credentials: { username: "2024000000", password: "pw" }, fetchImpl });
+  assert.equal(result.ok, true);
+  assert.ok(result.cookies.some(cookie => cookie.name === "access_token" && cookie.value === "http-seat"), "应带回座位站自己的 Cookie");
+  assert.ok(seen.some(call => call.href.includes("/do/off/ui/auth/login/check") && call.method === "POST"), "应真的提交过登录表单");
+});
