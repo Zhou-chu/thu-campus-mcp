@@ -35,7 +35,7 @@ export function createSeatView({ el, api }) {
   const state = {
     libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
-    date: today(), days: [], segment: null, segments: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1, zoomFit: true,
+    date: today(), days: [], segment: null, segments: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1, zoomFit: true, reserveBusy: false,
     bookings: [], bookingsLoading: false, bookingsLoaded: false, bookingsError: "", cancelTarget: null, cancelBusy: false,
   };
 
@@ -162,7 +162,12 @@ export function createSeatView({ el, api }) {
         .filter(Boolean).join(" · ");
       return el("div", { class: "seat-confirm" }, [
         el("p", { class: "seat-confirm-line", text: line }),
-        el("button", { class: "seat-confirm-button", type: "button", text: "预约此座位", onclick: () => { void submitReserve(); } }),
+        el("button", {
+          class: "seat-confirm-button", type: "button",
+          text: state.reserveBusy ? "提交中…" : "预约此座位",
+          disabled: state.reserveBusy,
+          onclick: () => { void submitReserve(); },
+        }),
       ]);
     };
 
@@ -410,15 +415,25 @@ export function createSeatView({ el, api }) {
     }
 
     async function submitReserve() {
-      if (!state.seat) return;
+      if (!state.seat || state.reserveBusy) return;
+      // 提交前冻结目标：按钮点下之后切换选区不会改变这次预约的座位/时段/日期。
+      const target = {
+        space: state.seat.id,
+        segment: state.seat.segment,
+        day: state.date,
+        name: state.seat.name,
+        begin: state.seat.begin,
+        end: state.seat.end,
+      };
+      state.reserveBusy = true;
       state.notice = "";
       render();
       try {
-        const body = { space: state.seat.id, segment: state.seat.segment, day: state.date };
+        const body = { space: target.space, segment: target.segment, day: target.day };
         const prepared = await api("/api/seat/reserve/prepare", { method: "POST", body });
         const result = await api("/api/seat/reserve", { method: "POST", body: { ...body, confirmToken: prepared.token } });
         state.notice = result.ok
-          ? `已提交预约：${state.seat.name} ${state.date} ${[state.seat.begin, state.seat.end].filter(Boolean).join("-")}`
+          ? `已提交预约：${target.name} ${target.day} ${[target.begin, target.end].filter(Boolean).join("-")}`
           : result.message || "预约未成功。";
         if (result.ok) await loadSeats();
       } catch (error) {
@@ -431,6 +446,7 @@ export function createSeatView({ el, api }) {
         };
         state.notice = hints[error?.code] ?? error?.message ?? "预约请求失败。";
       } finally {
+        state.reserveBusy = false;
         render();
       }
     }

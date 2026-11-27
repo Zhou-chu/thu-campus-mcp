@@ -507,3 +507,13 @@ test("sports: 预约记录归一保留场馆、时间与状态", () => {
   assert.equal(items[1].site, "");
   assert.equal(normalizeReservations(null).length, 0);
 });
+
+test("sports: 会话失效的三种表现都归为需要登录，交给一次性后台恢复", async () => {
+  const { sportsLoginProof } = await import("../lib/app/sports.mjs");
+  assert.equal(sportsLoginProof({ status: 302, ok: false, data: null, location: "https://id.tsinghua.edu.cn/do/off/ui/auth/login" }).state, "login-required", "302 去统一认证");
+  assert.equal(sportsLoginProof({ status: 302, ok: false, data: null, location: "https://other.example/x" }).state, "unknown", "跳到无关域名不算未登录");
+  assert.equal(sportsLoginProof({ status: 200, ok: true, data: null }).state, "login-required", "返回登录页而不是 JSON");
+  assert.equal(sportsLoginProof({ status: 401, ok: false, data: null }).state, "login-required");
+  assert.equal(sportsLoginProof({ status: 200, ok: true, data: { success: true, data: { id: "u1" } } }).state, "ready");
+  assert.equal(sportsLoginProof({ status: 500, ok: false, data: { errorCode: 500 } }).state, "unknown", "上游故障不能当成登录失效");
+});

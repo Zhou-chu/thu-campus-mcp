@@ -246,12 +246,33 @@ test("预约重试：登录后若已有记录则对账，不重复下单", async
   const page = fakePage(seatState({
     bookResponse: () => { attempt += 1; return attempt === 1 ? { status: 200, json: { status: 0, msg: "没有登录" } } : { status: 200, json: { status: 1 } }; },
   }));
-  const read = path => path === "/api.php/profile/books/" ? { data: { list: [{ id: 88, status: 2, endTime: { date: "2026-11-24T22:00" } }] } } : { data: { list: [] } };
+  const read = path => path === "/api.php/profile/books/" ? { data: { list: [{ id: 88, status: 2, space: 1, segment: 2, endTime: { date: "2026-11-24T22:00" } }] } } : { data: { list: [] } };
   const { api } = apiWith({ browser: fakeBrowser(page), read, probe: async () => ({ verified: true }) });
   const result = await api.reserve({ space: 1, segment: 2, day: "2026-11-24" });
   assert.equal(result.reconciled, true);
   assert.equal(result.bookingId, 88);
   assert.equal(attempt, 1, "对账后不再第二次下单");
+
+  // 同一天但有别的有效预约、却对不上座位/时段：不能冒认成功，也不能重发。
+  for (const record of [
+    { id: 91, status: 2, space: 9, segment: 2, endTime: { date: "2026-11-24T22:00" } },
+    { id: 92, status: 2, space: 1, segment: 7, endTime: { date: "2026-11-24T22:00" } },
+    { id: 93, status: 2, endTime: { date: "2026-11-24T22:00" } },
+  ]) {
+    let calls = 0;
+    const mismatchPage = fakePage(seatState({ bookResponse: () => { calls += 1; return { status: 200, json: { status: 0, msg: "没有登录" } }; } }));
+    const mismatched = apiWith({
+      browser: fakeBrowser(mismatchPage),
+      read: () => ({ data: { list: [record] } }),
+      probe: async () => ({ verified: true }),
+    }).api;
+    const outcome = await mismatched.reserve({ space: 1, segment: 2, day: "2026-11-24" });
+    assert.equal(outcome.ok, false, JSON.stringify(record));
+    assert.equal(outcome.reconciled, false);
+    assert.equal(outcome.code, "SEAT_RESERVE_UNKNOWN");
+    assert.match(outcome.message, /核对「我的预约」/);
+    assert.equal(calls, 1, "无法证明目标时不得重复下单");
+  }
 
   let retryAttempt = 0;
   const retryPage = fakePage(seatState({ bookResponse: () => { retryAttempt += 1; return retryAttempt === 1 ? { status: 200, json: { status: 0, msg: "没有登录" } } : { status: 200, json: { status: 1, msg: "预约成功" } }; } }));
