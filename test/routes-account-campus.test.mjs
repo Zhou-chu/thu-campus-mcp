@@ -467,3 +467,17 @@ test("体育下单：解锁失败要透传给界面，不能悄悄丢掉", async
   assert.equal(result.body.error.code, "SPORTS_LOCK_FAILED");
   assert.deepEqual(result.body.error.unlock, { ok: false, message: "浏览器仍在占用" }, "解锁结果必须透传");
 });
+
+test("体育预约窗口：失败要把原因写进日志，并区分未登录/日期不可用", async () => {
+  const fixture = campusFixture({
+    body: { sport: "羽毛球", venue: "气膜馆羽毛球", start: "19:00", end: "20:00", date: "2026-12-01" },
+    bookingError: { code: "DATE_NOT_AVAILABLE", message: "预约页没有可选日期 2026-12-01，可能尚未开放。" },
+  });
+  const logged = [];
+  fixture.base.logger = (event, detail) => logged.push([event, detail]);
+  const result = await call(createCampusRoutes(fixture.base), { pathname: "/api/sports/booking/prepare", method: "POST", body: fixture.base.body });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error.code, "DATE_NOT_AVAILABLE");
+  assert.match(result.body.error.message, /尚未开放/);
+  assert.deepEqual(logged, [["sports-booking-prepare-failed", { code: "DATE_NOT_AVAILABLE" }]]);
+});
