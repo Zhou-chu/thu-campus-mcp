@@ -1690,14 +1690,28 @@ function accountCard() {
         }
         updateAuthPanels();
         const skip = Object.keys(DIRECT_LOGIN).filter(name => authPresentation(state.meta?.services?.[name]).state === "ready");
-        const batch = await apiWithTimeout("/api/account/login", { method: "POST", body: { skip } }, 180000);
+        const batch = await apiWithTimeout("/api/account/login", { method: "POST", body: { skip, services: ["learnx", "seat", "sports", "cloud", "hetang"] } }, 180000);
         checkLoginConnection(connection);
+        const queued = [];
         for (const [name, item] of Object.entries(batch?.results || {})) {
+          if (name === "cloud" || name === "hetang" || name === "madmodel") {
+            // 走 worker 任务的服务：提交成功就继续跟进度，不再重复点登录。
+            if (item.state === "queued" && item.jobId) { state.authNotices[name] = { text: "登录任务已提交，正在运行…" }; queued.push([name, item.jobId]); }
+            else if (!item.ok) state.authNotices[name] = { error: true, code: item.code, text: "登录未完成：" + (item.message || item.code || "请重试。") };
+            else state.authNotices[name] = { text: "已登录。" };
+            continue;
+          }
           if (!DIRECT_LOGIN[name]) continue;
           state.authNotices[name] = item.ok
             ? { text: item.alreadyLoggedIn ? "已登录，无需重复登录。" : "已登录。" }
             : { error: true, code: item.code, text: "登录未完成：" + (item.message || item.code || "请重试。"),
                 manual: ["CAS_CAPTCHA_REQUIRED", "SEAT_LOGIN_UNCONFIRMED", "SPORTS_MANUAL_VERIFICATION"].includes(item.code) };
+        }
+        for (const [name, jobId] of queued) {
+          void followLoginJob(jobId, name, connection).catch(error => {
+            state.authNotices[name] = { error: true, text: "登录任务未完成：" + (error?.message || "请稍后重试。") };
+            updateAuthPanels();
+          });
         }
         if (batch?.needsManual?.length)
           state.authNotices.all = { error: true, text: "学校统一身份认证要求人工验证，其余服务未自动登录；请先在运行实例上完成验证再重试。" };

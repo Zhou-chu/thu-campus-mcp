@@ -63,3 +63,29 @@ test("统一登录编排：全部失败时 ok=false，但仍逐项给出状态",
   assert.equal(result.results.seat.code, "SEAT_LOGIN_UNCONFIRMED");
   assert.equal(result.results.sports.state, "failed");
 });
+
+test("统一登录编排：worker 服务只提交任务并返回 jobId，不冒充成功", async () => {
+  const result = await loginAll({
+    account: { username: "u", password: "p" },
+    adapters: {
+      cloud: async () => ({ ok: false, code: "LOGIN_QUEUED", message: "已提交", jobId: "job-cloud" }),
+      hetang: async () => { throw Object.assign(new Error("浏览器正忙"), { code: "BROWSER_BUSY" }); },
+      seat: async () => ({ ok: true }),
+    },
+  });
+  assert.equal(result.results.cloud.state, "queued");
+  assert.equal(result.results.cloud.jobId, "job-cloud");
+  assert.equal(result.results.hetang.state, "busy");
+  assert.equal(result.results.seat.state, "ready");
+});
+
+test("统一登录编排：services 只跑指定范围", async () => {
+  const ran = [];
+  const result = await loginAll({
+    account: { username: "u", password: "p" },
+    services: ["seat"],
+    adapters: { seat: async () => { ran.push("seat"); return { ok: true }; }, sports: async () => { ran.push("sports"); return { ok: true }; } },
+  });
+  assert.deepEqual(ran, ["seat"]);
+  assert.equal(result.total, 1);
+});
