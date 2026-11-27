@@ -4,7 +4,7 @@ import { renderMarkdown, fetchArtifact, workspaceJob, createJobPoller, JOB_LABEL
 import { runAction } from "./ui-feedback.js";
 import { recentSessions, sidebarStorageLabel } from "./sidebar.js";
 import { HOME_ACTIONS, ADD_ACTIONS, ICON_PATHS, getHomeAction, homeIsEmpty } from "./chat-home.js";
-import { createTurnQueue } from "./turn-queue.js";
+import { busyWithTurn, createTurnQueue } from "./turn-queue.js";
 import { createChatWidthUI } from "./chat-width-ui.js";
 import { createRightSidebar } from "./right-sidebar.js";
 import { createTimetableView } from "./timetable-view.js";
@@ -993,7 +993,16 @@ function composerAddMenu(input) {
 }
 function hasQueuedWork() {
   const queue = turnQueue.snapshot();
-  return state.busy || state.stopping || queue.running || queue.pending.length > 0;
+  // 只有“正在跑”才禁用入口；暂停后留下的 pending 不能把“新对话”锁死。
+  return busyWithTurn({ busy: state.busy, stopping: state.stopping, running: queue.running });
+}
+/** 离开当前会话前处理待发队列：明确告知会清空几条，确认后才丢。 */
+function leaveCurrentConversation() {
+  const pending = pendingQueueLength();
+  if (!pending) return true;
+  if (!confirm(`队列里还有 ${pending} 条未发送的消息，离开会清空。继续？`)) return false;
+  turnQueue.clear();
+  return true;
 }
 function submitDraft(textarea) {
   const text = textarea.value.trim();
@@ -1362,6 +1371,13 @@ function sessionsView() {
       }),
     ]),
   );
+  // 队列暂停时把“继续发送”摆出来：否则用户只能翻回输入区上方才能恢复。
+  const stalled = turnQueue.snapshot();
+  if (stalled.paused && stalled.pending.length)
+    wrap.append(el("div", { class: "row between" }, [
+      el("p", { class: "small muted", text: `暂停中：${stalled.pending.length} 条消息未发送（${stalled.paused}）。` }),
+      el("button", { class: "ghost", type: "button", text: "继续发送", onclick: () => { turnQueue.resume(); void turnQueue.drain(); } }),
+    ]));
   const search = el("input", { type: "search", placeholder: "搜索会话标题…", "aria-label": "搜索会话" });
   const list = el("div", { class: "list" });
   wrap.append(search, list);
@@ -2372,7 +2388,7 @@ function pendingQueueLength() {
   return queue.pending.length;
 }
 function startNewConversation() {
-  if (pendingQueueLength() > 0) { toast("请先处理或清空待发消息。"); return; }
+  if (!leaveCurrentConversation()) return;
   sessionNavigation++;
   state.sessionId = null;
   state.messages = [];
@@ -2382,7 +2398,7 @@ function startNewConversation() {
   $("#composer")?.focus();
 }
 async function openSavedSession(id, button) {
-  if (pendingQueueLength() > 0) { toast("请先处理或清空待发消息。"); return; }
+  if (!leaveCurrentConversation()) return;
   const ticket = ++sessionNavigation;
   const displayedView = $("#view").firstElementChild;
   await runAction(button, async () => {

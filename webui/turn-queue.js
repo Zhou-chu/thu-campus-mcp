@@ -1,5 +1,14 @@
 let nextId = 0;
 
+/**
+ * “正在跑”才阻断离开当前会话。
+ * 暂停的待发消息不能算忙碌：否则上一轮失败后 pending 会一直留着，
+ * “新对话”就被永久禁用，用户只能自己去找隐藏的“继续队列”。
+ */
+export function busyWithTurn({ busy = false, stopping = false, running = false } = {}) {
+  return Boolean(busy || stopping || running);
+}
+
 /** In-memory FIFO; run reads the current model only when dispatching an item. */
 export function createTurnQueue({ run, canRun = () => true, onChange = () => {} }) {
   const pending = [];

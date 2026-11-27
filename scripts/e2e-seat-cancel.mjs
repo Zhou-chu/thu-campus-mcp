@@ -51,7 +51,16 @@ function fakeSeat() {
         return {
           sectionId: Number(section),
           date,
-          seats: [{ id: 5122, name: "A001", status: 0, segment: Number(section) * 10, begin: "08:00", end: "12:00" }],
+          // 给一张明显超出容器的座位图：20 列 × 3 行，最小比例 100% 也放不下。
+          seats: Array.from({ length: 60 }, (_, index) => ({
+            id: 5000 + Number(section) * 100 + index,
+            name: "A" + String(index + 1).padStart(3, "0"),
+            status: 0,
+            segment: Number(section) * 10,
+            begin: "08:00",
+            end: "12:00",
+            position: { x: (index % 20) * 70, y: Math.floor(index / 20) * 60, width: 60, height: 50 },
+          })),
           segments: [],
         };
       },
@@ -117,6 +126,13 @@ async function main() {
     check("切换分区后会重新读座位", seatCalls.at(-1)?.section === 97, JSON.stringify(seatCalls));
     check("切换分区后不再带上一分区的 segment", seatCalls.at(-1)?.segment === null, JSON.stringify(seatCalls));
     check("切换分区不报读取失败", !/暂时读不到座位|时段已变化|该时段已失效/.test(await page.locator("#app").innerText()));
+    const fit = await page.evaluate(() => {
+      const frame = document.querySelector(".seat-plan-frame");
+      if (!frame) return null;
+      return { scrollW: frame.scrollWidth, clientW: frame.clientWidth, scrollH: frame.scrollHeight, clientH: frame.clientHeight, zoom: document.querySelector(".seat-zoom-value")?.textContent };
+    });
+    check("座位图默认就能完整显示（不需要横向滚动）", fit && fit.scrollW <= fit.clientW + 1, JSON.stringify(fit));
+    check("座位图默认就能完整显示（不需要纵向滚动）", fit && fit.scrollH <= fit.clientH + 1, JSON.stringify(fit));
 
     await page.getByRole("button", { name: "读取预约记录", exact: true }).click();
     await page.waitForSelector(".seat-bookings-list li", { timeout: 10000 });

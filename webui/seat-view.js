@@ -35,7 +35,7 @@ export function createSeatView({ el, api }) {
   const state = {
     libraries: [], floors: [], areas: [], seats: [],
     library: null, floor: null, area: null, seat: null,
-    date: today(), days: [], segment: null, segments: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1,
+    date: today(), days: [], segment: null, segments: [], loading: false, error: "", notice: "", loaded: false, display: "map", queryWindow: null, request: 0, zoom: 1, zoomFit: true,
     bookings: [], bookingsLoading: false, bookingsLoaded: false, bookingsError: "", cancelTarget: null, cancelBusy: false,
   };
 
@@ -116,18 +116,36 @@ export function createSeatView({ el, api }) {
         onclick: () => { state.display = mode; render(); panel.querySelector('.seat-view-switch [aria-pressed="true"]')?.focus(); },
       }))));
       if (usingMap) {
-        const zoomOut = el("button", { class: "ghost", type: "button", text: "－", "aria-label": "缩小座位图", disabled: state.zoom <= 1,
-          onclick: () => { state.zoom = Math.max(1, Math.round((state.zoom - 0.25) * 100) / 100); render(); } });
+        const zoomOut = el("button", { class: "ghost", type: "button", text: "－", "aria-label": "缩小座位图", disabled: state.zoom <= 0.25,
+          onclick: () => { state.zoomFit = false; state.zoom = Math.max(0.25, Math.round((state.zoom - 0.25) * 100) / 100); render(); } });
         const zoomIn = el("button", { class: "ghost", type: "button", text: "＋", "aria-label": "放大座位图", disabled: state.zoom >= 3,
-          onclick: () => { state.zoom = Math.min(3, Math.round((state.zoom + 0.25) * 100) / 100); render(); } });
+          onclick: () => { state.zoomFit = false; state.zoom = Math.min(3, Math.round((state.zoom + 0.25) * 100) / 100); render(); } });
         controlBar.append(el("div", { class: "seat-zoom", role: "group", "aria-label": "座位图缩放" }, [
           zoomOut,
           el("span", { class: "seat-zoom-value", role: "status", text: Math.round(state.zoom * 100) + "%" }),
           zoomIn,
+          el("button", { class: "ghost", type: "button", text: "适应", "aria-label": "缩放到刚好显示整张座位图",
+            onclick: () => { state.zoomFit = true; render(); } }),
           el("button", { class: "ghost", type: "button", text: "重置", disabled: state.zoom === 1,
-            onclick: () => { state.zoom = 1; render(); } }),
+            onclick: () => { state.zoomFit = false; state.zoom = 1; render(); } }),
         ]));
         display.append(drawSeatPlan(state.seats, makeButton, el, state.zoom));
+        // 首次或换分区后自动缩放到整张图能放进容器：即使 100% 也放不下，也不该让用户自己找。
+        if (state.zoomFit) {
+          const frame = display.querySelector(".seat-plan-frame");
+          const plan = display.querySelector(".seat-plan");
+          if (frame && plan) requestAnimationFrame(() => {
+            const ratio = Math.min(
+              1,
+              (frame.clientWidth - 2) / Math.max(1, plan.offsetWidth),
+              (frame.clientHeight - 2) / Math.max(1, plan.offsetHeight),
+            );
+            const next = Math.min(1, Math.max(0.25, Math.round(ratio * 100) / 100));
+            state.zoomFit = false;
+            if (frame.clientWidth && plan.offsetWidth && Math.abs(next - state.zoom) > 0.01) state.zoom = next;
+            render();
+          });
+        }
       }
       const listed = usingMap ? state.seats.filter(seat => !seat.position) : state.seats;
       if (listed.length) {
@@ -384,6 +402,7 @@ export function createSeatView({ el, api }) {
       await readScoped("/api/seat/seats?" + new URLSearchParams(params), data => {
         if (data.sectionId !== id || data.date !== date) throw new Error("Seat scope mismatch");
         state.seats = Array.isArray(data.seats) ? data.seats : [];
+        state.zoomFit = true;
         state.segments = Array.isArray(data.segments) ? data.segments : [];
         state.segment = data.segment?.id ?? segmentId ?? null;
         state.queryWindow = data.queryWindow ?? null;

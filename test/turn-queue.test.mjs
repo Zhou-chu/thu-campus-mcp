@@ -195,3 +195,20 @@ test("snapshot和onChange快照不暴露内部可变引用", async () => {
   await queue.drain();
   assert.deepEqual(calls, ["original"]);
 });
+
+test("turn-queue: 暂停的待发消息不阻断新会话，只有正在跑才算忙", async () => {
+  const { busyWithTurn, createTurnQueue } = await import("../webui/turn-queue.js");
+  assert.equal(busyWithTurn({}), false, "空闲时入口必须可用");
+  assert.equal(busyWithTurn({ busy: true }), true);
+  assert.equal(busyWithTurn({ stopping: true }), true);
+  assert.equal(busyWithTurn({ running: true }), true);
+  assert.equal(busyWithTurn({ busy: false, stopping: false, running: false, pending: 3, paused: "发送失败" }), false, "暂停的 pending 不算忙碌");
+
+  const queue = createTurnQueue({ run: async () => ({ ok: false, reason: "发送失败，队列已暂停" }) });
+  queue.enqueue("第一条");
+  queue.enqueue("第二条");
+  await queue.drain();
+  const after = queue.snapshot();
+  assert.equal(after.paused.length > 0, true, "失败后队列暂停");
+  assert.equal(busyWithTurn({ running: after.running }), false, "暂停后入口不得被锁死");
+});
