@@ -1527,10 +1527,34 @@ async function apiWithTimeout(path, options, ms) {
   try { return await api(path, { ...options, signal: controller.signal }); }
   finally { clearTimeout(timer); }
 }
+/** 登录请求可能因为浏览器被占用而排队；轮询队列快照，把占用者与排位写进该行提示。 */
+function watchBrowserHolder(name) {
+  let stopped = false;
+  let timer = 0;
+  const tick = async () => {
+    if (stopped) return;
+    try {
+      const snapshot = await api("/api/browser-state");
+      if (stopped) return;
+      if (snapshot?.active) {
+        const ahead = Number(snapshot.waiting) > 0 ? `，前面还有 ${snapshot.waiting} 个任务` : "";
+        state.authNotices[name] = { text: `正在等待浏览器：${snapshot.active} 占用中${ahead}。` };
+        updateAuthPanels();
+      }
+    } catch { /* 快照只是提示，失败不影响登录本身 */ }
+    if (!stopped) timer = setTimeout(tick, 2000);
+  };
+  timer = setTimeout(tick, 600);
+  return { stop() { stopped = true; clearTimeout(timer); } };
+}
 async function loginService(name, manual, connection) {
   try {
     if (DIRECT_LOGIN[name] && !manual) {
-      await apiWithTimeout(DIRECT_LOGIN[name], { method: "POST" }, 65000);
+      // 浏览器被占用时请求会排队，先把“现在谁在占着”告诉用户；轮询在请求结束后停掉。
+      const watch = watchBrowserHolder(name);
+      try {
+        await apiWithTimeout(DIRECT_LOGIN[name], { method: "POST" }, 65000);
+      } finally { watch.stop(); }
       checkLoginConnection(connection);
       state.authNotices[name] = { text: "已提交登录，正在核验。" };
       return;

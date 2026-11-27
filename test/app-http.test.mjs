@@ -346,6 +346,9 @@ test("工具列表区分只读与写入，工具调用失败返回错误码", as
   const { url, pairing } = await boot(t);
   const { body } = await pair(url, pairing);
   const headers = { authorization: "Bearer " + body.token, "content-type": "application/json" };
+  const browserState = await (await fetch(url + "/api/browser-state", { headers })).json();
+  assert.deepEqual({ ok: browserState.ok, active: browserState.active, waiting: browserState.waiting }, { ok: true, active: "", waiting: 0 });
+  assert.equal((await fetch(url + "/api/browser-state")).status, 401, "队列快照也必须带令牌");
   const tools = await (await fetch(url + "/api/tools", { headers })).json();
   // 两个假校园工具 + 四个定时任务工具（后者由应用自身提供）。
   assert.equal(tools.tools.length, 6);
