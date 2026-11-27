@@ -58,3 +58,23 @@ test("browser-lock: 看到来自其它进程的租约时直接 BROWSER_BUSY 并�
   assert.equal(ran, 1);
   assert.equal(await readLease(dir), null, "任务结束应释放租约");
 });
+
+test("lease: 租约下执行任务，拿不到就 BROWSER_BUSY，成功/失败都释放", async t => {
+  const { withBrowserLease } = await import("../lib/browser-lease.mjs");
+  const dir = await temp(t);
+  const value = await withBrowserLease(dir, { owner: "madmodel:1", label: "login:madmodel" }, async () => "ok");
+  assert.equal(value, "ok");
+  assert.equal(await readLease(dir), null, "成功后释放");
+
+  await assert.rejects(
+    () => withBrowserLease(dir, { owner: "app:2", label: "seat" }, async () => { throw new Error("boom"); }),
+    error => error.message === "boom",
+  );
+  assert.equal(await readLease(dir), null, "失败也要释放");
+
+  await acquireLease(dir, { owner: "worker:9", label: "open:seat" });
+  await assert.rejects(
+    () => withBrowserLease(dir, { owner: "madmodel:1", label: "login:madmodel" }, async () => "never"),
+    error => error.code === "BROWSER_BUSY" && /open:seat/.test(error.message),
+  );
+});
