@@ -1686,10 +1686,13 @@ function accountCard() {
   };
   const loginButton = el("button", {
     class: "primary", type: "button", text: "保存并登录",
-    onclick: event => runAction(event.currentTarget, async () => {
+    onclick: event => {
+      // 必须先同步占位再进异步流程：否则并发点击会在 await 之前都看到“空闲”。
       if (state.authLoginBusy) return;
-      const connection = { base: state.base, token: state.token };
       state.authLoginBusy = "all";
+      updateAuthPanels();
+      return runAction(event.currentTarget, async () => {
+      const connection = { base: state.base, token: state.token };
       delete state.authNotices.all;
       updateAuthPanels();
       try {
@@ -1741,7 +1744,8 @@ function accountCard() {
         render();
         await verifyAuthentication();
       } finally { state.authLoginBusy = ""; updateAuthPanels(); }
-    }, { pending: "登录中…", errorNode }),
+      }, { pending: "登录中…", errorNode });
+    },
   });
   const clearButton = el("button", {
     class: "ghost", type: "button", text: "清除账号",

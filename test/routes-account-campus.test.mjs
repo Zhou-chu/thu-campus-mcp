@@ -503,3 +503,30 @@ test("座位登录：浏览器被占用时返回可执行的 BROWSER_BUSY，而�
   assert.equal(result.body.error.code, "BROWSER_BUSY");
   assert.match(result.body.error.message, /open:seat/);
 });
+
+test("账号变更：凭据变了才回收会话，清除总会回收并返回代际", async () => {
+  await withDir(async stateDir => {
+    const events = [];
+    const resets = [];
+    const handler = createAccountRoutes({
+      config: { stateDir, host: "127.0.0.1" },
+      loginAll: async () => ({ ok: true, results: {} }),
+      readBody: async () => ({ username: "2024000000", password: "pass-one" }),
+      resetSessions: async () => { resets.push(1); },
+      onIdentityChanged: payload => events.push(payload.reason),
+    });
+    const first = await call(handler, { pathname: "/api/account", method: "PUT" });
+    assert.equal(first.status, 200);
+    assert.equal(first.body.changed, true);
+    assert.equal(resets.length, 1, "身份变化时回收旧会话");
+    const same = await call(handler, { pathname: "/api/account", method: "PUT" });
+    assert.equal(same.body.changed, false);
+    assert.equal(resets.length, 1, "同一组凭据不重复回收");
+
+    const cleared = await call(handler, { pathname: "/api/account", method: "DELETE" });
+    assert.equal(cleared.status, 200);
+    assert.equal(resets.length, 2, "清除账号必须回收");
+    assert.equal(cleared.body.generation, 2, "保存一次 + 清除一次");
+    assert.deepEqual(events, ["account-changed", "account-cleared"]);
+  });
+});

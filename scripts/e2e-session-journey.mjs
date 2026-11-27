@@ -63,6 +63,8 @@ async function main() {
   ];
   const loginAll = async options => {
     calls.push(options);
+    // 编排本身要花时间（真实环境更久）：故意慢一点，才能验证“忙时并发点击被忽略”。
+    await new Promise(resolve => setTimeout(resolve, 800));
     return sequence[Math.min(calls.length - 1, sequence.length - 1)];
   };
 
@@ -126,10 +128,16 @@ async function main() {
     // 并发点击：忙时只允许一次编排。
     await page.waitForTimeout(2500);
     const beforeConcurrent = calls.length;
-    await Promise.all([
-      page.getByRole("button", { name: "保存并登录", exact: true }).click().catch(() => {}),
-      page.getByRole("button", { name: "保存并登录", exact: true }).click().catch(() => {}),
-    ]);
+    // 同一个节点上连点两次：Playwright 的 click 会等元素可点，若页面已重渲染会重试，
+    // 那样测到的是“渲染后又一次点击”，不是“忙时并发”。
+    const clicked = await page.evaluate(() => {
+      const button = document.querySelector(".account-card button.primary");
+      if (!button) return 0;
+      button.click();
+      button.click();
+      return 1;
+    });
+    assert.equal(clicked, 1, "并发点击前按钮应存在");
     await page.waitForTimeout(2500);
     check("并发点击只产生一次编排", calls.length === beforeConcurrent + 1, `before=${beforeConcurrent} after=${calls.length}`);
 
