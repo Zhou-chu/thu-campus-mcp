@@ -1701,6 +1701,8 @@ function accountCard() {
         }
         if (batch?.needsManual?.length)
           state.authNotices.all = { error: true, text: "学校统一身份认证要求人工验证，其余服务未自动登录；请先在运行实例上完成验证再重试。" };
+        // 账号卡与提示都是整页渲染出来的，updateAuthPanels 只刷新服务面板。
+        render();
         await verifyAuthentication();
       } finally { state.authLoginBusy = ""; updateAuthPanels(); }
     }, { pending: "登录中…", errorNode }),
