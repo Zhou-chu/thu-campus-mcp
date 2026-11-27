@@ -65,7 +65,7 @@ function fakeBrowser(page, { openError, verifyStatus = 200, verifyPayload = { da
   };
 }
 
-function apiWith({ probe = async () => ({ verified: false, state: "login-required" }), credentials = { username: "u", password: "p" }, browser, casFill, read, now = () => new Date("2026-11-24T02:00:00.000Z") } = {}) {
+function apiWith({ probe = async () => ({ verified: false, state: "login-required" }), credentials = { username: "u", password: "p" }, browser, casFill, read, now = () => new Date("2026-11-24T02:00:00.000Z"), overrides = {} } = {}) {
   const calls = [];
   const api = createSeatApi({
     probe,
@@ -78,6 +78,8 @@ function apiWith({ probe = async () => ({ verified: false, state: "login-require
     casFill: casFill || (async () => ({ ok: true })),
     now,
     createReadSession: () => async (action, options) => action({ call: async path => { calls.push({ path, options }); return read ? read(path) : { data: { list: [] } }; } }),
+    // 规则默认走 HTTP；单元测试不应触网，除非显式注入。
+    readRulesPage: overrides.readRulesPage ?? (async () => ""),
   });
   return { api, calls };
 }
@@ -347,4 +349,20 @@ test("取消预约：回执丢失后核对记录，不重发取消", async () =>
 
   await assert.rejects(() => lost(() => ({ data: { list: [{ id: 66, title: "北馆 A001" }] } })).cancel(66), (error) => error.code === "SEAT_CANCEL_FAILED");
   await assert.rejects(() => lost(() => { throw new Error("读取失败"); }).cancel(66), (error) => error.code === "SEAT_CANCEL_UNKNOWN" && /读取预约记录/.test(error.message));
+});
+
+test("预约规则：HTTP 页面能读到时不打开浏览器", async () => {
+  let opened = 0;
+  const api = createSeatApi({
+    probe: async () => ({ verified: true }),
+    readCredentials: async () => ({ username: "u", password: "p" }),
+    withLock: async (_name, fn) => fn(),
+    openBrowser: async () => { opened += 1; throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    readRulesPage: async () => "1.读者登录后可预约当日或次日座位，系统开放时间为 6：00-23：00。",
+    now: () => new Date("2026-11-24T02:00:00.000Z"),
+  });
+  const rules = await api.rules();
+  assert.equal(rules.source, "page:ska.bookRule");
+  assert.deepEqual(rules.window, { open: "06:00", close: "23:00" });
+  assert.equal(opened, 0, "HTTP 拿到规则就不该开浏览器");
 });

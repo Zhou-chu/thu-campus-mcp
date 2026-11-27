@@ -148,6 +148,9 @@ test("座位只读：登录页或跳转识别为会话失效，触发一次性�
 test("座位规则：优先从页面 HTML 解析，不发浏览器；Cookie 过期仍判为需要登录", async () => {
   const { createSeatPageReader, parseSeatBookRule } = await import("../lib/app/seat-read.mjs");
   assert.equal(parseSeatBookRule('<script>window.ska={bookRule:["08:00-22:00 可预约"]}</script>'), "08:00-22:00 可预约");
+  // 线上是 JS 三元表达式；英文分支也可能夹着中文馆名，必须取中文那一支。
+  const ternary = '<script>window.ska = { \'bookRule\':"zh"=="en"?["<p>Library of 清华大学</p>"]:["<p>1.读者登录，系统开放时间为 6:00-23:00。</p>"] };</script>';
+  assert.equal(parseSeatBookRule(ternary), "<p>1.读者登录，系统开放时间为 6:00-23:00。</p>");
   assert.equal(parseSeatBookRule('<script>window.ska={bookRule:"单次最长 4 小时"}</script>'), "单次最长 4 小时");
   assert.equal(parseSeatBookRule("<html>没有规则</html>"), "");
   assert.equal(parseSeatBookRule("bookRule: not-json"), "");
