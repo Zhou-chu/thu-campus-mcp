@@ -61,7 +61,7 @@ test("统一登录编排：全部失败时 ok=false，但仍逐项给出状态",
   assert.equal(result.ok, false);
   assert.equal(result.ready, 0);
   assert.equal(result.results.seat.code, "SEAT_LOGIN_UNCONFIRMED");
-  assert.equal(result.results.sports.state, "failed");
+  assert.equal(result.results.sports.state, "timeout", "超时是独立状态，不混同普通失败");
 });
 
 test("统一登录编排：worker 服务只提交任务并返回 jobId，不冒充成功", async () => {
@@ -88,4 +88,18 @@ test("统一登录编排：services 只跑指定范围", async () => {
   });
   assert.deepEqual(ran, ["seat"]);
   assert.equal(result.total, 1);
+});
+
+test("统一登录编排：单个服务超时不会拖垮整体", async () => {
+  const result = await loginAll({
+    account: { username: "u", password: "p" },
+    timeoutMs: 60,
+    adapters: {
+      seat: () => new Promise(() => {}),
+      sports: async () => ({ ok: true }),
+    },
+  });
+  assert.equal(result.results.seat.state, "timeout");
+  assert.equal(result.results.sports.state, "ready");
+  assert.equal(result.ok, true, "其它服务仍算成功");
 });

@@ -1726,6 +1726,10 @@ function accountCard() {
             continue;
           }
           if (!DIRECT_LOGIN[name]) continue;
+          if (item.state === "timeout") {
+            state.authNotices[name] = { error: true, code: item.code, text: "登录超时：" + (item.message || "请稍后重试。") };
+            continue;
+          }
           state.authNotices[name] = item.ok
             ? { text: item.alreadyLoggedIn ? "已登录，无需重复登录。" : "已登录。" }
             : { error: true, code: item.code, text: "登录未完成：" + (item.message || item.code || "请重试。"),
