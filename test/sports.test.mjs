@@ -364,6 +364,11 @@ test("sports: 下单结果只在有明确依据时算成功", async () => {
   const { reserveOutcome } = await import("../lib/app/sports.mjs");
   assert.deepEqual(reserveOutcome({ code: 0, message: "预约成功" }), { ok: true, message: "预约成功" });
   assert.equal(reserveOutcome({ code: 500, message: "场地已满" }).code, "SPORTS_RESERVE_FAILED");
+  // 官网要滑块时通常同时带非 0 错误码，不能因此被归成普通失败。
+  const captchaWithCode = reserveOutcome({ code: 500, message: "请完成安全验证：向右滑动完成验证" });
+  assert.equal(captchaWithCode.code, "SPORTS_MANUAL_VERIFICATION");
+  const captchaMsg = reserveOutcome({ code: "E_SLIDE_CHECK", message: "请完成滑动验证" });
+  assert.equal(captchaMsg.code, "SPORTS_MANUAL_VERIFICATION");
   const captcha = reserveOutcome({ code: 0, message: "请完成安全验证：向右滑动完成验证" });
   assert.equal(captcha.ok, false);
   assert.equal(captcha.code, "SPORTS_MANUAL_VERIFICATION");

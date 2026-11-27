@@ -1624,6 +1624,8 @@ async function openLogin(name, manual = false) {
 }
 function accountCard() {
   const card = el("section", { class: "card stack account-card" });
+  const batchNotice = state.authNotices.all;
+  if (batchNotice) card.append(el("p", { class: "error", role: "alert", text: batchNotice.text }));
   const status = el("p", { class: "small" });
   const username = el("input", { type: "text", placeholder: "学号或用户名", "aria-label": "清华账号", autocomplete: "username", spellcheck: "false" });
   const password = el("input", { type: "password", placeholder: "统一身份认证密码", "aria-label": "清华账号密码", autocomplete: "current-password" });
@@ -1637,6 +1639,7 @@ function accountCard() {
       if (state.authLoginBusy) return;
       const connection = { base: state.base, token: state.token };
       state.authLoginBusy = "all";
+      delete state.authNotices.all;
       updateAuthPanels();
       try {
         if (username.value.trim() || password.value) {

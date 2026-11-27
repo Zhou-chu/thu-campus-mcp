@@ -194,6 +194,10 @@ test("worker simulation, stopped download and four-site open execute real orches
   f.env("THU_CAMPUS_MOCK", "1"); let job = await save(); await jobs.runBrowserJob(job.id); assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${job.id}.json`), "utf8")).simulation, true);
   f.env("THU_CAMPUS_MOCK", "0"); f.installSpawn(); job = await save({ stop: true }); await jobs.runBrowserJob(job.id); assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${job.id}.json`), "utf8")).status, "stopped");
   job = await save(); f.onGoto = async (_page, _url, context) => { if (f.gotoCalls.length === 4) context.emit("close"); }; await jobs.runBrowserJob(job.id); assert.equal(f.gotoCalls.length, 4); assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${job.id}.json`), "utf8")).status, "complete");
+  // open all 必须给每个站点各开一个标签页；只复用第一页会让后面的站点覆盖前面。
+  const openedPages = f.contexts.at(-1)._pages;
+  assert.equal(openedPages.length, 4, "四个站点四个标签页");
+  assert.equal(new Set(openedPages.map(page => page.urlText)).size, 4, "每个标签页落在不同站点");
 });
 test("worker login routes all real SDK adapters and honors a stop between services", async t => {
   const f = await fixture(t); await f.installed(); f.cloudFetch();

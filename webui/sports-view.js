@@ -1,7 +1,10 @@
 const DAY = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-const isoDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+// 体育场馆按北京时间排期：不在东八区时不能拿本机日期当默认值。
+const BEIJING = "Asia/Shanghai";
+const isoDate = date => date.toLocaleDateString("sv-SE", { timeZone: BEIJING });
+const beijingToday = () => isoDate(new Date());
 const dayNumber = date => `${date.getMonth() + 1}/${date.getDate()}`;
 const priceText = price => (typeof price === "number" ? `￥${price}` : "费用以官方页面为准");
 const isOrderable = session => session.status !== "N" && !(session.capacity !== null && session.reserved !== null && session.reserved >= session.capacity);
@@ -12,7 +15,7 @@ const statusText = session => {
 };
 
 export function createSportsView({ el, api }) {
-  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: isoDate(new Date()), loading: false, error: "", loaded: false, loginRequired: false, booking: null, bookingLoading: false, reservations: null, reservationsLoading: false };
+  const state = { venuesLoading: false, notice: "", sports: [], venues: [], sessions: [], sport: "", venue: "", date: beijingToday(), loading: false, error: "", loaded: false, loginRequired: false, booking: null, bookingLoading: false, reservations: null, reservationsLoading: false };
 
   return function sportsPage() {
     const wrap = el("div", { class: "stack sports-page" });
@@ -206,6 +209,7 @@ export function createSportsView({ el, api }) {
       state.sessions = [];
       state.venue = "";
       state.error = "";
+      state.venuesLoading = Boolean(state.sport);
       render();
       if (!state.sport) return;
       try {
@@ -218,6 +222,7 @@ export function createSportsView({ el, api }) {
         state.error = error?.code === "BROWSER_BUSY" ? "浏览器正被其它任务占用，请稍后重试。" : "暂时读不到该运动的场馆。";
       }
       if (request !== state.venuesRequest) return;
+      state.venuesLoading = false;
       render();
       if (state.venue) await loadSlots();
     }

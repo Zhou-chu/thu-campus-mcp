@@ -185,7 +185,7 @@ function campusFixture(overrides = {}) {
     seatLogin: async () => overrides.seatLogin ?? ({ ok: true, verified: true }),
     sportsLogin: async () => overrides.sportsLogin ?? ({ ok: true }),
     seatReserve: async () => overrides.seatReserve ?? ({ ok: true, message: "已预约" }),
-    sportsReserve: async () => overrides.sportsReserve ?? ({ ok: true, message: "已预约" }),
+    sportsReserve: async () => (typeof overrides.sportsReserve === "function" ? overrides.sportsReserve() : overrides.sportsReserve ?? { ok: true, message: "已预约" }),
     prepareBooking: async () => {
       if (overrides.bookingError) throw new BookingError(overrides.bookingError.code, overrides.bookingError.message);
       return overrides.booking ?? ({ prepared: true });
@@ -450,4 +450,20 @@ test("座位预约成功路径返回下单结果", async () => {
   const result = await call(createCampusRoutes(base), { method: "POST", pathname: "/api/seat/reserve" });
   assert.equal(result.status, 200);
   assert.equal(result.body.message, "已预约 A001");
+});
+
+test("体育下单：解锁失败要透传给界面，不能悄悄丢掉", async () => {
+  const fixture = campusFixture({
+    approve: true,
+    body: { sceneUuid: "s1", siteUuid: "site1", day: "2026-12-01", startTime: "19:00", endTime: "20:00", confirmToken: "t" },
+    sportsReserve: async () => {
+      const error = new fixture.base.SportsError("SPORTS_LOCK_FAILED", "预约窗口没能释放。");
+      error.unlock = { ok: false, message: "浏览器仍在占用" };
+      throw error;
+    },
+  });
+  const result = await call(createCampusRoutes(fixture.base), { pathname: "/api/sports/reserve", method: "POST", body: fixture.base.body });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error.code, "SPORTS_LOCK_FAILED");
+  assert.deepEqual(result.body.error.unlock, { ok: false, message: "浏览器仍在占用" }, "解锁结果必须透传");
 });
