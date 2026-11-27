@@ -126,7 +126,8 @@ test("日常UI不再生成重复眉标和无操作意义说明", () => {
 
 test("简化文案不删除输入名称、配对帮助或写入风险确认", () => {
   assert.match(app, /"aria-label": "消息"/);
-  assert.match(html, /<summary>获取配对码<\/summary>/);
+  assert.match(html, /<summary>改用配对码连接<\/summary>/);
+  assert.match(html, /id="unified-account"/);
   assert.match(app, /此操作会改动校园数据/);
   for (const text of ["允许执行", "拒绝", "使用说明", "诊断信息"])
     assert.ok(app.includes(text), "缺少必要交互：" + text);

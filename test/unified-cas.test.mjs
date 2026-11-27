@@ -69,7 +69,7 @@ function learnFixture({ verified = true, afterSubmit, accounts, fillResult = { o
 
 test("LearnX writes the verified session with a version guard and only captures LearnX cookies", async () => {
   const fixture = learnFixture();
-  assert.deepEqual(await fixture.login({ sameAccountOnly: true }), { ok: true });
+  assert.deepEqual(await fixture.login({ sameAccountOnly: true }), { ok: true, username: "test-user" });
   assert.deepEqual(fixture.saves, [[{ account: "test-user", csrfToken: "test" }, "epoch", "old"]]);
   assert.deepEqual(fixture.origins(), ["https://learn.tsinghua.edu.cn"]);
   assert.equal(fixture.closed(), 1);
@@ -92,7 +92,7 @@ test("LearnX automatic recovery never launches a browser for a different account
 
 test("LearnX interrupted navigation is verified normally; failures don't leak upstream URL or write state", async () => {
   const one = learnFixture({ prior: null, version: false, fillResult: { ok: false, code: "CAS_SUBMIT_INTERRUPTED" } });
-  assert.deepEqual(await one.login({ sameAccountOnly: true }), { ok: true });
+  assert.deepEqual(await one.login({ sameAccountOnly: true }), { ok: true, username: "test-user" });
   assert.equal(one.saves[0][2], null);
   for (const [options, code] of [
     [{ afterSubmit: "no-redirect" }, "LEARNX_LOGIN_UNCONFIRMED"],

@@ -56,3 +56,20 @@ test("browser-lock: 超时只取消排队，已启动任务不会被误报失败
   assert.equal(skippedTaskRuns, 0);
   assert.equal(browserQueueDepth(), 0);
 });
+test("browser-lock: 报错时说明是谁占着浏览器，而不是只让人‘先关闭窗口’", async () => {
+  const { browserActiveTask } = await import("../lib/app/browser-lock.mjs");
+  const running = withBrowserLock("图书馆座位登录", async () => {
+    await new Promise(resolve => setTimeout(resolve, 60));
+    return "done";
+  });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(browserActiveTask(), "图书馆座位登录");
+  const third = withBrowserLock("体育场馆登录", async () => "never", { maxQueue: 1 });
+  await assert.rejects(third, error => {
+    assert.equal(error.code, "BROWSER_BUSY");
+    assert.match(error.message, /正在执行：图书馆座位登录/, "错误里要带出占用者");
+    return true;
+  });
+  await running;
+  assert.equal(browserActiveTask(), "", "任务结束后不再占用");
+});
