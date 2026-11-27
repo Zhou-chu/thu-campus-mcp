@@ -318,3 +318,18 @@ test("停止请求在时间预算内让挂起的导航进入终态并释放租�
   const lease = await readFile(path.join(f.cfg.stateDir, "browser-lease.json"), "utf8").catch(() => "");
   assert.equal(lease, "", "任务结束后不残留租约");
 });
+
+test("启动失败在时间预算内终结任务，不留下进行中状态", async t => {
+  const f = await fixture(t);
+  await f.installed();
+  const id = randomUUID();
+  await f.put(`state/jobs/${id}.json`, { id, status: "queued", action: "open", service: "cloud", updatedAt: "0" });
+  f.launchError = new Error("launch failed");
+  const started = Date.now();
+  const settled = await Promise.race([jobs.runBrowserJob(id).then(() => "done"), new Promise(resolve => setTimeout(() => resolve("timeout"), 5000))]);
+  assert.equal(settled, "done", "启动失败必须收敛，不能一直是 running");
+  assert.ok(Date.now() - started < 5000, `预算内结束，实际 ${Date.now() - started}ms`);
+  const saved = JSON.parse(await readFile(f.path(`state/jobs/${id}.json`), "utf8"));
+  assert.equal(saved.status, "failed");
+  assert.equal(saved.error, "BROWSER_FAILED");
+});
