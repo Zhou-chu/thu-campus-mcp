@@ -393,3 +393,47 @@ test("座位会话：持久档案被占用时改用一次性浏览器并合并 C
   });
   await assert.rejects(() => closed.withSeatSession(async () => 1), error => error.code === "BROWSER_BUSY");
 });
+
+test("座位登录：优先纯 HTTP，凭据错误不退回浏览器，网络失败才回退", async () => {
+  const savedCookies = [];
+  const base = {
+    probe: async () => ({ verified: false, state: "login-required" }),
+    readCredentials: async () => ({ username: "u", password: "p" }),
+    withLock: async (_n, fn) => fn(),
+    persistCookies: async () => {},
+  };
+
+  // 1) HTTP 成功：不应打开浏览器。
+  let opened = 0;
+  const ok = createSeatApi({
+    ...base,
+    openBrowser: async () => { opened += 1; throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    loginHttp: async () => ({ ok: true, cookies: [{ name: "access_token", value: "t", domain: "seat.lib.tsinghua.edu.cn", path: "/", expires: -1 }] }),
+  });
+  const viaHttp = await ok.login();
+  assert.equal(viaHttp.via, "http");
+  assert.equal(viaHttp.ok, true);
+  assert.equal(opened, 0, "HTTP 成功时不该开浏览器");
+
+  // 2) 凭据错误：如实返回，不开浏览器。
+  const bad = createSeatApi({
+    ...base,
+    openBrowser: async () => { opened += 1; throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    loginHttp: async () => { throw Object.assign(new Error("密码不正确"), { code: "SEAT_CREDENTIALS_INVALID" }); },
+  });
+  const invalid = await bad.login();
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.code, "SEAT_CREDENTIALS_INVALID");
+  assert.match(invalid.message, /密码不正确/);
+  assert.equal(opened, 0, "凭据错误不应退回浏览器");
+
+  // 3) 网络/结构类失败：退回浏览器路径（这里让它抛出 BROWSER_BUSY 证明确实尝试了）。
+  const fallback = createSeatApi({
+    ...base,
+    openBrowser: async () => { opened += 1; throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    openEphemeral: async () => { throw Object.assign(new Error("busy"), { code: "BROWSER_BUSY" }); },
+    loginHttp: async () => { throw Object.assign(new Error("net"), { code: "SEAT_HTTP_LOGIN_FAILED" }); },
+  });
+  await assert.rejects(() => fallback.login(), error => error.code === "BROWSER_BUSY");
+  assert.equal(opened, 1, "网络类失败应回退到浏览器");
+});
