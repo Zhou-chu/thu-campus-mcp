@@ -86,7 +86,7 @@ async function app(t, { paired = true, href = origin + "/", routes: customRoutes
   if (paired) savedValues.set(connectionKey, JSON.stringify({ version: 1, base: origin, token }));
   const localStorage = { getItem: key => savedValues.get(key) ?? null, setItem: (key, value) => savedValues.set(key, String(value)), removeItem: key => savedValues.delete(key) };
   window.localStorage = localStorage;
-  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/auth/me": { ok: false, error: { code: "AUTH_REQUIRED" } }, "GET /api/auth/config": { ok: true, emailAuth: false, pairingEnabled: true }, "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/debug-log": { ok: true, enabled: false, dir: "logs", files: [], totalBytes: 0 }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
+  const routes = new Map(Object.entries({ "GET /api/meta": meta(), "GET /api/auth/me": { ok: false, error: { code: "AUTH_REQUIRED" } }, "GET /api/auth/config": { ok: true, emailAuth: false, pairingEnabled: true }, "GET /api/workspace/storage": { ok: true, storage: storage() }, "GET /api/sessions": { ok: true, sessions: [] }, "GET /api/sidebar/assignments": { ok: true, state: "ready", fetchedAt: checkedAt, active: [], expired: [], ungraded: [], courseErrors: [] }, "GET /api/gitlab/config": { ok: true, baseUrl: "https://git.tsinghua.edu.cn", configured: false, masked: "", source: "none" }, "GET /api/account": { ok: true, configured: false, masked: "", source: "none" }, "GET /api/service": { ok: true, supported: false }, "GET /api/jobs": { ok: true, jobs: [] }, "GET /api/debug-log": { ok: true, enabled: false, dir: "logs", files: [], totalBytes: 0 }, "GET /api/providers": { ok: true, providers: [], activeId: "" }, ...customRoutes }));
   const calls = [], denied = [], timers = new Map(), frames = new Map(), streams = [];
   let timerId = 0, now = 0;
   const setTimer = (fn, delay = 0) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
@@ -568,7 +568,7 @@ for (const [label, reply, expected] of [
 
 test("app: clearing credentials while login starts never polls with a changed connection", async t => {
   const pending = deferred();
-  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "GET /api/service": { ok: true, supported: false }, "POST /api/services/login": () => pending.promise } });
+  const a = await app(t, { routes: { "GET /api/keepalive": { ok: true, enabled: false, history: [] }, "GET /api/service": { ok: true, supported: false }, "GET /api/jobs": { ok: true, jobs: [] }, "POST /api/services/login": () => pending.promise } });
   a.nav("services"); await flush(); a.click(a.button("登录", a.$('[data-service="cloud"]'))); await flush();
   a.nav("settings"); await flush(); a.click(a.button("清除本地令牌并退出"));
   pending.resolve({ ok: true, jobId: "old-login" }); await flush();
@@ -1932,4 +1932,29 @@ test("app: 导出调试日志带鉴权头取 Blob，而不是裸链接", async t
   assert.equal(call.options.headers.authorization, "Bearer fixture-device-token", "下载必须带设备令牌");
   assert.equal(created.length, 1, "应生成 Blob 下载而不是跳转链接");
   assert.equal(a.$('a[href="/api/debug-log/download"]'), undefined, "不应再保留裸链接");
+});
+
+test("app: 刷新后接着跟正在跑的登录任务，不重复跟随同一个任务", async t => {
+  const jobs = [{ id: "job-cloud-1", action: "login", service: "cloud", status: "running", phase: "login", updatedAt: "0" }];
+  const polls = [];
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "GET /api/jobs": () => ({ ok: true, jobs }),
+    "GET /api/jobs/job-cloud-1": () => {
+      polls.push(Date.now());
+      return { ok: true, found: true, job: { service: "cloud", status: polls.length >= 2 ? "complete" : "running", phase: "login" } };
+    },
+  } });
+  a.nav("services");
+  await flush();
+  assert.ok(a.count("GET /api/jobs") >= 1, "进服务页时应查一次在跑的任务");
+  await a.tick(1200);
+  assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /登录任务/);
+  assert.ok(a.count("GET /api/jobs/job-cloud-1") >= 1, "应继续跟这个任务的进度");
+
+  // 重新渲染服务页不应再次拉取任务列表之外的重复跟随。
+  const before = a.count("GET /api/jobs/job-cloud-1");
+  a.click('.tab[data-view="services"]'); await flush();
+  await a.tick(1200);
+  assert.ok(a.count("GET /api/jobs/job-cloud-1") >= before, "已有跟随者不会被二次启动覆盖");
 });

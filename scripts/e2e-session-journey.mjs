@@ -189,6 +189,18 @@ async function main() {
       await restarted.close();
     }
 
+    // 刷新后接着跟任务：让编排返回一个 queued 的 cloud 任务，刷新页面应重新跟上进度。
+    sequence.length = 0;
+    sequence.push({
+      ok: true, total: 5, ready: 4, needsManual: [], busy: 0,
+      results: { ...Object.fromEntries([ready("learnx"), ready("seat"), ready("sports"), ready("hetang")]),
+        cloud: { ok: false, state: "queued", code: "LOGIN_QUEUED", message: "登录任务已提交。", jobId: "job-cloud-gate" } },
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole("button", { name: "保存并登录", exact: true }).click();
+    await page.waitForFunction(() => /登录任务/.test(document.querySelector('[data-service="cloud"] .auth-notice')?.textContent || ""), null, { timeout: 20000 });
+    check("编排把 worker 服务标成任务进行中", /正在运行|正在启动/.test(await page.locator('[data-service="cloud"] .auth-notice').innerText()));
+
     check("页面无未捕获异常", pageErrors.length === 0, pageErrors.join(" | "));
     console.log(`session journey gate: ${checks} checks passed`);
   } finally {

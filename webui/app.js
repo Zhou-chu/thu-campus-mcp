@@ -1490,6 +1490,26 @@ function sessionRow(session) {
   row.append(open, rename, remove);
   return row;
 }
+/**
+ * 刷新页面后继续跟正在跑的登录任务：只在第一次进服务页时拉一次，
+ * 同一个 jobId 不重复跟随（避免多个轮询器互相覆盖提示）。
+ */
+const followedJobs = new Set();
+async function resumeRunningJobs(connection) {
+  let data;
+  try { data = await api("/api/jobs"); } catch { return; }
+  for (const job of data?.jobs || []) {
+    if (!["queued", "running"].includes(job.status)) continue;
+    if (!["cloud", "hetang", "learnx"].includes(job.service)) continue;
+    if (followedJobs.has(job.id)) continue;
+    followedJobs.add(job.id);
+    state.authNotices[job.service] = { text: job.status === "queued" ? "登录任务已提交，正在启动浏览器…" : "登录任务运行中…" };
+    void followLoginJob(job.id, job.service, connection)
+      .catch(error => { state.authNotices[job.service] = { error: true, text: "登录任务未完成：" + (error?.message || "请稍后重试。") }; })
+      .finally(() => { followedJobs.delete(job.id); updateAuthPanels(); });
+  }
+  updateAuthPanels();
+}
 function updateAuthPanels() {
   for (const panel of document.querySelectorAll(".auth-panel")) panel.draw();
 }
@@ -1809,6 +1829,11 @@ function servicesView() {
   };
   panel.draw();
   wrap.append(accountCard(), panel, keepAliveCard());
+  // 刷新后接着跟已有任务：只对当前连接做一次。
+  if (!state.resumeJobsDone) {
+    state.resumeJobsDone = true;
+    void resumeRunningJobs({ base: state.base, token: state.token });
+  }
   return wrap;
 }
 const SERVICE_LABEL = { learnx: "网络学堂", cloud: "云盘", hetang: "雨课堂", madmodel: "MadModel", seat: "图书馆" };
