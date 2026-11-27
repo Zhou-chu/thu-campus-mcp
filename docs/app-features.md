@@ -129,7 +129,7 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 
 ### 当前现状
 
-数据来自 `sports.tsinghua.edu.cn/venue`（CAS 登录的 Vue 应用），通过持久浏览器按真实点击驱动：点“场地预约”→ 运动种类（11 项，动态读取）→ 场馆（按运动变化）→ 场馆页触发 `POST /venue/site/api/reserve/current/page` 取得场次。
+数据来自 `sports.tsinghua.edu.cn/venue`（CAS 登录的 Vue 应用）。约定的只读接口**全部走普通 HTTP**：带 `token` 请求头直接调用站点自己的接口（`createSportsReader`），不打开浏览器；只有在需要登录、或用户主动打开预约窗口时才使用浏览器。
 
 ### 已实现
 
@@ -141,13 +141,13 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 ### 未完成
 
 1. 预约下单与支付：按“只读查询 + 确认后由官方页面完成”的方式实现，不在本应用内代下单、不经手支付凭据。
-2. 会话寿命：体育登录数小时后失效，需重新登录；暂无静默续期（CAS 弹窗在无界面环境不跳转）。
+2. 会话寿命：体育登录数小时后失效，需重新登录；token 存在快照的 `localStorage` 里，过期后只读接口返回 `SPORTS_LOGIN_REQUIRED`，界面提示重新登录（暂无纯 HTTP 的体育登录路径，CAS 之后仍由页面写入 token）。
 
 ## LIBRARY-SEAT：图书馆座位预约
 
 ### 当前现状
 
-目标系统 `seat.lib.tsinghua.edu.cn`，独立登录页（非 CAS）。已将其纳入持久浏览器站点清单（`campus_browser_open` 支持 `service=seat`），登录窗口可打开。
+目标系统 `seat.lib.tsinghua.edu.cn`。登录走学校统一身份认证（CAS，`id.tsinghua.edu.cn`），**默认纯 HTTP 完成**：表单 SM2 加密密码 → 提交 → 跟随回调换座位站 Cookie（`lib/app/cas-http.mjs`），不再需要打开登录窗口。
 
 ### 功能与验收
 
@@ -173,7 +173,9 @@ UI没有思考强度控件；Agent请求只传model/messages/tools/stream。现�
 
 ### 注意
 
-- 座位系统登录会话约 1 小时后失效，需重新用 `campus_browser_open(service="seat")` 登录；过期时接口返回 `没有登录或登录已超时`，模块抛 `SEAT_LOGIN_REQUIRED`。
+- 座位系统登录会话约 1 小时后失效。过期时接口返回 `没有登录或登录已超时`，模块抛 `SEAT_LOGIN_REQUIRED`，随后用已保存的清华账号走**纯 HTTP CAS** 自动重登一次（`loginSeatHttp`）；凭据错误或需要二次认证时如实返回，不会为了绕过失败去开窗口。
+- 预约/取消也走纯 HTTP：`access_token`/`userid` 从快照 Cookie（或首页 HTML 的 `window.ska`）取，直接 POST；只有在快照里完全没有可用会话时才回退到浏览器路径（`reserveViaBrowser`/`cancelViaBrowser`）。
+- 非开放时段（06:00–23:00 之外）座位站会跳到 `/web/notopen`，此时返回 `SEAT_CLOSED`，不冒充登录失败。
 - 取消有每日次数限制，测试预约后应立即取消。
 
 ### 探测记录（截至 2026-11-19）

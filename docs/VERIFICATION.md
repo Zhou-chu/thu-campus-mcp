@@ -116,6 +116,15 @@
 
 原本机三个独立项目保留；安装遇到不同路径的同名服务会停止。配置写入逐文件处理，不承诺跨文件事务。
 
+## 2026-11-28 issue 收尾批次（#160–#174）
+
+- 关闭 #156–#169、#172、#173 等一批 issue；#167/#170/#171/#174/#166 仍开放（需要真实账号或真实校园验收）。
+- 浏览器任务：跨进程租约（`browser-lease.json`）覆盖 worker、座位会话、体育读取、体育预约窗口与 MadModel 登录窗口；`GET /api/jobs` 可查排队位置、`POST /api/jobs/<id>/cancel` 可取消；`reapInterruptedJobs()` 把死进程任务落盘为 `interrupted` 并释放租约。
+- 统一登录：`POST /api/account/login` 一次编排 learnx/seat/sports/cloud/hetang/madmodel，逐服务归因（`ready/needs-manual/busy/unavailable/not-configured/queued/timeout/failed`），单服务 120 秒超时，界面按状态渲染并跟随 worker 任务进度（刷新后仍可续跟）。
+- 身份代际：账号变更/清除时递增代际并回收校园站点 Cookie 与网络学堂授权；契约见 `docs/identity-lifecycle.md`。
+- 座位链路 HTTP 化：规则、CAS 登录（SM2）、只读查询、预约、取消全部走普通 HTTP，浏览器只在无法建立会话时回退。真实 CAS 校验：不存在的账号返回官方「您的用户名或密码不正确，请重试！」，0.2 秒、无浏览器。
+- 门禁：全量单测 1144 项通过；分层规则 5 条通过；真实 Chromium `e2e:seat-cancel` 18 项、`e2e:session-journey` 34 项、`e2e:auth-services` 13 项通过。
+
 ## 2026-11-25 上游 issue 批次与运行日志
 
 - 关闭 #136–#141：默认账号目录回退、CAS 二次验证提前识别、座位 bookings 注入与多时段、体育预约锁/token/窗口回收、工具调用移入设置、可选调试日志。
