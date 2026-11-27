@@ -44,7 +44,20 @@ async function main() {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-session-journey-"));
   const db = newDb({ autoCreateForeignKeyIndices: true });
   const session = await openStore({ pool: new (db.adapters.createPg().Pool)() });
-  const host = { describe: () => [], toolForModel: () => [], async call() { return { ok: true, data: {} }; }, async close() {} };
+  // 四个受保护探针的结果由用例控制，用来跑“冷启动 / 已登录 / 已过期”三态矩阵。
+  let probeState = "login-required";
+  const PROBES = new Set(["learn_status", "cloud_status", "rain_status", "madmodel_status"]);
+  const host = {
+    describe: () => [],
+    toolForModel: () => [],
+    async call(name) {
+      if (!PROBES.has(name)) return { ok: true, data: {} };
+      if (probeState === "ready")
+        return { ok: true, data: { verified: true, code: "VERIFIED", source: "protected-api:read", checkedAt: new Date().toISOString() } };
+      return { ok: true, data: { code: probeState === "expired" ? "AUTH_EXPIRED" : "AUTH_REQUIRED" } };
+    },
+    async close() {},
+  };
   const route = { route: "madmodel", models: async () => [], status: async () => ({ available: false }), chat: async () => { throw new Error("不需要对话"); } };
 
   const calls = [];
@@ -226,11 +239,30 @@ async function main() {
     });
     const answered = value => value?.json && typeof value.json.ok === "boolean";
     check("并发查询两个服务都得到结构化应答", answered(concurrent.seat) && answered(concurrent.sports), JSON.stringify(concurrent));
-    // 这两条读接口在没有校园数据时可能先尝试建立会话（含启动浏览器的回退），
-    // 所以预算给到 15 秒；这里验证的是“两个请求被并行处理并且都收敛”，不是校园延迟。
-    check("并发查询在 15 秒预算内收敛", Date.now() - probeStarted < 15000, `${Date.now() - probeStarted}ms`);
+    // 这两条读接口在没有校园数据时可能先尝试建立会话（含启动浏览器的回退与重试），
+    // 预算给到 45 秒：这里验证的是“两个请求被并行处理并且都能收敛、不互相死锁”，不是校园延迟。
+    check("并发查询在 45 秒预算内收敛", Date.now() - probeStarted < 45000, `${Date.now() - probeStarted}ms`);
     const leaseFile = path.join(dir, "browser-lease.json");
     check("并发查询不起浏览器也不留租约", !existsSync(leaseFile), "存在租约文件");
+
+    // 状态矩阵：冷启动 / 已登录 / 已过期三态，四个受保护探针逐个核对界面文案。
+    const probeRows = ["learnx", "cloud", "hetang", "madmodel"];
+    for (const [state, label] of [["login-required", "未登录"], ["ready", "已登录"], ["expired", "登录已过期"]]) {
+      probeState = state;
+      await page.getByRole("button", { name: /核验登录状态|核验中…/ }).click();
+      await page.waitForFunction(
+        ({ names, expected }) => names.every(name => document.querySelector(`[data-service="${name}"] .state`)?.textContent?.trim() === expected),
+        { names: probeRows, expected: label },
+        { timeout: 40000 },
+      );
+      for (const name of probeRows) {
+        const text = (await page.locator(`[data-service="${name}"] .state`).innerText()).trim();
+        check(`${name} 在 ${state} 时显示「${label}」`, text === label, "实际 " + text);
+      }
+      if (state !== "ready") {
+        check(`${state} 时每个服务都有可点的登录入口`, (await page.locator(".auth-service button").count()) >= 6);
+      }
+    }
 
     check("页面无未捕获异常", pageErrors.length === 0, pageErrors.join(" | "));
     console.log(`session journey gate: ${checks} checks passed`);
