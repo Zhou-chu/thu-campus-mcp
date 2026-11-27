@@ -133,6 +133,21 @@ async function main() {
     await page.waitForTimeout(2500);
     check("并发点击只产生一次编排", calls.length === beforeConcurrent + 1, `before=${beforeConcurrent} after=${calls.length}`);
 
+    // 跨进程占用：写入一份外来租约，座位登录必须被明确挡住并报出占用者。
+    const { writeFile, unlink } = await import("node:fs/promises");
+    await writeFile(path.join(dir, "browser-lease.json"), JSON.stringify({
+      owner: "worker:gate", label: "open:seat", pid: process.pid,
+      since: new Date().toISOString(), heartbeatAt: new Date().toISOString(),
+    }));
+    await page.locator('[data-service="seat"]').getByRole("button", { name: "登录", exact: true }).click();
+    await page.waitForFunction(() => /占用|正在执行/.test(document.querySelector('[data-service="seat"] .auth-notice')?.textContent || ""), null, { timeout: 20000 })
+      .catch(async error => {
+        console.error("lease debug:", await page.evaluate(() => document.querySelector('[data-service="seat"] .auth-notice')?.textContent || "(无提示)"));
+        throw error;
+      });
+    check("外来租约下座位登录被明确挡住", /正在执行：open:seat/.test(await page.locator('[data-service="seat"] .auth-notice').innerText()));
+    await unlink(path.join(dir, "browser-lease.json")).catch(() => {});
+
     const browserState = await page.evaluate(async () => {
       const raw = localStorage.getItem("campus-connection") || "{}";
       const token = JSON.parse(raw).token || "";

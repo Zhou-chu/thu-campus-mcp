@@ -182,7 +182,7 @@ function campusFixture(overrides = {}) {
     canonicalJson: value => JSON.stringify(value),
     readBody: async req => req?.body ?? overrides.body ?? {},
     loadAccount: async () => overrides.account ?? { username: "u", password: "p" },
-    seatLogin: async () => overrides.seatLogin ?? ({ ok: true, verified: true }),
+    seatLogin: async () => (typeof overrides.seatLogin === "function" ? overrides.seatLogin() : overrides.seatLogin ?? { ok: true, verified: true }),
     sportsLogin: async () => overrides.sportsLogin ?? ({ ok: true }),
     seatReserve: async () => overrides.seatReserve ?? ({ ok: true, message: "已预约" }),
     sportsReserve: async () => (typeof overrides.sportsReserve === "function" ? overrides.sportsReserve() : overrides.sportsReserve ?? { ok: true, message: "已预约" }),
@@ -494,4 +494,12 @@ test("统一登录：POST /api/account/login 把已核验服务作为 skip 传�
     assert.equal(result.status, 200);
     assert.deepEqual(seen[0].skip, ["seat", "sports", "learnx"], "只接受字符串");
   });
+});
+
+test("座位登录：浏览器被占用时返回可执行的 BROWSER_BUSY，而不是笼统 500", async () => {
+  const fixture = campusFixture({ seatLogin: async () => { throw Object.assign(new Error("浏览器正被占用（正在执行：open:seat）"), { code: "BROWSER_BUSY" }); } });
+  const result = await call(createCampusRoutes(fixture.base), { pathname: "/api/seat/login", method: "POST" });
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.error.code, "BROWSER_BUSY");
+  assert.match(result.body.error.message, /open:seat/);
 });
