@@ -439,3 +439,35 @@ test("统一登录：账号提交失败时回收刚签发的设备令牌", async
   const devices = await new DeviceStore(dir, { encrypt: async buffer => buffer }).list();
   assert.equal(devices.length, 0, "失败后不应残留设备记录");
 });
+
+test("身份变更：账号换代后服务状态立刻显示会话过期", async (t) => {
+  const { url } = await boot(t);
+  const email = "identity-" + Date.now() + "@mails.tsinghua.edu.cn";
+  const registered = await fetch(url + "/api/auth/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password: "long-enough-pass" }),
+  });
+  assert.equal(registered.status, 200);
+  const cookie = cookieOf(registered);
+  const headers = { cookie, "content-type": "application/json", "x-thu-csrf": "1" };
+
+  const beforeResponse = await fetch(url + "/api/auth/status", { headers });
+  const before = await beforeResponse.json();
+  assert.equal(beforeResponse.status, 200, JSON.stringify(before));
+  assert.notEqual(before.services?.learnx?.state, "expired", "未变更前不应提前标过期");
+
+  const saved = await fetch(url + "/api/account", { method: "PUT", headers, body: JSON.stringify({ username: "2024000000", password: "first-pass" }) });
+  assert.equal(saved.status, 200);
+  const first = await saved.json();
+  assert.equal(first.changed, true);
+  assert.equal(first.generation, 1);
+
+  const after = await (await fetch(url + "/api/auth/status", { headers })).json();
+  assert.equal(after.services.learnx.state, "expired", "身份变化后旧会话应显示过期");
+
+  const again = await fetch(url + "/api/account", { method: "PUT", headers, body: JSON.stringify({ username: "2024000000", password: "first-pass" }) });
+  const same = await again.json();
+  assert.equal(same.changed, false);
+  assert.equal(same.generation, 1);
+});
