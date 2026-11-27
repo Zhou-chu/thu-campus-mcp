@@ -360,3 +360,47 @@ test("回收：没有 PID 且超过 30 秒的排队任务也会被判中断", as
   assert.equal((await jobs.reapInterruptedJobs()).reaped, 1);
   assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${stale.id}.json`), "utf8")).status, "interrupted");
 });
+
+test("任务初始化异常：context 关闭、租约释放，下一个任务仍能跑完", async t => {
+  const f = await fixture(t);
+  f.installSpawn();
+  await f.installed();
+  const failing = { id: randomUUID(), status: "queued", action: "open", service: "learnx", updatedAt: "0" };
+  await f.put(`state/jobs/${failing.id}.json`, failing);
+  // 模拟“页面初始化过程中出错”（viewport/点击之类的异常在真实环境同样走这条路径）。
+  f.onGoto = async () => { throw new Error("viewport setup failed"); };
+  await jobs.runBrowserJob(failing.id);
+  const failed = JSON.parse(await readFile(f.path(`state/jobs/${failing.id}.json`), "utf8"));
+  assert.equal(failed.status, "failed");
+  assert.equal(await readLease(f.cfg.stateDir), null, "失败后租约必须释放");
+  assert.equal(f.contexts.every(context => context._closed), true, "浏览器 context 必须关闭");
+
+  // open 任务会等窗口关闭才结束：让它导航后自行关闭，模拟用户关窗。
+  f.onGoto = async (_page, _url, context) => { context.emit("close"); };
+  const next = { id: randomUUID(), status: "queued", action: "open", service: "learnx", updatedAt: new Date().toISOString() };
+  await f.put(`state/jobs/${next.id}.json`, next);
+  await jobs.runBrowserJob(next.id);
+  assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${next.id}.json`), "utf8")).status, "complete", "下一个任务必须能用");
+});
+
+test("取消其中一个任务不会中止另一个任务", async t => {
+  const f = await fixture(t);
+  f.installSpawn();
+  await f.installed();
+  // updatedAt 用当前时间：太旧的 queued 会被判成“早已过期”，那样测的就不是取消语义了。
+  const stamp = new Date().toISOString();
+  const cancelled = { id: randomUUID(), status: "queued", action: "open", service: "learnx", updatedAt: stamp };
+  const other = { id: randomUUID(), status: "queued", action: "open", service: "learnx", updatedAt: stamp };
+  await f.put(`state/jobs/${cancelled.id}.json`, cancelled);
+  await f.put(`state/jobs/${other.id}.json`, other);
+
+  await jobs.cancelBrowserJob(cancelled.id);
+  await jobs.runBrowserJob(cancelled.id);
+  // open 任务会等窗口被关闭才结束；这里让它在第一次导航后自行关闭，模拟“用户关掉窗口”。
+  f.onGoto = async (_page, _url, context) => { context.emit("close"); };
+  await jobs.runBrowserJob(other.id);
+
+  assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${cancelled.id}.json`), "utf8")).status, "stopped");
+  assert.equal(JSON.parse(await readFile(f.path(`state/jobs/${other.id}.json`), "utf8")).status, "complete");
+  assert.equal(f.gotoCalls.length, 1, "被取消的任务不应导航，另一个任务照常执行");
+});
