@@ -4,7 +4,7 @@
 
 | 编号 | 功能点 | 状态 |
 | --- | --- | --- |
-| ACCOUNT-LOGIN | 用清华学号 / 邮箱 / 用户名 + 统一身份认证密码直接登录应用，取消设备配对码前置；凭据有效性由清华官方通道判定 | **待实现**（需求已定，见[账号登录](#account-login清华账号直接登录)与 [#158](https://github.com/Zhou-chu/thu-campus-mcp/issues/158)） |
+| ACCOUNT-LOGIN | 用清华学号 / 邮箱 / 用户名 + 统一身份认证密码直接登录应用，取消设备配对码前置；凭据有效性由清华官方通道判定 | **已实现（MVP）**：首屏即账号登录，校验走统一身份认证 + 网络学堂受保护页面；配对码降级为次要入口。验收见[账号登录](#account-login清华账号直接登录)与 [#158](https://github.com/Zhou-chu/thu-campus-mcp/issues/158) |
 | UI-APPROVAL-CARD | 紧凑、可伸缩、处理后收起的审批卡 | 本批修复，验收见[审批卡验证](approval-card-verification.md) |
 | MODEL-REASONING-EFFORT | 按模型能力选择思考强度 | **部分实现**：输入区与设置可选低/中/高并随请求发送，默认不发该参数；尚未按模型能力过滤选项 |
 | SECURITY-APPROVAL-MODE | 明确、可选择且由服务端强制执行的审批模式 | **待实现**，不是现有启动开关或单次允许/拒绝 |

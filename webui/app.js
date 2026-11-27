@@ -315,6 +315,57 @@ function showPair(message) {
     forgetToken();
   }
 }
+const UNIFIED_ERRORS = {
+  ACCOUNT_REQUIRED: "请填写学号、邮箱或用户名。",
+  PASSWORD_REQUIRED: "请填写统一身份认证密码。",
+  LEARNX_LOGIN_UNCONFIRMED: "学校统一认证没有通过：账号或密码不正确。",
+  CAS_CAPTCHA_REQUIRED: "学校要求验证码或二次验证，请在运行实例的电脑上完成一次登录后再试。",
+  LEARNX_LOGIN_TIMEOUT: "统一认证响应超时，请稍后重试。",
+  UNIFIED_HTTPS_REQUIRED: "请用 HTTPS 打开这个地址后再登录。",
+  UNIFIED_LOGIN_DISABLED: "这个实例使用固定令牌，请直接打开带令牌的链接。",
+  UNIFIED_LOGIN_FAILED: "登录没有完成，请稍后重试。",
+};
+/** 清华账号直连登录：凭据交给运行实例去学校统一认证校验，成功后才拿到设备令牌。 */
+async function submitUnified() {
+  const button = $("#unified-submit");
+  const errorNode = $("#unified-error");
+  const base = sanitizeBaseUrl(location.origin);
+  const account = $("#unified-account").value.trim();
+  const password = $("#unified-password").value;
+  const fail = message => { errorNode.hidden = false; errorNode.textContent = message; };
+  errorNode.hidden = true;
+  if (!base) return fail("请从运行实例的地址打开这个页面。");
+  if (!account) return fail(UNIFIED_ERRORS.ACCOUNT_REQUIRED);
+  if (!password) return fail(UNIFIED_ERRORS.PASSWORD_REQUIRED);
+  button.disabled = true;
+  button.textContent = "正在用学校统一认证校验…";
+  try {
+    const response = await fetch(base + "/api/auth/unified", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "omit",
+      body: JSON.stringify({ account, password, deviceName: navigator.platform || "浏览器", platform: "webui" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok)
+      throw Object.assign(new Error(UNIFIED_ERRORS[data?.error?.code] || data?.error?.message || "登录失败"), { code: data?.error?.code });
+    const issued = sanitizeToken(String(data.token ?? ""));
+    if (!issued) throw new Error("服务器返回的设备令牌不合法，未保存。");
+    state.token = issued;
+    state.base = base;
+    writeConnection(localStorage, { base, token: issued });
+    $("#unified-password").value = "";
+    $("#pair").hidden = true;
+    $("#app").hidden = false;
+    await refreshMeta();
+    render();
+  } catch (error) {
+    fail(error.message || "登录失败，请稍后重试。");
+  } finally {
+    button.disabled = false;
+    button.textContent = "登录";
+  }
+}
 async function submitPair() {
   const button = $("#pair-submit");
   const errorNode = $("#pair-error");
@@ -2547,6 +2598,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden && themeMode === "auto") document.documentElement.dataset.theme = resolveAutoTheme();
 });
   $("#pair-submit").addEventListener("click", submitPair);
+  $("#unified-form").addEventListener("submit", event => { event.preventDefault(); void submitUnified(); });
   $("#pair-code").addEventListener("keydown", (event) => {
     if (event.key === "Enter") void submitPair();
   });

@@ -81,29 +81,41 @@
 
     <section id="pair" class="pair" hidden>
       <div class="card pair-card">
-        <h2>连接设备</h2>
-        <p id="pair-guidance" class="small muted" hidden></p>
-        <label class="field">
-          <span>服务器地址</span>
-          <input id="pair-base" type="url" inputmode="url" placeholder="http://192.168.1.23:8971" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span>配对码</span>
-          <input
-            id="pair-code"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            maxlength="6"
-            placeholder="000000"
-            autocomplete="one-time-code"
-          />
-        </label>
-        <p id="pair-error" class="error" role="alert" hidden></p>
-        <button id="pair-submit" class="primary" type="button">配对并连接</button>
-        <details class="help-section">
-          <summary>获取配对码</summary>
-          <p>在已连接设备的“设置”中生成配对码。</p>
+        <h2 id="pair-title">用清华账号登录</h2>
+        <form id="unified-form" novalidate>
+          <label class="field">
+            <span>学号 / 邮箱 / 用户名</span>
+            <input id="unified-account" type="text" autocomplete="username" spellcheck="false" placeholder="2024xxxxxxxx 或 name@mails.tsinghua.edu.cn" required />
+          </label>
+          <label class="field">
+            <span>统一身份认证密码</span>
+            <input id="unified-password" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="small muted">用学校统一身份认证校验这组凭据；密码只保存在这台运行实例上。</p>
+          <p id="unified-error" class="error" role="alert" hidden></p>
+          <button id="unified-submit" class="primary" type="submit">登录</button>
+        </form>
+        <details class="help-section" id="pairing-fallback">
+          <summary>改用配对码连接</summary>
+          <p id="pair-guidance" class="small muted" hidden></p>
+          <label class="field">
+            <span>服务器地址</span>
+            <input id="pair-base" type="url" inputmode="url" placeholder="http://192.168.1.23:8971" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>配对码</span>
+            <input
+              id="pair-code"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="6"
+              placeholder="000000"
+              autocomplete="one-time-code"
+            />
+          </label>
+          <p id="pair-error" class="error" role="alert" hidden></p>
+          <button id="pair-submit" class="primary" type="button">配对并连接</button>
           <p>首次启动：<code>node bin/thu-campus.mjs app serve</code>，使用控制台显示的配对码。</p>
         </details>
       </div>

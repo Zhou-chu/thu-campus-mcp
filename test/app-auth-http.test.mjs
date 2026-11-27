@@ -10,6 +10,7 @@ import { DeviceStore } from "../lib/app/devices.mjs";
 import { SessionStore } from "../lib/app/sessions.mjs";
 import { ProviderStore } from "../lib/app/providers.mjs";
 import { openStore } from "../lib/store/index.mjs";
+import { UnifiedLoginError } from "../lib/app/unified-login.mjs";
 
 function fakeHost() {
   return {
@@ -51,6 +52,7 @@ async function boot(t, options = {}) {
     auth: session.auth,
     store: session,
     providerStore: options.providerStore || undefined,
+    unifiedLogin: options.unifiedLogin || undefined,
   });
   const url = await app.listen();
   t.after(async () => {
@@ -342,4 +344,80 @@ test("设备会话列表可撤销其它设备，登录限流生效", async t => 
     if (attempt.status === 429) { limited = true; break; }
   }
   assert.equal(limited, true, "15 分钟内第 11 次失败应被限流");
+});
+test("清华账号直连登录：校验成功才签发令牌，失败不签发", async t => {
+  const seen = [];
+  const { url } = await boot(t, {
+    unifiedLogin: async ({ account, password, stateDir }) => {
+      seen.push({ account, password, stateDir });
+      if (password === "right-pass-123") return { ok: true, username: "2024000000" };
+      throw new UnifiedLoginError("LEARNX_LOGIN_UNCONFIRMED", "统一身份认证没有确认这组凭据：请检查账号与密码是否正确。", 401);
+    },
+  });
+
+  const failed = await fetch(url + "/api/auth/unified", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ account: "2024000000", password: "wrong-pass" }),
+  });
+  assert.equal(failed.status, 401);
+  const failure = await failed.json();
+  assert.equal(failure.error.code, "LEARNX_LOGIN_UNCONFIRMED");
+  assert.match(failure.error.message, /账号与密码/);
+  assert.equal(failure.ok, false);
+  assert.equal("token" in failure, false, "校验失败不能签发令牌");
+
+  const ok = await fetch(url + "/api/auth/unified", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ account: "2024000000", password: "right-pass-123", deviceName: "实验室台式机" }),
+  });
+  assert.equal(ok.status, 200);
+  const body = await ok.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.username, "2024000000");
+  assert.match(body.token, /^tc1_/);
+  assert.deepEqual(seen.map(item => item.account), ["2024000000", "2024000000"]);
+  assert.deepEqual(seen.map(item => item.password), ["wrong-pass", "right-pass-123"]);
+
+  const meta = await fetch(url + "/api/meta", { headers: { authorization: "Bearer " + body.token } });
+  assert.equal(meta.status, 200, "签发的令牌应能直接访问受保护接口");
+  const devices = await new DeviceStore(seen[0].stateDir, { encrypt: async buffer => buffer }).list();
+  assert.equal(devices.length, 1);
+  assert.equal(devices[0].name, "实验室台式机");
+});
+
+test("清华账号直连登录：缺账号或密码在进入校验前就被拒", async t => {
+  const { url } = await boot(t);
+  for (const body of [{}, { account: "2024000000" }, { account: "", password: "x" }]) {
+    const response = await fetch(url + "/api/auth/unified", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    assert.ok([400, 401].includes(response.status), "缺字段必须是 4xx");
+    const payload = await response.json();
+    assert.equal(payload.ok, false);
+    assert.ok(["ACCOUNT_REQUIRED", "PASSWORD_REQUIRED"].includes(payload.error.code), payload.error.code);
+  }
+});
+
+test("清华账号直连登录：固定令牌实例不开放账号登录", async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), "campus-auth-token-"));
+  const app = createAppServer({
+    config: { root: path.resolve(import.meta.dirname, ".."), host: "127.0.0.1", port: 0, stateDir: dir, token: "fixed-token", modelRoute: "madmodel", modelBaseUrl: "", modelApiKey: "", modelName: "", maxSteps: 8, hostname: "test-host", version: "test" },
+    host: fakeHost(), route: fakeRoute(),
+    devices: new DeviceStore(dir, { encrypt: async buffer => buffer }),
+    pairing: new PairingCodes(), sessions: new SessionStore(dir), version: "test",
+    webuiDir: path.join(dir, "webui"),
+  });
+  const url = await app.listen();
+  t.after(async () => { await app.close(); await rm(dir, { recursive: true, force: true }); });
+  const response = await fetch(url + "/api/auth/unified", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ account: "2024000000", password: "right-pass-123" }),
+  });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "UNIFIED_LOGIN_DISABLED");
 });
