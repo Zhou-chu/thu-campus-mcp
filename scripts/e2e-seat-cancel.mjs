@@ -31,17 +31,30 @@ async function chromiumPath() {
 
 /** 可切换行为的座位替身：记录写入次数，不触达真实图书馆。 */
 function fakeSeat() {
-  const state = { bookings: [{ id: 41, title: "北馆 A001", status: 2, start: "2026-11-26 08:00", end: "2026-11-26 12:00" }], cancelCalls: [], mode: "ok", delayMs: 0 };
+  const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const state = {
+    bookings: [{ id: 41, title: "北馆 A001", status: 2, start: "2026-11-26 08:00", end: "2026-11-26 12:00" }],
+    cancelCalls: [], seatCalls: [], mode: "ok", delayMs: 0, day,
+  };
   return {
     state,
     api: {
-      libraries: async () => ({ libraries: [] }),
-      floors: async () => ({ floors: [] }),
-      areas: async () => ({ areas: [] }),
+      libraries: async () => ({ libraries: [{ id: 35, name: "北馆", valid: true }, { id: 36, name: "西馆", valid: true }] }),
+      floors: async () => ({ floors: [{ id: 1, name: "一层", valid: true }] }),
+      areas: async () => ({ areas: [{ id: 96, name: "A区", valid: true, total: 8 }, { id: 97, name: "B区", valid: true, total: 8 }] }),
       rules: async () => ({ rules: [] }),
-      segments: async () => ({ segments: [] }),
-      days: async () => ({ days: [] }),
-      seats: async () => ({ seats: [], segments: [] }),
+      segments: async section => ({ segments: [{ id: Number(section) * 10, day }] }),
+      days: async () => ({ days: [{ date: day }] }),
+      seats: async (section, date, segment) => {
+        // 记录每次读座位的参数：切换分区后不能再带上一分区的 segment。
+        state.seatCalls.push({ section: Number(section), segment: segment ? Number(segment) : null });
+        return {
+          sectionId: Number(section),
+          date,
+          seats: [{ id: 5122, name: "A001", status: 0, segment: Number(section) * 10, begin: "08:00", end: "12:00" }],
+          segments: [],
+        };
+      },
       sections: async () => ({ sections: [] }),
       bookings: async () => ({ bookings: state.bookings.map(item => ({ ...item })) }),
       cancel: async id => {
@@ -94,6 +107,17 @@ async function main() {
     await page.waitForSelector("#app:not([hidden])", { timeout: 15000 });
 
     await page.click('.tab[data-view="seat"]');
+    // 等首屏座位加载完成，再切换分区：切换后不得把上一分区的 segment 带进新查询。
+    await page.waitForSelector(".seat-select", { timeout: 10000 });
+    await page.waitForFunction(() => document.querySelectorAll(".seat-grid .seat-cell, .seat-map button, .seat-seat").length > 0, null, { timeout: 10000 }).catch(() => {});
+    await page.selectOption(".seat-select", "97");
+    await page.waitForFunction(() => true, null, { timeout: 1000 });
+    await page.waitForTimeout(800);
+    const seatCalls = seat.state.seatCalls;
+    check("切换分区后会重新读座位", seatCalls.at(-1)?.section === 97, JSON.stringify(seatCalls));
+    check("切换分区后不再带上一分区的 segment", seatCalls.at(-1)?.segment === null, JSON.stringify(seatCalls));
+    check("切换分区不报读取失败", !/暂时读不到座位|时段已变化|该时段已失效/.test(await page.locator("#app").innerText()));
+
     await page.getByRole("button", { name: "读取预约记录", exact: true }).click();
     await page.waitForSelector(".seat-bookings-list li", { timeout: 10000 });
     check("读取记录后每条预约都有取消入口", (await page.locator(".seat-bookings-list li button").count()) === 1);

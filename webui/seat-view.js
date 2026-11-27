@@ -320,6 +320,7 @@ export function createSeatView({ el, api }) {
         const hints = {
           SEAT_LOGIN_REQUIRED: "需要先登录图书馆座位系统。",
           SEAT_WINDOW_CLOSED: "系统开放预约时间为06:00-23:00（北京时间）。",
+          SEAT_SEGMENT_INVALID: "这个分区的时段已变化，已重置筛选，请重新选座。",
           BROWSER_BUSY: "浏览器正被其它任务占用，请稍后重试。",
           SEAT_UNREACHABLE: "无法启动浏览器读取座位，请检查运行实例。",
           SEAT_LOGIN_UNCONFIRMED: "未能确认座位登录，请核对清华账号或到运行实例完成验证。",
@@ -342,7 +343,8 @@ export function createSeatView({ el, api }) {
     }
 
     async function loadFloors() {
-      Object.assign(state, { floors: [], areas: [], days: [], floor: null, area: null });
+      // 换馆区：旧的楼层/分区/时段/座位都失效，先清空，避免把旧 segment 带进新分区查询。
+      Object.assign(state, { floors: [], areas: [], days: [], floor: null, area: null, segment: null, segments: [], seats: [], seat: null });
       if (!state.library) return;
       const ok = await readScoped("/api/seat/floors?library=" + state.library.id, data => {
         state.floors = (Array.isArray(data.floors) ? data.floors : []).filter(item => item.valid !== false);
@@ -352,7 +354,7 @@ export function createSeatView({ el, api }) {
     }
 
     async function loadAreas() {
-      Object.assign(state, { areas: [], days: [], area: null });
+      Object.assign(state, { areas: [], days: [], area: null, segment: null, segments: [], seats: [], seat: null });
       if (!state.floor) return;
       const ok = await readScoped("/api/seat/areas?floor=" + state.floor.id, data => {
         state.areas = (Array.isArray(data.areas) ? data.areas : []).filter(item => item.valid !== false && (item.total ?? 1) > 0);
@@ -362,7 +364,8 @@ export function createSeatView({ el, api }) {
     }
 
     async function loadSegments() {
-      state.days = [];
+      // 换分区：旧的 segment 与座位属于上一个分区，必须先清掉。
+      Object.assign(state, { days: [], segment: null, segments: [], seats: [], seat: null });
       if (!state.area) return;
       const ok = await readScoped("/api/seat/segments?section=" + state.area.id, data => {
         const segments = Array.isArray(data.segments) ? data.segments : [];

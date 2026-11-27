@@ -290,6 +290,28 @@ test("取消预约：明确拒绝报错且不再读取记录", async () => {
   assert.equal(reads, 0, "明确拒绝不需要核对记录");
 });
 
+test("取消预约：非 JSON 响应与历史状态都要走核对，而不是直接判失败", async () => {
+  let reads = 0;
+  const nonJson = (read) => apiWith({
+    // 网关错误页：evaluate 拿不到 json，返回 status:-1 且标记结果不明。
+    browser: fakeBrowser(fakePage(seatState({ cancelResponse: () => null }))),
+    probe: async () => ({ verified: true }),
+    read: () => { reads += 1; return read(); },
+  }).api;
+
+  // 记录仍在且 status=2：确实没取消掉。
+  await assert.rejects(() => nonJson(() => ({ data: { list: [{ id: 66, status: 2 }] } })).cancel(66),
+    (error) => error.code === "SEAT_CANCEL_FAILED" && reads === 1);
+
+  // 记录还在，但已是取消/历史状态：按已取消处理，不回滚成失败。
+  const history = await nonJson(() => ({ data: { list: [{ id: 66, status: 4 }] } })).cancel(66);
+  assert.deepEqual(history, { id: 66, ok: true, cancelled: true, verified: true, message: "预约已不在有效状态。" });
+
+  // 记录里没有状态字段：无法证明已取消，保守判为仍在。
+  await assert.rejects(() => nonJson(() => ({ data: { list: [{ id: 66, title: "北馆 A001" }] } })).cancel(66),
+    (error) => error.code === "SEAT_CANCEL_FAILED");
+});
+
 test("取消预约：回执丢失后核对记录，不重发取消", async () => {
   const cancelled = [];
   const lost = (read) => apiWith({
