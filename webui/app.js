@@ -1503,7 +1503,7 @@ async function resumeRunningJobs(connection) {
     if (!["cloud", "hetang", "learnx"].includes(job.service)) continue;
     if (followedJobs.has(job.id)) continue;
     followedJobs.add(job.id);
-    state.authNotices[job.service] = { text: job.status === "queued" ? "登录任务已提交，正在启动浏览器…" : "登录任务运行中…" };
+    state.authNotices[job.service] = { text: job.status === "queued" ? "登录任务已提交，正在启动浏览器…" : "登录任务运行中…", jobId: job.id };
     void followLoginJob(job.id, job.service, connection)
       .catch(error => { state.authNotices[job.service] = { error: true, text: "登录任务未完成：" + (error?.message || "请稍后重试。") }; })
       .finally(() => { followedJobs.delete(job.id); updateAuthPanels(); });
@@ -1576,7 +1576,8 @@ async function followLoginJob(id, name, connection) {
     checkLoginConnection(connection);
     const progress = loginJobProgress(result, name);
     if (progress.done) return;
-    state.authNotices[name] = progress;
+    // 保留 jobId：行内“取消任务”按钮要在整段跟随期间都在。
+    state.authNotices[name] = { ...progress, jobId: id };
     updateAuthPanels();
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
@@ -1728,6 +1729,7 @@ function accountCard() {
                 manual: ["CAS_CAPTCHA_REQUIRED", "SEAT_LOGIN_UNCONFIRMED", "SPORTS_MANUAL_VERIFICATION"].includes(item.code) };
         }
         for (const [name, jobId] of queued) {
+          state.authNotices[name] = { ...(state.authNotices[name] || {}), jobId };
           void followLoginJob(jobId, name, connection).catch(error => {
             state.authNotices[name] = { error: true, text: "登录任务未完成：" + (error?.message || "请稍后重试。") };
             updateAuthPanels();
@@ -1808,6 +1810,23 @@ function servicesView() {
         } }));
       }
       if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : ""), role: notice.error ? "alert" : "status", text: notice.text }));
+      // 正在跟随的 worker 任务：给一个明确的取消入口，而不是只能干等。
+      if (notice?.jobId && !notice.error)
+        row.append(el("button", {
+          class: "ghost", type: "button", text: "取消任务",
+          onclick: async event => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            try {
+              await api("/api/jobs/" + encodeURIComponent(notice.jobId) + "/cancel", { method: "POST", body: {} });
+              state.authNotices[name] = { text: "已请求取消，等待任务收尾。" };
+            } catch (error) {
+              state.authNotices[name] = { error: true, text: "取消未成功：" + (error?.message || "请稍后重试。") };
+            }
+            button.disabled = false;
+            updateAuthPanels();
+          },
+        }));
       // 浏览器被占用时，“先关闭窗口”必须是一个能点的动作，而不是一句让远程用户无从下手的话。
       if (notice?.code === "BROWSER_BUSY")
         row.append(el("button", { class: "ghost", type: "button", text: "关闭占用窗口并重试", onclick: () => { void closeBrowserWindows(); } }));

@@ -1458,3 +1458,15 @@ test("HTTP 边界：超大请求体 413、坏 JSON 400、IPv6 主机头与静态
   assert.equal(ipv6.status, 403);
   assert.match(ipv6.text, /HOST_REJECTED/);
 });
+
+test("任务列表：排队任务带位置，取消未知任务返回 404", async (t) => {
+  const { url } = await boot(t, { token: "t" });
+  const headers = { authorization: "Bearer t" };
+  const list = await (await fetch(url + "/api/jobs", { headers })).json();
+  assert.equal(list.ok, true);
+  assert.ok(Array.isArray(list.jobs), "job 列表必须是数组");
+
+  const missing = await fetch(url + "/api/jobs/9f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f/cancel", { method: "POST", headers });
+  assert.equal(missing.status, 404, "未知任务不能假装取消成功");
+  assert.equal((await missing.json()).error.code, "JOB_NOT_FOUND");
+});

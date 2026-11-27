@@ -1958,3 +1958,19 @@ test("app: 刷新后接着跟正在跑的登录任务，不重复跟随同一个
   await a.tick(1200);
   assert.ok(a.count("GET /api/jobs/job-cloud-1") >= before, "已有跟随者不会被二次启动覆盖");
 });
+
+test("app: 跟随中的登录任务可以取消，失败时如实提示", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "GET /api/jobs": { ok: true, jobs: [{ id: "job-cloud-2", action: "login", service: "cloud", status: "running", updatedAt: "0" }] },
+    "GET /api/jobs/job-cloud-2": { ok: true, found: true, job: { service: "cloud", status: "running", phase: "login" } },
+    "POST /api/jobs/job-cloud-2/cancel": { ok: true, requested: true },
+  } });
+  a.nav("services");
+  await flush();
+  await a.tick(1200);
+  const cancel = a.button("取消任务", a.$('[data-service="cloud"]'));
+  a.click(cancel); await flush();
+  assert.equal(a.count("POST /api/jobs/job-cloud-2/cancel"), 1);
+  assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /已请求取消/);
+});
