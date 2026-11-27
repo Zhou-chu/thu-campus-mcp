@@ -144,3 +144,22 @@ test("座位只读：登录页或跳转识别为会话失效，触发一次性�
   assert.equal(refreshes, 1, "只恢复一次");
   assert.equal(calls, 2, "恢复后只重试一次");
 });
+
+test("座位规则：优先从页面 HTML 解析，不发浏览器；Cookie 过期仍判为需要登录", async () => {
+  const { createSeatPageReader, parseSeatBookRule } = await import("../lib/app/seat-read.mjs");
+  assert.equal(parseSeatBookRule('<script>window.ska={bookRule:["08:00-22:00 可预约"]}</script>'), "08:00-22:00 可预约");
+  assert.equal(parseSeatBookRule('<script>window.ska={bookRule:"单次最长 4 小时"}</script>'), "单次最长 4 小时");
+  assert.equal(parseSeatBookRule("<html>没有规则</html>"), "");
+  assert.equal(parseSeatBookRule("bookRule: not-json"), "");
+
+  const snapshot = async () => ({ cookies: [{ domain: "seat.lib.tsinghua.edu.cn", path: "/", name: "access_token", value: "t", expires: -1 }] });
+  let requested = "";
+  const reader = createSeatPageReader({ snapshot, fetchImpl: async url => { requested = String(url); return new Response('<script>window.ska={bookRule:["07:00-23:00"]}</script>', { status: 200 }); } });
+  assert.equal(await reader(), "07:00-23:00");
+  assert.match(requested, /seat\.lib\.tsinghua\.edu\.cn\/web\/seat3/);
+
+  const expired = createSeatPageReader({ snapshot, fetchImpl: async () => new Response("", { status: 401 }) });
+  await assert.rejects(() => expired(), error => error.code === "SEAT_LOGIN_REQUIRED");
+  const noCookie = createSeatPageReader({ snapshot: async () => ({ cookies: [] }), fetchImpl: async () => new Response("", { status: 200 }) });
+  await assert.rejects(() => noCookie(), error => error.code === "SEAT_LOGIN_REQUIRED");
+});
