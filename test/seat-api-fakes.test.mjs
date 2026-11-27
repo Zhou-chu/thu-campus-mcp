@@ -82,6 +82,9 @@ function apiWith({ probe = async () => ({ verified: false, state: "login-require
     createReadSession: () => async (action, options) => action({ call: async path => { calls.push({ path, options }); return read ? read(path) : { data: { list: [] } }; } }),
     // 规则默认走 HTTP；单元测试不应触网，除非显式注入。
     readRulesPage: overrides.readRulesPage ?? (async () => ""),
+    // 单元测试绝不碰真实站点：HTTP 预约路径显式关闭，快照也为空。
+    httpReserve: overrides.httpReserve ?? false,
+    readSnapshotState: overrides.readSnapshotState ?? (async () => null),
   });
   return { api, calls };
 }
@@ -436,4 +439,65 @@ test("座位登录：优先纯 HTTP，凭据错误不退回浏览器，网络失
   });
   await assert.rejects(() => fallback.login(), error => error.code === "BROWSER_BUSY");
   assert.equal(opened, 1, "网络类失败应回退到浏览器");
+});
+
+test("预约：有快照 Cookie 时走纯 HTTP，不开浏览器也不停真实站点", async () => {
+  const posts = [];
+  const cookies = [
+    { name: "access_token", value: "http-token", domain: "seat.lib.tsinghua.edu.cn", path: "/", expires: -1 },
+    { name: "userid", value: "2024000000", domain: "seat.lib.tsinghua.edu.cn", path: "/", expires: -1 },
+  ];
+  // 注入 fetch：只允许我们关心的地址，其它一律失败；浏览器入口一律报错以证明没用到它。
+  const api2 = createSeatApi({
+    probe: async () => ({ verified: true }),
+    readCredentials: async () => ({ username: "u", password: "p" }),
+    withLock: async (_n, fn) => fn(),
+    openBrowser: async () => { throw new Error("不该打开浏览器"); },
+    httpReserve: true,
+    readSnapshotState: async () => ({ cookies, origins: [] }),
+    fetchImpl: async (url, options = {}) => {
+      posts.push({ url: String(url), method: options.method || "GET", body: options.body });
+      return { status: 200, ok: true, async text() { return JSON.stringify({ status: 1, msg: "预约成功" }); }, async json() { return { status: 1, msg: "预约成功" }; } };
+    },
+    readRulesPage: async () => "",
+    createReadSession: () => async (action, options) => action({ call: async () => ({ data: { list: [] } }), options }),
+    now: () => new Date("2026-11-24T02:00:00.000Z"),
+  });
+  const result = await api2.reserve({ space: 5122, segment: 7, day: "2026-11-24" });
+  assert.equal(result.ok, true);
+  assert.equal(posts.length, 1, "应该只发一次预约请求");
+  assert.match(posts[0].url, /\/api\.php\/spaces\/5122\/book$/);
+  assert.match(String(posts[0].body), /access_token=http-token/);
+  assert.match(String(posts[0].body), /segment=7/);
+  assert.ok(!posts.some(item => /id\.tsinghua/.test(item.url)), "绝不能碰真实站点或登录页");
+});
+
+
+test("取消：有快照 Cookie 时也走纯 HTTP，且只发一次", async () => {
+  const posts = [];
+  const cookies = [
+    { name: "access_token", value: "http-token", domain: "seat.lib.tsinghua.edu.cn", path: "/", expires: -1 },
+    { name: "userid", value: "2024000000", domain: "seat.lib.tsinghua.edu.cn", path: "/", expires: -1 },
+  ];
+  const api = createSeatApi({
+    probe: async () => ({ verified: true }),
+    readCredentials: async () => ({ username: "u", password: "p" }),
+    withLock: async (_n, fn) => fn(),
+    openBrowser: async () => { throw new Error("不该打开浏览器"); },
+    httpReserve: true,
+    readSnapshotState: async () => ({ cookies, origins: [] }),
+    fetchImpl: async (url, options = {}) => {
+      posts.push({ url: String(url), method: options.method || "GET", body: options.body });
+      return { status: 200, ok: true, async text() { return JSON.stringify({ status: 1, msg: "已取消" }); }, async json() { return { status: 1, msg: "已取消" }; } };
+    },
+    readRulesPage: async () => "",
+    createReadSession: () => async (action, options) => action({ call: async () => ({ data: { list: [] } }), options }),
+    now: () => new Date("2026-11-24T02:00:00.000Z"),
+  });
+  const result = await api.cancel(66);
+  assert.equal(result.cancelled, true);
+  assert.equal(posts.length, 1);
+  assert.match(posts[0].url, /\/api\.php\/profile\/books\/66$/);
+  assert.match(String(posts[0].body), /_method=delete/);
+  assert.ok(!posts.some(item => /id\.tsinghua/.test(item.url)));
 });
