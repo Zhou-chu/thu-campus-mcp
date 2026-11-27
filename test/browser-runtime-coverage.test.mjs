@@ -268,3 +268,17 @@ test("MadModel rejects closed window, fatal navigation, challenge, abort and mal
     f.localValue = value; await assert.rejects(madLogin({ force: true, timeoutMs: 50, interactive, verify: async () => false }), { code: "BROWSER_LOGIN_REQUIRED" });
   }
 });
+
+test("browser jobs: 没有 PID 的 queued 过期后不再当作运行中", async t => {
+  const { browserJobs } = await import("../lib/browser.mjs");
+  const f = await fixture(t);
+  const stale = new Date(Date.now() - 120_000).toISOString();
+  const oldId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  await f.put(`state/jobs/${oldId}.json`, { id: oldId, action: "open", service: "all", status: "queued", createdAt: stale, updatedAt: stale });
+  assert.equal((await browserJobs())[0].status, "interrupted", "崩溃前没写 PID 的 queued 不能永久占位");
+
+  const freshId = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
+  const now = new Date().toISOString();
+  await f.put(`state/jobs/${freshId}.json`, { id: freshId, action: "open", service: "all", status: "queued", createdAt: now, updatedAt: now });
+  assert.equal((await browserJobs()).find(job => job.id === freshId).status, "queued", "刚开始的任务仍在排队");
+});
