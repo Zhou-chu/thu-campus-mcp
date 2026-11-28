@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'__SENTRY_CONNECT__; base-uri 'none'; form-action 'none'"
     />
+    <meta name="sentry-dsn" content="__SENTRY_WEB_DSN__" />
+    <meta name="sentry-environment" content="__SENTRY_ENV__" />
+    <meta name="sentry-release" content="__ASSET_VERSION__" />
     <meta name="theme-color" content="#eeeeeb" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#181818" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
@@ -15,6 +18,8 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <script src="/theme.js?v=__ASSET_VERSION__"></script>
+    <script src="/vendor/sentry.bundle.min.js?v=__ASSET_VERSION__"></script>
+    <script src="/sentry-client.js?v=__ASSET_VERSION__"></script>
     <link rel="stylesheet" href="/styles.css?v=__ASSET_VERSION__" />
     <link rel="stylesheet" href="/motion.css?v=__ASSET_VERSION__" />
   </head>

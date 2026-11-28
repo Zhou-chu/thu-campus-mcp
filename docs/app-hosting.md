@@ -26,7 +26,10 @@
 | `THU_CAMPUS_APP_ALLOW_PLAINTEXT` | 空 | 仅为已在运行的明文实例保留的迁移开关；新部署不要使用 |
 | `THU_CAMPUS_APP_ALLOWED_HOSTS` | 空 | 逗号分隔的额外 Host 白名单（反代转发的主机名不在 `PUBLIC_URL` 里时才需要） |
 | `THU_CAMPUS_APP_ALLOWED_ORIGINS` | 空 | 逗号分隔的额外 Origin 白名单；列入后会对该来源回显 CORS 头并处理 OPTIONS 预检（供部署在 Vercel 等的外部前端直连） |
-| `SENTRY_DSN` | 空 | 配置后把 5xx 未捕获异常上报 Sentry（只含错误类型、脱敏消息、错误码、版本）；留空则完全不联网 |
+| `SENTRY_DSN` | 空 | 服务端 Sentry（官方 `@sentry/node` SDK）：配置后上报 5xx 未捕获异常；留空则不初始化、不联网 |
+| `SENTRY_WEB_DSN` | 空 | 前端 Sentry（浏览器 SDK）：配置后把 DSN 注入页面并放行 ingest 源的 CSP；留空则页面不加载上报 |
+| `SENTRY_ENVIRONMENT` | 空 | 上报环境名，缺省按监听地址推断 `production` / `local` |
+| `SENTRY_TRACES_SAMPLE_RATE` | 空 | 服务端 trace 采样率，缺省生产 0.1、本机 1.0 |
 
 安全闸门有两条，都在 `app serve` 启动阶段执行，不满足直接退出：
 

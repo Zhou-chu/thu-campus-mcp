@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSentry, parseDsn, scrubMessage } from "../lib/observability/sentry.mjs";
+import { scrubMessage } from "../lib/observability/scrub.mjs";
+import { createAppSentry } from "../lib/observability/sentry-node.mjs";
+import { resolveWebDsn } from "../lib/observability/web-dsn.mjs";
 
-test("Sentry：未配置 DSN 时完全不发请求", async () => {
-  let calls = 0;
-  const sentry = createSentry({ dsn: "", fetchImpl: async () => { calls += 1; return { ok: true }; } });
-  assert.equal(sentry.enabled, false);
-  const result = await sentry.capture(new Error("boom"));
-  assert.equal(result.code, "SENTRY_DISABLED");
-  assert.equal(calls, 0);
-});
-
-test("Sentry：脱敏去掉令牌、学号、邮箱、查询串与路径", () => {
+test("Sentry 脱敏：去掉令牌、学号、邮箱、查询串与本地路径", () => {
   const raw = "登录失败 https://id.tsinghua.edu.cn/x?ticket=SECRET 账号 2024010419 邮箱 a.b@mails.tsinghua.edu.cn token=tc1_abcdefghijkl D:\\code\\secret\\file.js";
   const cleaned = scrubMessage(raw);
   assert.ok(!cleaned.includes("SECRET"));
@@ -22,39 +15,18 @@ test("Sentry：脱敏去掉令牌、学号、邮箱、查询串与路径", () =>
   assert.ok(cleaned.length <= 500);
 });
 
-test("Sentry：Envelope 内容与鉴权头正确，且同类错误一分钟内只发一次", async () => {
-  const calls = [];
-  const sentry = createSentry({
-    dsn: "https://publickey@o1.ingest.sentry.io/42",
-    release: "v1",
-    environment: "test",
-    fetchImpl: async (url, options) => { calls.push({ url, options }); return { ok: true }; },
-    now: () => Date.parse("2026-11-29T00:00:00.000Z"),
-  });
-  assert.equal(sentry.enabled, true);
-  const first = await sentry.capture(Object.assign(new Error("请求失败 token=tc1_secretsecret"), { name: "TypeError" }), { tags: { code: "APP_ERROR" } });
-  assert.equal(first.ok, true);
-  assert.equal(calls.length, 1);
-  const url = String(calls[0].url);
-  assert.match(url, /^https:\/\/o1\.ingest\.sentry\.io\/42\/envelope\/$/);
-  assert.match(calls[0].options.headers["x-sentry-auth"], /sentry_key=publickey/);
-  const lines = calls[0].options.body.split("\n");
-  assert.equal(lines.length, 3);
-  const event = JSON.parse(lines[2]);
-  assert.equal(event.exception.values[0].type, "TypeError");
-  assert.ok(!JSON.stringify(event).includes("tc1_secretsecret"));
-  assert.equal(event.tags.code, "APP_ERROR");
-  assert.equal(event.release, "v1");
-
-  const second = await sentry.capture(Object.assign(new Error("请求失败 token=tc1_secretsecret"), { name: "TypeError" }));
-  assert.equal(second.code, "SENTRY_DEDUPED");
-  assert.equal(calls.length, 1);
+test("Sentry 未配置 DSN 时完全不初始化", async () => {
+  const sentry = createAppSentry({ version: "v1", host: "127.0.0.1", env: {} });
+  assert.equal(sentry.enabled, false);
+  const result = await sentry.capture(new Error("boom"));
+  assert.equal(result.code, "SENTRY_DISABLED");
 });
 
-test("Sentry：上报失败不影响调用方", async () => {
-  const sentry = createSentry({ dsn: "https://k@o1.ingest.sentry.io/1", fetchImpl: async () => { throw new Error("network"); } });
-  const result = await sentry.capture(new Error("x"));
-  assert.equal(result.code, "SENTRY_UNREACHABLE");
-  assert.equal(parseDsn("not a dsn"), null);
-  assert.equal(parseDsn(""), null);
+test("前端 DSN 解析：缺省为空，合法时给出 ingest 源与环境", () => {
+  assert.equal(resolveWebDsn({ env: {}, host: "127.0.0.1" }), null);
+  assert.equal(resolveWebDsn({ env: { SENTRY_WEB_DSN: "not-a-dsn" }, host: "127.0.0.1" }), null);
+  const parsed = resolveWebDsn({ env: { SENTRY_WEB_DSN: "https://k@o1.ingest.de.sentry.io/42" }, host: "0.0.0.0" });
+  assert.equal(parsed.origin, "https://o1.ingest.de.sentry.io");
+  assert.equal(parsed.environment, "production");
+  assert.equal(resolveWebDsn({ env: { SENTRY_WEB_DSN: "https://k@o1.ingest.de.sentry.io/42", SENTRY_ENVIRONMENT: "local" }, host: "0.0.0.0" }).environment, "local");
 });
