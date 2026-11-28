@@ -31,6 +31,13 @@
 | `SENTRY_ENVIRONMENT` | 空 | 上报环境名，缺省按监听地址推断 `production` / `local` |
 | `SENTRY_TRACES_SAMPLE_RATE` | 空 | 服务端 trace 采样率，缺省生产 0.1、本机 1.0 |
 
+### Sentry 前端 bundle 的选择
+
+`webui/vendor/sentry.bundle.min.js` 用的是 `bundle.tracing.logs.metrics.min.js`（SDK 10.78.0）。
+**不要换回 `bundle.tracing.min.js`**：那个变体不含 logs，`Sentry.logger` 只在 JS 侧存在、不会发出任何
+log envelope（实测页面上只有 session envelope，Sentry 里查不到日志）。
+记录版本与哈希：10.78.0，sha256 `a1e8d0f7b71eb15c…`。
+
 安全闸门有两条，都在 `app serve` 启动阶段执行，不满足直接退出：
 
 1. 非回环监听必须在 `THU_CAMPUS_APP_TOKEN` 与 `THU_CAMPUS_APP_ALLOW_REMOTE=1` 之间**二选一**，否则 `INSECURE_LISTEN`。

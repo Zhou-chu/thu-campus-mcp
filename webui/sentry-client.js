@@ -28,7 +28,10 @@
     dsn: dsn,
     release: release || undefined,
     environment: environment,
+    // 页面加载与接口调用的耗时；生产只采 10%，本机全采便于验证。
     tracesSampleRate: environment === "local" ? 1.0 : 0.1,
+    integrations: [window.Sentry.browserTracingIntegration()],
+    enableLogs: true,
     sendDefaultPii: false,
     beforeSend: function (event) {
       // 请求体、Cookie、查询串一律不带走。
@@ -45,4 +48,10 @@
       return event;
     },
   });
+  // 一条高信号日志：记清是哪一版页面启动的，不含用户信息。
+  try {
+    window.Sentry.logger.info("web.app.booted", { route: location.pathname, release: release || "unknown" });
+  } catch (error) {
+    /* 日志失败不影响页面 */
+  }
 })();
