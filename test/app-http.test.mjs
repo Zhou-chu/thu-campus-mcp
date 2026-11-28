@@ -107,7 +107,7 @@ function scriptedRoute() {
     },
   };
 }
-async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {}, keepAlive = null, savedSettings = null } = {}) {
+async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(), config: overrides = {}, keepAlive = null, savedSettings = null, extraOrigins = null } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "campus-app-http-"));
   if (savedSettings) await writeFile(path.join(dir, "settings.json"), JSON.stringify(savedSettings));
   const config = {
@@ -119,6 +119,7 @@ async function boot(t, { token = "", route = scriptedRoute(), host = fakeHost(),
     modelRoute: "madmodel",
     modelBaseUrl: "",
     modelApiKey: "",
+    extraOrigins: extraOrigins || [],
     modelName: "",
     maxSteps: 8,
     hostname: "test-host",
@@ -1469,4 +1470,23 @@ test("任务列表：排队任务带位置，取消未知任务返回 404", asyn
   const missing = await fetch(url + "/api/jobs/9f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f/cancel", { method: "POST", headers });
   assert.equal(missing.status, 404, "未知任务不能假装取消成功");
   assert.equal((await missing.json()).error.code, "JOB_NOT_FOUND");
+});
+
+test("跨域：白名单来源带 CORS 头与预检响应，非白名单仍拒绝", async (t) => {
+  const { url } = await boot(t, { token: "t", extraOrigins: ["https://campus-preview.vercel.app"] });
+  const preflight = await fetch(url + "/api/meta", {
+    method: "OPTIONS",
+    headers: { origin: "https://campus-preview.vercel.app", "access-control-request-headers": "authorization" },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), "https://campus-preview.vercel.app");
+  assert.match(preflight.headers.get("access-control-allow-headers"), /authorization/);
+
+  const actual = await fetch(url + "/api/meta", { headers: { origin: "https://campus-preview.vercel.app", authorization: "Bearer t" } });
+  assert.equal(actual.status, 200);
+  assert.equal(actual.headers.get("access-control-allow-origin"), "https://campus-preview.vercel.app");
+
+  const blocked = await fetch(url + "/api/meta", { headers: { origin: "https://evil.example", authorization: "Bearer t" } });
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.headers.get("access-control-allow-origin"), null);
 });

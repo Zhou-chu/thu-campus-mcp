@@ -25,7 +25,8 @@
 | `THU_CAMPUS_APP_TLS_PROXY` | 空 | `1` 表示由本机回环反代终止 TLS；必须同时设回环监听与 `HTTPS` 的 `PUBLIC_URL` |
 | `THU_CAMPUS_APP_ALLOW_PLAINTEXT` | 空 | 仅为已在运行的明文实例保留的迁移开关；新部署不要使用 |
 | `THU_CAMPUS_APP_ALLOWED_HOSTS` | 空 | 逗号分隔的额外 Host 白名单（反代转发的主机名不在 `PUBLIC_URL` 里时才需要） |
-| `THU_CAMPUS_APP_ALLOWED_ORIGINS` | 空 | 逗号分隔的额外 Origin 白名单 |
+| `THU_CAMPUS_APP_ALLOWED_ORIGINS` | 空 | 逗号分隔的额外 Origin 白名单；列入后会对该来源回显 CORS 头并处理 OPTIONS 预检（供部署在 Vercel 等的外部前端直连） |
+| `SENTRY_DSN` | 空 | 配置后把 5xx 未捕获异常上报 Sentry（只含错误类型、脱敏消息、错误码、版本）；留空则完全不联网 |
 
 安全闸门有两条，都在 `app serve` 启动阶段执行，不满足直接退出：
 
