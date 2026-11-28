@@ -1631,6 +1631,8 @@ async function loginService(name, manual, connection) {
       } finally { watch.stop(); }
       checkLoginConnection(connection);
       state.authNotices[name] = { text: "已提交登录，正在核验。" };
+      // 直接登录返回就代表会话已经就绪：立刻核验并重绘，不要等用户手动刷新。
+      await verifyAuthentication();
       return;
     }
     if (manual && (name === "seat" || name === "sports")) {

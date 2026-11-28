@@ -262,8 +262,10 @@ export function createSportsView({ el, api }) {
     }
 
     render();
+    // 回到体育视图时直接把当前运动/场馆/日期的场次拉一次：以前要用户再点一次日期才会真正查询。
     if (!state.loaded) void loadSports();
     else if (!state.venues.length && state.sport) void loadVenues();
+    else if (state.sport && state.venue) void loadSlots();
     return wrap;
   };
 }

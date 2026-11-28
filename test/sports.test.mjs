@@ -517,3 +517,10 @@ test("sports: 会话失效的三种表现都归为需要登录，交给一次性
   assert.equal(sportsLoginProof({ status: 200, ok: true, data: { success: true, data: { id: "u1" } } }).state, "ready");
   assert.equal(sportsLoginProof({ status: 500, ok: false, data: { errorCode: 500 } }).state, "unknown", "上游故障不能当成登录失效");
 });
+
+test("预约窗口：官网日期标签有多种写法，逐个尝试", async () => {
+  const { dateCandidates } = await import("../lib/app/sports-booking.mjs");
+  assert.deepEqual(dateCandidates("2026-11-28"), ["2026-11-28", "11-28", "11/28", "11月28日", "11月28号", "28日"]);
+  assert.deepEqual(dateCandidates(""), []);
+  assert.deepEqual(dateCandidates("下周六"), ["下周六"]);
+});
