@@ -1974,3 +1974,22 @@ test("app: 跟随中的登录任务可以取消，失败时如实提示", async 
   assert.equal(a.count("POST /api/jobs/job-cloud-2/cancel"), 1);
   assert.match(a.$('[data-service="cloud"] .auth-notice').textContent, /已请求取消/);
 });
+
+test("app: 同一行有两个操作按钮时不会互相重叠", async t => {
+  const a = await app(t, { routes: {
+    "GET /api/keepalive": { ok: true, enabled: false, history: [] },
+    "GET /api/auth/status": { ok: true, services: { seat: { state: "login-required", code: "AUTH_REQUIRED" } } },
+    "GET /api/browser-state": { ok: true, active: "open:seat", waiting: 1 },
+    "POST /api/seat/login": { ok: false, error: { code: "BROWSER_BUSY", message: "浏览器正被占用。", holder: "open:seat" } },
+  } });
+  a.nav("services");
+  await flush();
+  a.click(a.button("登录", a.$('[data-service="seat"]')));
+  await a.tick(2500);
+  const row = a.$('[data-service="seat"]');
+  const buttons = [...row.querySelectorAll("button")].filter(node => /取消任务|关闭占用窗口/.test(node.textContent));
+  // 两个按钮必须各自占位：宽度之和不能超过容器，且不能有同一个 left/top。
+  const boxes = buttons.map(node => { const rect = node.getBoundingClientRect(); return { text: node.textContent.trim(), top: Math.round(rect.top), left: Math.round(rect.left), width: Math.round(rect.width) }; });
+  const unique = new Set(boxes.map(box => box.top + ":" + box.left));
+  assert.equal(unique.size, boxes.length, "按钮不能叠在同一位置：" + JSON.stringify(boxes));
+});

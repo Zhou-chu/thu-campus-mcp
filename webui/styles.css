@@ -761,6 +761,8 @@ a:focus-visible {
 .auth-service .item-title { white-space: normal; }
 .auth-service-main { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 .auth-service > button { grid-column: 2; grid-row: 1; align-self: start; }
+/* 一行的操作按钮放在同一列里纵向排列；同一格里放两个按钮会互相覆盖。 */
+.auth-service > .auth-service-actions { grid-column: 2; grid-row: 1; align-self: start; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
 .auth-service > :is(.auth-evidence, .auth-notice, .auth-account) { grid-column: 1 / -1; min-width: 0; }
 .auth-evidence > summary { font-size: var(--text-meta); min-height: 44px; align-content: center; cursor: pointer; }
 .auth-evidence .small { overflow-wrap: anywhere; }

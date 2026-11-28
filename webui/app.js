@@ -1812,15 +1812,19 @@ function servicesView() {
       const row = el("section", { class: "auth-service", dataset: { service: name } }, [
         el("div", { class: "auth-service-main" }, [el("span", { class: "item-title", text: label }), el("span", { class: "state", dataset: { s: info.state }, text: info.label })]),
       ]);
+      // 一行的操作按钮统一放进同一列：以前每个 button 都钉在 grid-column:2 / row:1，
+      // 出现第二个按钮（如“取消任务”+“关闭占用窗口”）时就会叠在一起。
+      const actions = el("div", { class: "auth-service-actions" });
+      row.append(actions);
       // 已经有受保护接口核验通过的状态时，不再把旧的登录失败提示摆在旁边。
       if (info.verified) delete state.authNotices[name];
       const notice = info.verified ? null : state.authNotices[name];
       if (name !== "gitlab") {
-        row.append(el("button", { class: "ghost", type: "button", text: notice?.manual ? "人工验证" : state.authLoginBusy === name ? "登录中…" : "登录",
+        actions.append(el("button", { class: "ghost", type: "button", text: notice?.manual ? "人工验证" : state.authLoginBusy === name ? "登录中…" : "登录",
           disabled: !!state.authLoginBusy || state.authChecking, onclick: () => openLogin(name, !!notice?.manual) }));
       } else if (!info.verified) {
         // GitLab 用访问令牌而不是统一身份认证；入口在设置里，这里给出可点的下一步。
-        row.append(el("button", { class: "ghost", type: "button", text: "配置访问令牌", onclick: () => {
+        actions.append(el("button", { class: "ghost", type: "button", text: "配置访问令牌", onclick: () => {
           state.view = "settings";
           render();
           requestAnimationFrame(() => document.querySelector(".settings-gitlab")?.scrollIntoView({ block: "start" }));
@@ -1829,7 +1833,7 @@ function servicesView() {
       if (notice) row.append(el("div", { class: "auth-notice " + (notice.error ? "error" : ""), role: notice.error ? "alert" : "status", text: notice.text }));
       // 正在跟随的 worker 任务：给一个明确的取消入口，而不是只能干等。
       if (notice?.jobId && !notice.error)
-        row.append(el("button", {
+        actions.append(el("button", {
           class: "ghost", type: "button", text: "取消任务",
           onclick: async event => {
             const button = event.currentTarget;
@@ -1846,7 +1850,7 @@ function servicesView() {
         }));
       // 浏览器被占用时，“先关闭窗口”必须是一个能点的动作，而不是一句让远程用户无从下手的话。
       if (notice?.code === "BROWSER_BUSY")
-        row.append(el("button", { class: "ghost", type: "button", text: "关闭占用窗口并重试", onclick: () => { void closeBrowserWindows(); } }));
+        actions.append(el("button", { class: "ghost", type: "button", text: "关闭占用窗口并重试", onclick: () => { void closeBrowserWindows(); } }));
       const hint = nextStep[info.state];
       if (hint) row.append(el("div", { class: "small muted auth-hint", text: hint }));
       const record = el("details", { class: "auth-evidence" }, [el("summary", { text: "核验记录" })]);
